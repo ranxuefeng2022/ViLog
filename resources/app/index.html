@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono&display=swap"
+      rel="stylesheet"
+    />
+    <meta charset="UTF-8" />
+    <title>VivoLog - 日志查看器</title>
+    <link rel="icon" type="image/png" href="../icons/icon.png">
+    <link rel="stylesheet" href="renderer/css/style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <!-- PapaParse - 强大的CSV解析库 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  </head>
+  <body>
+    <div id="toolbar">
+      <!-- 窗口拖拽区域 - 只有这个区域可以拖拽移动窗口 -->
+      <div class="window-drag-area"></div>
+
+      <!-- 清除按钮 -->
+      <div class="toolbar-group">
+        <button id="clearAllBtn" onclick="clearMainLogContent()">刷新</button>
+      </div>
+
+      <!-- 在工具栏中添加 -->
+      <div class="toolbar-group">
+        <button
+          id="toggleQuickLinksBtn"
+          onclick="toggleQuickLinksPanel()"
+          title="显示/隐藏快速链接"
+        >
+          网站库
+        </button>
+      </div>
+
+      <!-- 新增快速链接面板（默认隐藏） -->
+      <div id="quickLinksPanel" class="quick-links-panel">
+        <!-- 面板头部 - 固定在顶部 -->
+        <div class="quick-links-panel-header">
+          <div class="quick-links-search-container">
+            <input
+              type="text"
+              class="quick-links-search"
+              placeholder="🔍 搜索网站..."
+              id="quickLinksSearch"
+            />
+          </div>
+        </div>
+        <!-- 面板内容 - 可滚动 -->
+        <div class="quick-links-panel-content" id="quickLinksPanelContent">
+          <!-- 按钮将动态生成 -->
+        </div>
+      </div>
+
+      <!-- 书签面板（默认隐藏）：关键行书签/注释/导出分享 -->
+      <div id="bookmarksPanel" aria-hidden="true">
+        <div id="bookmarksSearchWrap">
+          <input id="bookmarksSearch" type="text" placeholder="搜索书签..." />
+          <button type="button" class="danger" onclick="clearAllBookmarks()">清空</button>
+        </div>
+        <div id="bookmarksList"></div>
+      </div>
+
+      <!-- 书签编辑弹窗 -->
+      <div id="bookmarkModal" aria-hidden="true">
+        <div id="bookmarkModalCard" role="dialog" aria-modal="true" aria-label="编辑书签注释">
+          <div class="hd">
+            <div>编辑书签注释</div>
+            <button type="button" onclick="closeBookmarkModal()">×</button>
+          </div>
+          <div class="bd">
+            <div id="bookmarkModalMeta"></div>
+            <div id="bookmarkModalText"></div>
+            <textarea id="bookmarkModalNote" placeholder="在这里写注释（会随书签导出/分享）"></textarea>
+          </div>
+          <div class="ft">
+            <button type="button" class="danger" onclick="deleteBookmarkFromModal()">删除书签</button>
+            <button type="button" onclick="closeBookmarkModal()">取消</button>
+            <button type="button" class="primary" onclick="saveBookmarkNoteFromModal()">保存</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="toolbar-group" style="align-items: center">
+        <input
+          type="text"
+          id="filterBox"
+          placeholder="f键聚焦 (使用 | 分隔多个关键词, \| 表示字面量 |)"
+        />
+        <button id="expandFilterBtn" title="展开过滤输入框">📝</button>
+        <!-- 自动建议下拉菜单 -->
+        <div id="filterSuggestions" class="filter-suggestions"></div>
+      </div>
+
+      <div class="toolbar-group">
+        <input
+          type="text"
+          id="searchBox"
+          placeholder="搜索关键词 (Enter=下一个, Shift+Enter=上一个)"
+        />
+        <!-- 搜索自动建议下拉菜单 -->
+        <div id="searchSuggestions" class="filter-suggestions"></div>
+        <span id="searchStatus"></span>
+        <button id="prevBtn" onclick="prevMatch()" disabled>↑</button>
+        <button id="nextBtn" onclick="nextMatch()" disabled>↓</button>
+      </div>
+
+      <!-- 状态信息组 -->
+      <div class="toolbar-group" style="gap: 12px;">
+        <span id="status"></span>
+        <span id="fileInfo" class="file-info"></span>
+        <span id="systemStats" class="system-stats" title="系统资源占用率（CPU=系统CPU使用率, MEM=系统内存使用率, APP=Electron进程内存占用）">CPU: --% | MEM: --% | APP: --MB</span>
+      </div>
+
+      <div class="progress-bar" id="progressBar" style="display: none">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+
+      <!-- 文件计数组 -->
+      <div class="toolbar-group">
+        <span id="fileCount" class="file-count"></span>
+      </div>
+
+      <div style="flex: 1"></div>
+
+      <!-- 高亮功能已移至右键菜单中 -->
+
+      <div class="toolbar-group">
+        <button id="fullscreenBtn" onclick="toggleFullscreen()">全屏</button>
+        <button id="bookmarksBtn" onclick="toggleBookmarksPanel()" title="书签/注释/导出：B 切换当前行书签；Ctrl+B 打开/关闭面板">书签</button>
+      </div>
+
+      <!-- AI助手工具栏按钮 -->
+      <div class="toolbar-group">
+        <button id="aiAssistantToolbarBtn" onclick="toggleAiAssistant()">
+          AI助手
+        </button>
+      </div>
+
+      <!-- 代码更新按钮 -->
+      <div class="toolbar-group">
+        <button id="updateCodeBtn" onclick="quickUpdateCode(event)">
+          更新工具
+        </button>
+      </div>
+
+      <!-- 窗口控制按钮 -->
+      <div class="toolbar-group window-controls">
+        <button id="windowMinimizeBtn" onclick="minimizeWindow()" title="最小化">−</button>
+        <button id="windowMaximizeBtn" onclick="maximizeWindow()" title="最大化">□</button>
+        <button id="windowCloseBtn" onclick="closeWindow()" title="关闭">×</button>
+      </div>
+    </div>
+
+    <!-- 文件树容器 -->
+    <div id="fileTreeContainer" class="visible" tabindex="0">
+      <div id="fileTreeResizer"></div>
+      <!-- 服务器连接区域 - 优化：IP和目录在同一行 -->
+      <div id="serverConnectArea">
+        <div id="serverInputGroup">
+          <input
+            type="text"
+            id="serverAddress"
+            placeholder="IP地址"
+            value="172.16.191.214:8082"
+            title="服务器地址 (如: 172.16.50.79:8082)"
+          />
+          <button id="serverAddressDropdownBtn" type="button" title="选择常用服务器地址">▼</button>
+          
+          <!-- 目录输入框 -->
+          <input type="text" id="serverPath" placeholder="输入目录路径后按 Enter 加载..." title="输入目录路径后按 Enter 加载" />
+          <button id="monthSelectBtn" type="button" title="选择月份">📅</button>
+
+          <span id="serverStatus" class="disconnected" title="服务器状态">●</span>
+
+          <!-- 月份选择下拉菜单 -->
+          <div id="monthSelectMenu" role="listbox" aria-label="选择月份">
+          </div>
+
+          <!-- 下拉菜单保持不变 -->
+          <div id="serverAddressDropdownMenu" role="listbox" aria-label="常用服务器地址">
+            <button class="server-address-option" type="button" data-value="172.16.191.214:8082">(172.16.191.214:8082)BPM生产环境服务器</button>
+            <button class="server-address-option" type="button" data-value="172.16.107.173:8082">(172.16.107.173:8082)BPM测试环境服务器</button>
+            <button class="server-address-option" type="button" data-value="172.16.50.79:8082">(172.16.50.79:8082)充电小组个人空间</button>
+			<button class="server-address-option" type="button" data-value="172.16.50.79:8083">(172.16.50.79:8083)充电小组windows目录挂载</button>
+			<button class="server-address-option" type="button" data-value="172.16.144.154:8083">(172.16.144.154:8083)冉雪峰-编译服务器</button>
+			<button class="server-address-option" type="button" data-value="192.168.70.130:8082">(192.168.70.130:8082)冉雪峰vmware-本地EF盘</button>
+			<button class="server-address-option" type="button" data-value="172.16.144.162:8082">(172.16.144.162:8082)姚国通-编译服务器</button>
+			<button class="server-address-option" type="button" data-value="172.16.144.46:8082">(172.16.144.46:8082)史晓生-编译服务器</button>
+          </div>
+        </div>
+        <!-- 移除原来的 pathInputGroup，已合并到上面 -->
+      </div>
+      <div class="file-tree-search-container">
+        <button id="toggleSearchModeBtn" type="button" class="toggle-search-btn" title="切换到 Everything 全局搜索">
+          <span class="arrow-left"></span>
+          <span class="arrow-right"></span>
+        </button>
+        <input type="text" id="fileTreeSearch" placeholder="搜索文件 (支持 | 分隔多个关键词，如 kernel|pl_lk)" />
+        <!-- 🚀 新增：加载模式切换按钮 -->
+        <button id="toggleLoadModeBtn" type="button" class="toggle-load-mode-btn" title="切换模式：加载模式（加载到主日志） / 过滤模式（直接rg过滤）">
+          <span class="mode-icon">⬇️</span>
+        </button>
+      </div>
+      <!-- 🚀 远程目录区域 -->
+      <div id="remoteDirectoryArea">
+        <div id="remoteDirectoryHeader">
+          <span class="remote-icon">☁️</span>
+          <span class="remote-title">远程目录</span>
+          <div class="remote-actions">
+            <button id="localShareBtn" type="button" title="启动本地共享">📤</button>
+            <button id="remoteConnectBtn" type="button" title="连接远程目录">+</button>
+          </div>
+        </div>
+        <div id="localShareStatus" class="local-share-status" style="display: none;">
+          <span class="share-status-icon">✓</span>
+          <span class="share-status-text">本地共享已启动</span>
+          <span class="share-address"></span>
+          <button id="stopLocalShareBtn" class="stop-share-btn" title="停止共享">×</button>
+        </div>
+        <div id="remoteDirectoryList">
+          <!-- 远程连接节点将显示在这里 -->
+        </div>
+      </div>
+      <div id="fileTreeList" tabindex="0">
+        <div class="file-tree-empty">导入文件、文件夹或压缩包后，文件将显示在这里<br><small>💡 提示：也可以复制文件后在这里粘贴 (Ctrl+V)</small></div>
+      </div>
+    </div>
+
+    <!-- Ctrl+G 悬浮文件树遮罩（仅在悬浮模式下显示） -->
+    <div id="fileTreeFloatingOverlay" aria-hidden="true"></div>
+
+    <!-- 文件树右键菜单 -->
+    <div id="fileTreeContextMenu" role="menu" aria-hidden="true">
+      <!-- 操作组 -->
+      <div class="menu-group">
+        <button id="fileTreeCtxExpandAll" type="button" class="menu-item">
+          <span class="icon">📂</span>
+          <span class="text">展开全部</span>
+        </button>
+        <button id="fileTreeCtxCollapseAll" type="button" class="menu-item">
+          <span class="icon">📁</span>
+          <span class="text">折叠全部</span>
+        </button>
+      </div>
+
+      <div class="menu-separator"></div>
+
+      <div class="menu-group">
+        <button id="fileTreeCtxExtractArchive" type="button" class="menu-item">
+          <span class="icon">📦</span>
+          <span class="text">解压到当前路径</span>
+        </button>
+      </div>
+
+      <div class="menu-separator"></div>
+
+      <div class="menu-group">
+        <button id="fileTreeCtxOpenHtml" type="button" class="menu-item">
+          <span class="icon">🌐</span>
+          <span class="text">打开HTML文件</span>
+        </button>
+      </div>
+
+      <div class="menu-separator"></div>
+
+      <div class="menu-group">
+        <button id="fileTreeCtxLoadOnlyDir" type="button" class="menu-item">
+          <span class="icon">📁</span>
+          <span class="text">文件树只加载此目录</span>
+        </button>
+        <button id="fileTreeCtxCopyName" type="button" class="menu-item">
+          <span class="icon">📋</span>
+          <span class="text">复制名称</span>
+        </button>
+        <button id="fileTreeCtxRefreshDir" type="button" class="menu-item">
+          <span class="icon">🔄</span>
+          <span class="text">刷新此目录</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 隐藏的文件和文件夹输入元素 -->
+    <input type="file" id="importFileInput" style="display: none;" multiple />
+    <input type="file" id="importFolderInput" style="display: none;" webkitdirectory directory multiple />
+    <input type="file" id="importArchiveInput" style="display: none;" accept=".zip,.rar,.7z,.tar,.gz,.tgz,.bz2" multiple />
+
+    <!-- 日志内容框右键菜单 - 优化版本 -->
+    <div id="logContextMenu" role="menu" aria-hidden="true">
+      <div class="menu-title" id="logContextMenuTitle">日志</div>
+
+      <!-- 文件信息区域 -->
+      <div class="menu-info" id="logCtxFileInfo" style="display: none;">
+        <span class="info-label">所属文件</span>
+        <span class="info-value" id="logCtxFileName"></span>
+      </div>
+
+      <div class="menu-separator"></div>
+
+      <!-- 窗口操作组 -->
+      <div class="menu-group">
+        <button id="logCtxNewWindow" type="button" class="menu-item">
+          <span class="icon">🪟</span>
+          <span class="text">新建窗口</span>
+        </button>
+        <button id="logCtxUartLog" type="button" class="menu-item">
+          <span class="icon">🔌</span>
+          <span class="text">串口日志</span>
+        </button>
+        <button id="logCtxMinimizeAll" type="button" class="menu-item">
+          <span class="icon">📉</span>
+          <span class="text">最小化所有窗口</span>
+        </button>
+        <button id="logCtxOpenTerminal" type="button" class="menu-item">
+          <span class="icon">💻</span>
+          <span class="text">打开终端</span>
+        </button>
+      </div>
+
+      <div class="menu-separator"></div>
+
+      <!-- 时间操作组 -->
+      <div class="menu-group">
+        <div class="menu-group-title">时间</div>
+        <button id="logCtxConvertTimestamp" type="button" class="menu-item">
+          <span class="icon">🕐</span>
+          <span class="text">全部转换为 UTC 时间</span>
+        </button>
+      </div>
+
+      <div class="menu-separator"></div>
+
+      <!-- 视图操作组 -->
+      <div class="menu-group">
+        <div class="menu-group-title">视图</div>
+        <button id="logCtxViewAsTable" type="button" class="menu-item">
+          <span class="icon">📊</span>
+          <span class="text">以表格形式查看CSV</span>
+        </button>
+      </div>
+
+      <div class="menu-separator"></div>
+
+      <!-- 文件操作组 -->
+      <div class="menu-group two-columns">
+        <div class="menu-group-title" style="grid-column: 1 / -1;">文件</div>
+        <button id="logCtxImportFile" type="button" class="menu-item">
+          <span class="icon">📄</span>
+          <span class="text">导入文件</span>
+        </button>
+        <button id="logCtxImportFolder" type="button" class="menu-item">
+          <span class="icon">📂</span>
+          <span class="text">导入文件夹</span>
+        </button>
+        <button id="logCtxImportArchive" type="button" class="menu-item">
+          <span class="icon">📦</span>
+          <span class="text">导入压缩包</span>
+        </button>
+        <button id="logCtxRefreshOpenFiles" type="button" class="menu-item">
+          <span class="icon">🔄</span>
+          <span class="text">刷新</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- 文件树边框上的展开/隐藏按钮 - 始终显示 -->
+    <div id="fileTreeCollapseBtn">▶</div>
+    
+    <!-- 移除原来的dropArea，将拖拽功能集成到outerContainer -->
+    <!-- <div id="dropArea"> -->
+    <!--   <div class="icon">📂</div> -->
+    <!--   <p>拖放文件或文件夹到此处加载</p> -->
+    <!-- </div> -->
+
+    <div id="outerContainer">
+      <div id="innerContainer"></div>
+    </div>
+    <div id="hScroll"><div id="hScrollContent"></div></div>
+
+    <!-- 悬停行显示"所在文件名"的提示 -->
+    <div id="lineFileHoverTip" aria-hidden="true"></div>
+
+    <!-- 🚀 远程连接对话框 -->
+    <div id="remoteConnectDialog" class="dialog-overlay" aria-hidden="true">
+      <div class="dialog-content">
+        <div class="dialog-header">
+          <span class="dialog-title">连接远程目录</span>
+          <button class="dialog-close" id="remoteConnectDialogClose">×</button>
+        </div>
+        <div class="dialog-body">
+          <div class="form-group">
+            <label for="remoteConnectIp">IP地址</label>
+            <input type="text" id="remoteConnectIp" placeholder="例如: 192.168.1.100" />
+          </div>
+          <div class="form-group">
+            <label for="remoteConnectPort">端口</label>
+            <input type="number" id="remoteConnectPort" placeholder="例如: 8080" value="8080" />
+          </div>
+          <div class="form-group">
+            <label for="remoteConnectPath">目录路径（可选）</label>
+            <input type="text" id="remoteConnectPath" placeholder="例如: F:/logs 或留空共享根目录" />
+          </div>
+          <div class="form-group">
+            <label for="remoteConnectName">显示名称（可选）</label>
+            <input type="text" id="remoteConnectName" placeholder="例如: 同事的F盘" />
+          </div>
+        </div>
+        <div class="dialog-footer">
+          <button class="btn btn-secondary" id="remoteConnectCancel">取消</button>
+          <button class="btn btn-primary" id="remoteConnectConfirm">连接</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 🚀 本地共享对话框 -->
+    <div id="localShareDialog" class="dialog-overlay" aria-hidden="true">
+      <div class="dialog-content">
+        <div class="dialog-header">
+          <span class="dialog-title">启动本地共享</span>
+          <button class="dialog-close" id="localShareDialogClose">×</button>
+        </div>
+        <div class="dialog-body">
+          <div class="form-group">
+            <label for="localSharePath">共享目录路径</label>
+            <input type="text" id="localSharePath" placeholder="例如: F:/logs 或留空共享整个项目" />
+          </div>
+          <div class="form-group">
+            <label for="localSharePort">端口号</label>
+            <input type="number" id="localSharePort" placeholder="例如: 8080" value="8080" />
+          </div>
+          <div class="info-box">
+            <p>💡 提示：</p>
+            <ul>
+              <li>共享后，其他电脑可以通过你的IP地址访问此目录</li>
+              <li>确保两台电脑在同一局域网</li>
+              <li>如遇连接问题，请检查防火墙设置</li>
+            </ul>
+          </div>
+        </div>
+        <div class="dialog-footer">
+          <button class="btn btn-secondary" id="localShareCancel">取消</button>
+          <button class="btn btn-primary" id="localShareConfirm">启动共享</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 优化：悬浮过滤内容框 - 添加虚拟滚动容器和四个角调整手柄 -->
+    <div id="filteredPanel">
+      <!-- 替换原有的 filteredPanelHeader 和 filteredPanelSearchContainer -->
+      <div id="filteredPanelHeader">
+        <!-- 左侧：高度调节拖动按钮、最小化、关闭、最大化按钮和过滤结果计数 -->
+        <div class="filtered-panel-header-left">
+          <!-- 🔧 高度调节拖动按钮移到最左边 -->
+          <div id="filteredPanelHeightDragHandle" title="拖动调整高度">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M3 3h10v2H3V3zm0 4h10v2H3V7zm0 4h10v2H3v-2z"/>
+            </svg>
+          </div>
+          <button id="filteredPanelMinimize" title="最小化">─</button>
+          <button id="filteredPanelClose" title="关闭">×</button>
+          <button id="filteredPanelMaximize" title="最大化">□</button>
+          <span class="filtered-result-info">过滤结果 <span id="filteredCount" style="display: none;"></span> <span id="filteredTime" style="display: none;"></span></span>
+        </div>
+
+        <!-- 中间：搜索和二级过滤 -->
+        <div class="filtered-panel-header-center">
+          <!-- 正则搜索 -->
+          <div class="filtered-panel-input-wrapper">
+            <input
+              type="text"
+              id="filteredPanelSearchBox"
+              placeholder="正则搜索[enter/shift+enter]"
+            />
+            <!-- 过滤结果框搜索自动建议下拉菜单 -->
+            <div id="filteredPanelSearchSuggestions" class="filter-suggestions"></div>
+          </div>
+          <span id="filteredPanelSearchStatus"></span>
+          <button
+            id="filteredPanelPrevBtn"
+            onclick="filteredPanelPrevMatch()"
+            disabled
+          >
+            ↑
+          </button>
+          <button
+            id="filteredPanelNextBtn"
+            onclick="filteredPanelNextMatch()"
+            disabled
+          >
+            ↓
+          </button>
+
+          <!-- 二级过滤 -->
+          <div class="filtered-panel-input-wrapper">
+            <input
+              type="text"
+              id="filteredPanelFilterBox"
+              placeholder="二级过滤 (支持多个关键词, 用|分隔)"
+            />
+            <!-- 二级过滤自动建议下拉菜单 -->
+            <div id="secondaryFilterSuggestions" class="filter-suggestions"></div>
+          </div>
+          <span
+            class="regex-status idle"
+            id="filteredPanelRegexStatus"
+            title="正则表达式状态"
+          ></span>
+          <button id="filteredPanelFilterBtn" onclick="applySecondaryFilter()">
+            应用
+          </button>
+          <button
+            id="filteredPanelClearFilterBtn"
+            onclick="clearSecondaryFilter()"
+          >
+            清除
+          </button>
+          <button id="filteredPanelCopyBtn" onclick="copyFilteredLogs()" title="复制过滤结果">📋</button>
+          <button id="filteredPanelExportBtn" onclick="exportFilteredAsHTML()" title="导出为HTML">📥</button>
+          <span id="filteredPanelFilterStatus"></span>
+          <span class="secondary-filter-status" id="secondaryFilterStatus"
+            >未应用</span
+          >
+        </div>
+      </div>
+
+      <div id="filteredPanelContent">
+        <div id="filteredPanelPlaceholder"></div>
+        <div id="filteredPanelVirtualContent"></div>
+      </div>
+      <!-- 只保留四个角的调整大小手柄 -->
+      <div class="panel-resize-handle nw" data-direction="nw"></div>
+      <div class="panel-resize-handle ne" data-direction="ne"></div>
+      <div class="panel-resize-handle sw" data-direction="sw"></div>
+      <div class="panel-resize-handle se" data-direction="se"></div>
+    </div>
+
+    <!-- 二级过滤右侧边栏 -->
+    <div id="secondaryFilterSidebar">
+      <div id="secondaryFilterSidebarHeader">
+        <div id="secondaryFilterHeightHandle" class="height-resize-handle" title="拖动调整高度">
+          <div class="height-handle-line"></div>
+          <div class="height-handle-line"></div>
+          <div class="height-handle-line"></div>
+        </div>
+        <span class="secondary-filter-sidebar-title">二级过滤结果</span>
+        <span class="secondary-filter-sidebar-count">[<span id="secondaryFilterCount">0</span> 行]</span>
+      </div>
+      <!-- 关键词高亮工具栏 -->
+      <div id="highlightToolbar" class="highlight-toolbar">
+        <input
+          type="text"
+          id="highlightKeywordInput"
+          placeholder="高亮关键词 (按回车添加)"
+          class="highlight-input"
+        />
+        <input
+          type="color"
+          id="highlightColorPicker"
+          class="highlight-color-picker"
+          value="#ff6347"
+          title="选择高亮颜色"
+        />
+        <button id="addHighlightBtn" class="highlight-add-btn" title="添加高亮">+</button>
+        <div id="highlightKeywordsList" class="highlight-keywords-list"></div>
+        <button id="secondaryFilterSidebarMaximize" class="maximize-btn" title="最大化/还原">□</button>
+        <button id="secondaryFilterSidebarClose" title="关闭">×</button>
+      </div>
+      <div id="secondaryFilterSidebarContent">
+        <div id="secondaryFilterSidebarPlaceholder"></div>
+        <div id="secondaryFilterSidebarVirtualContent"></div>
+      </div>
+      <!-- 调整大小手柄（只保留四个角） -->
+      <div class="secondary-filter-resize-handle ne" data-direction="ne"></div>
+      <div class="secondary-filter-resize-handle nw" data-direction="nw"></div>
+      <div class="secondary-filter-resize-handle se" data-direction="se"></div>
+      <div class="secondary-filter-resize-handle sw" data-direction="sw"></div>
+    </div>
+
+    <!-- 过滤面板最小化按钮 -->
+    <div id="filteredPanelMinimizedBtn" title="点击展开过滤面板">
+      <span id="filteredPanelMinimizedCount">0</span>
+    </div>
+
+    <!-- 快捷键说明按钮 -->
+    <div id="shortcutsToggleBtn" title="快捷键说明">快</div>
+
+    <!-- 快捷键说明面板 -->
+    <div id="shortcutsPanel">
+      <div class="shortcuts-header">
+        <span>快捷键</span>
+        <button id="shortcutsClose">×</button>
+      </div>
+      <div class="shortcuts-content">
+        <div class="shortcut-category">搜索与过滤</div>
+        <div class="shortcut-item"><kbd>F</kbd> 聚焦工具栏过滤框</div>
+        <div class="shortcut-item"><kbd>f</kbd> 弹出过滤对话框</div>
+        <div class="shortcut-item"><kbd>Ctrl+f</kbd> 智能聚焦搜索框</div>
+        <div class="shortcut-item"><kbd>Ctrl+s</kbd> 弹出过滤对话框</div>
+        <div class="shortcut-item"><kbd>Ctrl+h</kbd> 显示/隐藏过滤结果框</div>
+        <div class="shortcut-item"><kbd>Shift+W</kbd> 切换过滤面板最大化</div>
+        <div class="shortcut-item"><kbd>Ctrl+g</kbd> 弹出/隐藏悬浮文件树</div>
+        <div class="shortcut-item"><kbd>Enter</kbd> 应用过滤/跳转</div>
+
+        <div class="shortcut-category">书签</div>
+        <div class="shortcut-item"><kbd>B</kbd> 打开/关闭书签面板</div>
+        <div class="shortcut-item"><kbd>Ctrl+B</kbd> 添加当前行到书签</div>
+
+        <div class="shortcut-category">窗口与面板</div>
+        <div class="shortcut-item"><kbd>Alt+X</kbd> 全屏切换</div>
+        <div class="shortcut-item"><kbd>Alt+1~9</kbd> 跳转到对应窗口</div>
+        <div class="shortcut-item"><kbd>Ctrl+Tab</kbd> 循环切换窗口</div>
+        <div class="shortcut-item"><kbd>Ctrl+Shift+T</kbd> 新建窗口</div>
+
+        <div class="shortcut-category">其他</div>
+		<div class="shortcut-item"><kbd>Ctrl+滚轮</kbd> 字体放缩</div>
+		<div class="shortcut-item"><kbd>Alt+滚轮</kbd> 内容左右平移</div>
+      </div>
+    </div>
+
+    <!-- AI助手面板 - 改为弹出式，与过滤结果框样式一致 -->
+    <div id="aiAssistantPanel">
+      <div id="aiAssistantHeader">
+        <span>AI助手 双击头部全屏/还原</span>
+        <button id="aiAssistantClose">×</button>
+      </div>
+      <!-- URL输入栏 -->
+      <div id="aiAssistantUrlBar">
+        <input
+          type="text"
+          id="aiAssistantUrlInput"
+          placeholder="输入网址，按回车跳转"
+        />
+        <button id="aiAssistantGoBtn">跳转</button>
+        <button id="aiAssistantOpenExternalBtn" title="在外部浏览器打开（解决401认证问题）">🌐外部打开</button>
+        <button id="aiAssistantBackBtn">返回豆包</button>
+      </div>
+      <div id="aiAssistantFrameContainer">
+        <iframe
+          id="aiAssistantFrame"
+          src="https://www.doubao.com/chat/"
+        ></iframe>
+        <div id="aiAssistantStatus"></div>
+      </div>
+      <!-- 四个角调整大小手柄 -->
+      <div class="panel-resize-handle nw"></div>
+      <div class="panel-resize-handle ne"></div>
+      <div class="panel-resize-handle sw"></div>
+      <div class="panel-resize-handle se"></div>
+    </div>
+
+    <!-- CSV表格视图面板 -->
+    <div id="csvTablePanel">
+      <div id="csvTablePanelHeader" title="单击头部切换全屏/还原">
+        <div class="csv-table-header-left">
+          <span>📊 CSV表格视图</span>
+          <span id="csvTableInfo"></span>
+        </div>
+        <div class="csv-table-header-right">
+          <button id="csvTableCloseBtn" title="关闭表格">×</button>
+        </div>
+      </div>
+      <div id="csvTablePanelContent">
+        <div id="csvTablePlaceholder" class="placeholder-message">
+          <div class="placeholder-icon">📊</div>
+          <div class="placeholder-text">没有可显示的表格数据</div>
+        </div>
+        <div id="csvTableContainer"></div>
+      </div>
+      <!-- CSV表格右键菜单 -->
+      <div id="csvTableContextMenu" class="context-menu">
+        <div class="context-menu-item" id="csvExportCSV">
+          <span>📥</span> 导出为CSV
+        </div>
+        <div class="context-menu-separator"></div>
+        <div class="context-menu-item" id="csvPlotChart">
+          <span>📈</span> 绘制曲线图
+        </div>
+        <div class="context-menu-separator"></div>
+        <div class="context-menu-item" id="csvKeepColumns">
+          <span>✓</span> 保留任意列
+        </div>
+        <div class="context-menu-separator"></div>
+        <div class="context-menu-item" id="csvRestoreColumns">
+          <span>↺</span> 恢复所有列
+        </div>
+      </div>
+      <!-- 列选择弹窗 -->
+      <div id="csvColumnSelector" class="csv-column-selector" style="display: none;">
+        <div class="csv-column-selector-header">
+          <span>选择要保留的列</span>
+          <button id="csvColumnSelectorClose" class="csv-column-selector-close">×</button>
+        </div>
+        <div class="csv-column-selector-content" id="csvColumnList"></div>
+        <div class="csv-column-selector-footer">
+          <button id="csvSelectAllColumns">全选</button>
+          <button id="csvDeselectAllColumns">全不选</button>
+          <button id="csvConfirmColumns" class="primary">确定</button>
+        </div>
+      </div>
+      <!-- 调整大小手柄 -->
+      <div class="panel-resize-handle n" data-direction="n"></div>
+      <div class="panel-resize-handle e" data-direction="e"></div>
+      <div class="panel-resize-handle s" data-direction="s"></div>
+      <div class="panel-resize-handle w" data-direction="w"></div>
+      <div class="panel-resize-handle nw" data-direction="nw"></div>
+      <div class="panel-resize-handle ne" data-direction="ne"></div>
+      <div class="panel-resize-handle sw" data-direction="sw"></div>
+      <div class="panel-resize-handle se" data-direction="se"></div>
+    </div>
+
+
+    <!-- 右键菜单 -->
+    <div id="contextMenu" class="context-menu">
+      <!-- 仅为CSV表格保留的功能 -->
+    </div>
+    
+    <!-- 展开的过滤输入框对话框 -->
+    <div id="filterDialog">
+      <div id="filterDialogContent">
+        <div id="filterDialogHeader">
+          <h3>🔍 过滤日志</h3>
+          <button id="closeFilterDialog">×</button>
+        </div>
+        <div style="position: relative;">
+          <!-- 历史关键词提示框 -->
+          <div id="filterHistorySuggestions" class="filter-history-suggestions" style="display: none;">
+            <div class="filter-history-header">📚 历史关键词</div>
+            <div id="filterHistoryList"></div>
+          </div>
+          <textarea id="filterDialogTextarea" placeholder="输入过滤关键词，可使用 | 分隔多个关键词，使用 \| 表示字面量 |"></textarea>
+        </div>
+        <div id="filterDialogKeywords">
+          <strong>当前过滤关键词：</strong> <span id="currentFilterKeywords">无</span>
+        </div>
+        <div id="filterDialogButtons">
+          <button id="clearFilterDialog">清空</button>
+          <button id="applyFilterDialog">应用过滤</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 过滤结果框右键菜单 -->
+    <div id="filterContextMenu" class="context-menu">
+      <!-- 颜色选项横向展示区域 -->
+      <div class="color-options-grid">
+        <div class="context-menu-item color-option" id="highlightRed" title="红色高亮">
+          <span style="background:red;"></span>
+        </div>
+        <div class="context-menu-item color-option" id="highlightGreen" title="绿色高亮">
+          <span style="background:green;"></span>
+        </div>
+        <div class="context-menu-item color-option" id="highlightBlue" title="蓝色高亮">
+          <span style="background:blue;"></span>
+        </div>
+        <div class="context-menu-item color-option" id="highlightYellow" title="黄色高亮">
+          <span style="background:orange;"></span>
+        </div>
+        <div class="context-menu-item color-option" id="highlightPurple" title="紫色高亮">
+          <span style="background:purple;"></span>
+        </div>
+        <div class="context-menu-item color-option" id="highlightCyan" title="青色高亮">
+          <span style="background:cyan;"></span>
+        </div>
+        <div class="context-menu-item color-option" id="highlightPink" title="粉色高亮">
+          <span style="background:pink;"></span>
+        </div>
+        <div class="context-menu-item color-option" id="highlightLime" title="青柠高亮">
+          <span style="background:lime;"></span>
+        </div>
+        <div class="context-menu-item color-option" id="highlightBrown" title="棕色高亮">
+          <span style="background:brown;"></span>
+        </div>
+        <div class="context-menu-item color-option" id="highlightGray" title="灰色高亮">
+          <span style="background:gray;"></span>
+        </div>
+        <div class="context-menu-item color-option" id="highlightCustom" title="自定义颜色...">
+          <span style="background:linear-gradient(135deg, red, orange, yellow, green, blue, indigo, violet);"></span>
+        </div>
+      </div>
+      <div class="context-menu-separator"></div>
+      <div class="context-menu-item" id="removeCurrentHighlight">
+        <span>🗑️</span> 移除当前文本高亮
+      </div>
+      <div class="context-menu-item" id="excludeSelectedLines">
+        <span>❌</span> 去除选中内容的行
+      </div>
+      <div class="context-menu-item" id="clearHighlights">
+        <span>✖</span> 清除所有高亮
+      </div>
+      <div class="context-menu-separator"></div>
+      <div class="context-menu-item" id="convertFilteredToUTC">
+        <span>🕐</span> 过滤结果转 UTC 时间
+      </div>
+    </div>
+
+    <!-- 跳转到指定行对话框 -->
+    <div id="gotoLineModal" class="goto-line-modal">
+      <div class="goto-line-content">
+        <div class="goto-line-header">
+          <h3>跳转到指定行</h3>
+          <button id="gotoLineClose" class="goto-line-close">×</button>
+        </div>
+        <div class="goto-line-body">
+          <input
+            type="number"
+            id="gotoLineInput"
+            class="goto-line-input"
+            placeholder="输入行号 (1 - 999999)"
+            min="1"
+          />
+          <div class="goto-line-hint">
+            总行数: <span id="gotoLineTotalLines">0</span>
+          </div>
+        </div>
+        <div class="goto-line-footer">
+          <button id="gotoLineCancel" class="goto-line-btn goto-line-btn-secondary">取消</button>
+          <button id="gotoLineOk" class="goto-line-btn goto-line-btn-primary">跳转</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 自定义颜色选择器 -->
+    <input type="color" id="highlightColorPicker" style="display:none; position:fixed; z-index:10001;" />
+
+    <!-- 多线程并行过滤管理器 (在 main.js 之前) -->
+    <script src="renderer/js/parallel-filter-manager.js"></script>
+
+    <!-- 🚀 SharedWorker过滤管理器 (支持多窗口共享Worker池) -->
+    <script src="renderer/js/shared-filter-manager.js"></script>
+
+    <!-- Worker 管理器 (CSV/UTC/统计 Worker) -->
+    <script src="renderer/js/utils/worker-manager.js"></script>
+
+    <!-- CSV 表格渲染器 (Canvas + Worker) - 必须在 main.js 之前加载 -->
+    <script src="renderer/js/features/csv-table-renderer.js"></script>
+
+    <!-- 二级过滤面板 Canvas 渲染器 -->
+    <script src="renderer/js/features/secondary-filter-canvas.js"></script>
+
+    <!-- WASM 时间戳转换器 -->
+    <script src="workers/wasm-timestamp-converter.js"></script>
+
+    <!-- Everything 集成 (在 main.js 之前加载) -->
+    <script src="renderer/js/features/everything-cli-integration.js"></script>
+
+    <!-- Main Application Script -->
+    <script src="renderer/js/main.js"></script>
+
+    <!-- Everything 搜索 UI (在 main.js 之后加载，使用 DOM API) -->
+    <script src="renderer/js/features/everything-search-ui.js"></script>
+
+    <!-- 搜索模式切换 (文件树搜索 <-> Everything 全局搜索) -->
+    <script src="renderer/js/features/search-mode-toggle.js"></script>
+
+    <!-- 过滤功能补丁 (必须在 main.js 之后加载，以覆盖 original-script.js 中的函数) -->
+    <script src="renderer/js/filter-worker-patch.js"></script>
+
+    <!-- 🚀 虚拟滚动性能优化补丁 (在所有脚本之后加载，覆盖渲染函数) -->
+    <script src="renderer/js/virtual-scroll-patch.js"></script>
+
+    <!-- CSV图表弹窗 -->
+    <div id="csvChartDialog" class="csv-chart-dialog" style="display: none;">
+      <div class="csv-chart-dialog-content" id="csvChartDialogContent">
+        <div class="csv-chart-dialog-header" id="csvChartDialogHeader">
+          <span class="csv-chart-dialog-title">CSV曲线图</span>
+          <div class="csv-chart-dialog-actions">
+            <button class="csv-chart-config-btn" id="csvChartConfigBtn">⚙️ 配置</button>
+            <button class="csv-chart-dialog-close" id="csvChartDialogClose">×</button>
+          </div>
+        </div>
+        <div class="csv-chart-dialog-body">
+          <canvas id="csvChartCanvas"></canvas>
+        </div>
+        <div class="csv-chart-dialog-legend" id="csvChartLegend"></div>
+        <!-- 调整大小的手柄 -->
+        <div class="resize-handle resize-handle-n" data-position="n"></div>
+        <div class="resize-handle resize-handle-e" data-position="e"></div>
+        <div class="resize-handle resize-handle-s" data-position="s"></div>
+        <div class="resize-handle resize-handle-w" data-position="w"></div>
+        <div class="resize-handle resize-handle-nw" data-position="nw"></div>
+        <div class="resize-handle resize-handle-ne" data-position="ne"></div>
+        <div class="resize-handle resize-handle-sw" data-position="sw"></div>
+        <div class="resize-handle resize-handle-se" data-position="se"></div>
+      </div>
+    </div>
+
+    <!-- CSV图表配置面板 -->
+    <div id="csvChartConfigPanel" class="csv-chart-config-panel" style="display: none;">
+      <div class="csv-chart-config-content">
+        <div class="csv-chart-config-header">
+          <span class="csv-chart-config-title">配置曲线</span>
+          <button class="csv-chart-config-close" id="csvChartConfigClose">×</button>
+        </div>
+        <div class="csv-chart-config-body">
+          <div class="csv-chart-config-instructions">
+            💡 选择要绘制的列，设置Y轴范围和单位
+          </div>
+          <div class="csv-chart-config-list" id="csvChartConfigList"></div>
+        </div>
+        <div class="csv-chart-config-footer">
+          <button class="csv-chart-config-reset" id="csvChartConfigReset">重置</button>
+          <button class="csv-chart-config-apply" id="csvChartConfigApply">应用并绘制</button>
+        </div>
+      </div>
+    </div>
+</body>
+</html>

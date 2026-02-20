@@ -1,0 +1,7 @@
+{
+  "name": "logview",
+  "version": "1.0.0",
+  "description": "LogView - Professional Log Viewer",
+  "main": "main.js",
+  "author": "LogView Team"
+}
