@@ -1,0 +1,3999 @@
+ls
+#1770260420
+fd mtk_charger
+#1770260427
+cp  platform/mediatek/common/charger/mtk_charger.c ~
+#1770260435
+git reset --hard HEAD^^^
+#1770260436
+git pull
+#1770260437
+gb
+#1770260437
+gs
+#1770260439
+gb
+#1770260446
+cp ~/mtk_charger.c platform/mediatek/common/charger/
+#1770260446
+gb
+#1770260447
+gs
+#1770260448
+git diff
+#1770260461
+v
+#1770260487
+gs
+#1770260488
+git add .
+#1770260490
+commit
+#1770260520
+push
+#1770260765
+cdc
+#1770260766
+cd
+#1770260769
+cd PDj2545temp/
+#1770260774
+cd vendor/mediatek/proprietary/bootable/bootloader/lk2/
+#1770260776
+v
+#1770261326
+cd -
+#1770261328
+make lk --rebuild -j12
+#1770261731
+cp out/target/product/k6993v1_64/lk-verified.img ~
+#1770261819
+v
+#1770262210
+cd
+#1770273087
+cd codecenter/all/dx5/system/core/healthd/
+#1770273088
+v
+#1770283979
+clear
+#1770285928
+cd
+#1770285934
+cd PDj2545temp/
+#1770285937
+v
+#1770286067
+make lk --rebuild -j12
+#1770286478
+cp out/target/product/k6993v1_64/lk-verified.img ~/m
+#1770301311
+clear
+#1770348050
+cd 
+#1770348051
+cd codecenter/
+#1770348054
+cd dx5/kernel/kernel_device_modules-6.12/
+#1770348055
+git pull
+#1770348069
+git checkout  temp_fold6_wd_t
+#1770348069
+gb
+#1770348069
+gs
+#1770348082
+gb
+#1770348082
+gs
+#1770348083
+v
+#1770348101
+gs
+#1770348103
+git add .
+#1770348104
+commit
+#1770348105
+push
+#1770348116
+cdcdcd
+#1770348116
+cd
+#1770348117
+cd codecenter/
+#1770348120
+cd dx5/vendor/vivo/propconfig/
+#1770348121
+gb
+#1770348121
+gs
+#1770348125
+git pull
+#1770348130
+git checkout  temp_fold6_wd_t
+#1770348131
+git pull
+#1770348132
+v
+#1770348140
+gs
+#1770348141
+git add .
+#1770348143
+commit 
+#1770348144
+push
+#1770348153
+cd
+#1770348158
+cd codecenter/dx5/kernel/kernel_device_modules-6.12/
+#1770348162
+v
+#1770348279
+git add .
+#1770348283
+git commit --amend
+#1770348286
+push
+#1770350879
+v
+#1770453587
+clear
+#1770465128
+gs
+#1770524424
+cd include
+#1770524424
+gs
+#1770524473
+sg
+#1770524475
+gs
+#1770524477
+git pull
+#1770524943
+git apply ~/diff
+#1770524943
+gs
+#1770524934
+cd include
+#1770524935
+gs
+#1770524937
+git diff >~/diff
+#1770526488
+gs
+#1770526493
+git add drivers/ include/
+#1770526493
+gs
+#1770526496
+commit
+#1770526528
+push
+#1770523524
+tmux at -t main
+#1770600346
+gs
+#1770600348
+gb
+#1770600350
+git pull
+#1770600359
+gb
+#1770600359
+gs
+#1770600365
+git log -p
+#1770600443
+cd include
+#1770600443
+gs
+#1770600446
+git add .
+#1770600447
+commit
+#1770600466
+push
+#1770601861
+git pull
+#1770605516
+git apply ~/dif
+#1770605516
+gs
+#1770605521
+git apply ~/dif
+#1770605531
+git apply ~/diff
+#1770605532
+gs
+#1770605504
+cd include
+#1770605505
+gs
+#1770605507
+git diff >~/difgf
+#1770605511
+git diff >~/diff
+#1770466679
+git add drivers/power/
+#1770466679
+gs
+#1770466681
+commit
+#1770466701
+push
+#1770619101
+gs
+#1770620760
+cd include
+#1770620761
+gs
+#1770620768
+git diff ../drivers/power/supply/vfcs/vfcs-chg/charge.c
+#1770620772
+git diff ../drivers/power/supply/vfcs/vfcs-chg/charge.c >~/diff
+#1770620779
+git apply ~/dif
+#1770620779
+gs
+#1770620785
+rm -rf ~/dif
+#1770620792
+git apply ~/diff
+#1770620798
+rm -rf ~/difgf 
+#1770620799
+ls
+#1770620801
+gs
+#1770626519
+cd arch/arm64/boot/dts/mediatek/
+#1770626520
+rg 'vivo,exit-fchg-ibat-thr-ma'
+#1770627781
+cd i
+#1770627783
+cd arch
+#1770627783
+gs
+#1770627785
+git diff
+#1770628069
+cd arch
+#1770628069
+gs
+#1770628073
+git diff >~/diff
+#1770628114
+git apply ~/diff
+#1770628115
+gs
+#1770628097
+cd arch
+#1770628100
+git diff >~/diff
+#1770630030
+gs
+#1770630033
+git diff
+#1770630039
+git apply ~/diff
+#1770630039
+gs
+#1770630838
+git apply ~/diff
+#1770630840
+git diff
+#1770630848
+git checkout  .
+#1770630851
+git apply ~/diff
+#1770630814
+cd include
+#1770630815
+gs
+#1770630820
+git diff ../drivers/power/supply/vfcs/vfcs-chg/charge.c
+#1770630825
+git diff ../drivers/power/supply/vfcs/vfcs-chg/charge.c >~/diff
+#1770631055
+gs
+#1770630969
+cd include
+#1770630969
+gs
+#1770630971
+git diff
+#1770631453
+gs
+#1770632189
+git diff
+#1770632193
+gs
+#1770632198
+git checkout  drivers/power/supply/vfcs/vfcs-bat/battery.c
+#1770632224
+gs
+#1770632227
+git apply ~/diff
+#1770632227
+gs
+#1770633030
+git add .
+#1770633031
+commit
+#1770633155
+push
+#1770617584
+tmux at -t main
+#1770633984
+gs
+#1770634060
+cd include
+#1770634060
+gs
+#1770634062
+git diff
+#1770634069
+git checkout  ..
+#1770639979
+cd include
+#1770639979
+gs
+#1770640060
+git diff
+#1770640063
+gs
+#1770640067
+git checkout  drivers/power/supply/vfcs/vfcs-bat/battery.c
+#1770640072
+git apply ~/diff
+#1770640073
+gs
+#1770640074
+git diff
+#1770640042
+cd include
+#1770640042
+gs
+#1770640044
+git add -A
+#1770640049
+git diff --cached >~/diff
+#1770640089
+gs
+#1770640092
+git diff
+#1770640373
+gs
+#1770640375
+git diff
+#1770640436
+gs
+#1770640437
+git diff
+#1770640441
+git add .
+#1770640441
+gs
+#1770640445
+git reset tags
+#1770640445
+gs
+#1770640448
+commit
+#1770640472
+push
+#1770641052
+cd include
+#1770641052
+gs
+#1770641266
+git diff
+#1770641270
+git add  drivers/power/
+#1770641273
+commit
+#1770641311
+push
+#1770641350
+fd charge.c
+#1770641354
+cp  drivers/power/supply/vfcs/vfcs-chg/charge.c ~
+#1770641908
+cd include
+#1770641908
+gs
+#1770641912
+git diff >~/diff
+#1770641921
+gs
+#1770641927
+git apply ~/diff
+#1770641927
+gs
+#1770641929
+git idff
+#1770641931
+git diff
+#1770642293
+gs
+#1770642295
+git pull
+#1770642665
+gs
+#1770642667
+git diff
+#1770642681
+gs
+#1770643118
+git diff
+#1770644245
+cd include
+#1770644245
+gs
+#1770644247
+git diff
+#1770644398
+gs
+#1770644474
+cd include
+#1770644474
+gs
+#1770646837
+git diff
+#1770646842
+gs
+#1770646850
+git checkout drivers/power/supply/vfcs/vfcs-cms/vfcs-cms.c
+#1770646858
+gs
+#1770646863
+git checkout .
+#1770646866
+gs
+#1770647077
+git diff
+#1770647832
+gs
+#1770647841
+git diff drivers/power/supply/vfcs/vfcs-bat/battery_id.c
+#1770647845
+git checkout  drivers/power/supply/vfcs/vfcs-bat/battery_id.c
+#1770647847
+git diff
+#1770647851
+git add  drivers/
+#1770647852
+gs
+#1770647853
+commit
+#1770647870
+push
+#1770648130
+cd include
+#1770648130
+gs
+#1770649403
+cd arch/arm64/boot/dts/
+#1770649406
+git status .
+#1770649408
+git add .
+#1770649410
+commit
+#1770649425
+push
+#1770649441
+gs
+#1770649454
+git add drivers/
+#1770649456
+commit
+#1770649480
+push
+#1770649494
+gs
+#1770649513
+git reset .
+#1770649515
+git status
+#1770649517
+git diff
+#1770649536
+gs
+#1770649538
+git log -p
+#1770649550
+gs
+#1770649571
+gb
+#1770649573
+git pull
+#1770649587
+gs
+#1770649866
+cd arch
+#1770649867
+gs
+#1770649868
+git add .
+#1770649869
+commit
+#1770649878
+push
+#1770649940
+gs
+#1770649943
+git diff >~/diff
+#1770650350
+gs
+#1770650353
+git pull
+#1770650354
+gb
+#1770650355
+gs
+#1770650858
+cd include
+#1770650858
+gs
+#1770650862
+git diff >~/diff
+#1770650872
+gs
+#1770650875
+git apply ~/diff
+#1770650876
+gs
+#1770639809
+tmux at -t main
+#1770689641
+cd include
+#1770689642
+gs
+#1770689644
+git diff
+#1770689687
+gs
+#1770690236
+git add drivers/
+#1770690238
+commit
+#1770690257
+push
+#1770690570
+gs
+#1770690574
+git diff
+#1770694519
+gs
+#1770694521
+cd arch
+#1770694521
+gs
+#1770695201
+cd i
+#1770695203
+cd arch
+#1770695203
+gs
+#1770695389
+cd include
+#1770695390
+gs
+#1770695394
+git pull
+#1770695407
+git log --author=ranxuefeng -p
+#1770695502
+gs
+#1770695504
+git pull
+#1770695510
+gb
+#1770696981
+cd arch
+#1770696981
+gs
+#1770696992
+git diff >~/diff
+#1770697000
+gs
+#1770697018
+git status .
+#1770697021
+git apply ~/diff
+#1770697023
+git status .
+#1770697303
+gs
+#1770697305
+git diff
+#1770697815
+cd include
+#1770697815
+gs
+#1770697994
+cd arch
+#1770697994
+gs
+#1770697999
+git add .
+#1770698020
+gs
+#1770698022
+commit
+#1770698082
+push
+#1770698383
+cd i
+#1770698383
+gs
+#1770698384
+cd i
+#1770698386
+cd arch
+#1770698386
+gs
+#1770687480
+tmux at -=t mian
+#1770687483
+tmux at -t main
+#1770705955
+gs
+#1770708094
+cd arch
+#1770708094
+gs
+#1770708095
+gb
+#1770708097
+git pull
+#1770710851
+cd arch/arm64/boot/dts/
+#1770710853
+cd mediatek/
+#1770710855
+rg 'ivo,third-genb-silicon-battery-ena'
+#1770712347
+gs
+#1770712349
+git diff
+#1770712362
+gs
+#1770712364
+git diff
+#1770714766
+cd include
+#1770714766
+gs
+#1770714769
+git add -A
+#1770714784
+cd include
+#1770714785
+gs
+#1770714787
+git add -A
+#1770714788
+commit
+#1770714909
+push
+#1770714927
+gs
+#1770714931
+git diff
+#1770716586
+cd include
+#1770716586
+gs
+#1770716610
+git diff
+#1770716693
+cd include
+#1770716693
+gs
+#1770716696
+git diff >~/diff
+#1770716700
+gs
+#1770716702
+git apply ~/diff
+#1770716705
+gs
+#1770717182
+cd include
+#1770717183
+gs
+#1770717185
+git add  -A
+#1770717187
+commit
+#1770717220
+push
+#1770718237
+gs
+#1770718239
+git diff
+#1770718246
+git checkout  .
+#1770718248
+git pull
+#1770718252
+git log -p
+#1770725521
+gs
+#1770725525
+git pull
+#1770726588
+gs
+#1770726591
+git checkout  .
+#1770727190
+gs
+#1770728950
+git diff
+#1770728972
+gs
+#1770728978
+git diff drivers/power/supply/vfcs/vfcs-core/vfcs.c
+#1770728981
+git checkout drivers/power/supply/vfcs/vfcs-core/vfcs.c
+#1770728989
+git diff drivers/power/supply/vfcs/vfcs-bat/battery.c
+#1770728992
+git checkout  drivers/power/supply/vfcs/vfcs-bat/battery.c
+#1770728993
+git pull
+#1770728996
+gs
+#1770728998
+git diff
+#1770729020
+git checkout  .
+#1770729021
+git pull
+#1770729039
+cd include/
+#1770729040
+gs
+#1770729043
+git add ../drivers/
+#1770729043
+gs
+#1770729045
+commit
+#1770729048
+gb
+#1770729052
+gs
+#1770729060
+git checkout vivo_mtk_1.0 
+#1770729062
+git pull
+#1770729063
+gs
+#1770729065
+git reset .
+#1770729068
+git reset ..
+#1770729070
+git pull
+#1770729073
+git checkout  ..
+#1770729074
+git pull
+#1770729076
+gb
+#1770729078
+git pull
+#1770729084
+gs
+#1770729089
+git reset --hard HEAD^^^^^^^^^^^^
+#1770729091
+git pull
+#1770729111
+gs
+#1770729113
+git add drivers/power/
+#1770729113
+gs
+#1770729117
+commit
+#1770729121
+gb
+#1770729124
+git commit --amend
+#1770729153
+push
+#1770729509
+cd include
+#1770729510
+gs
+#1770732682
+fd 2545
+#1770733589
+cd include
+#1770733589
+gs
+#1770725144
+tmux at -t main
+#1770773784
+gs
+#1770773786
+git diff
+#1770773790
+git checkout  .
+#1770773790
+gs
+#1770773792
+git pull
+#1770773793
+gb
+#1770773793
+gs
+#1770776665
+git apply ~/diff
+#1770776665
+gs
+#1770777898
+cd include
+#1770777898
+gs
+#1770777901
+git diff >~/diff
+#1770777908
+gs
+#1770777912
+git apply ~/diff
+#1770777915
+gs
+#1770779169
+cd include
+#1770779169
+gs
+#1770779172
+git add -A
+#1770779174
+commit
+#1770779222
+push
+#1770781308
+gs
+#1770781309
+cd include
+#1770781310
+gs
+#1770793506
+git diff
+#1770793518
+git checkout  .
+#1770793521
+git apply ~/diff
+#1770793521
+gs
+#1770793487
+cd include
+#1770793488
+gs
+#1770793490
+git add -A
+#1770793496
+git diff --cached >~/diff
+#1770793554
+commit 
+#1770793587
+push
+#1770797544
+gs
+#1770797546
+git diff
+#1770797549
+git checkout  .
+#1770797551
+git pull
+#1770797551
+gb
+#1770797552
+gs
+#1770797553
+gb
+#1770797557
+git apply ~/diff
+#1770797565
+gs
+#1770797582
+git diff
+#1770797460
+cd include
+#1770797460
+gs
+#1770797528
+git add -A
+#1770797535
+git diff --cached >~/diff
+#1770797592
+cd include
+#1770797593
+gs
+#1770797892
+git diff
+#1770801496
+cd arch
+#1770801496
+gs
+#1770801499
+git diff >~/diff
+#1770790313
+tmux at -t main
+#1770811330
+gs
+#1770811331
+git diff
+#1770811367
+cat ~/ddd.h > ~/m/PD2545_A_16.0.4.17.W10.V000L1/vendor/vivo/pri-charge/common/include/linux/vfcs-data-engine-common.h 
+#1770811368
+gs
+#1770811984
+cd arch/arm64/boot/dts/mediatek/
+#1770811988
+rg 'richtek,rt6160'
+#1770813577
+gs
+#1770813581
+git add .
+#1770813583
+commit
+#1770813626
+push
+#1770814798
+gs
+#1770814804
+git diff
+#1770816692
+cd include
+#1770816693
+gs
+#1770816697
+git diff --cached 
+#1770860728
+cd include
+#1770860728
+gs
+#1770862096
+git diff
+#1770862114
+gs
+#1770862115
+gb
+#1770862120
+git diff >~/diff
+#1770863621
+gs
+#1770864915
+cd co
+#1770864917
+cd include
+#1770864917
+gs
+#1770868661
+cd include
+#1770868662
+gs
+#1770868665
+git diff >~/diff
+#1770868673
+gs
+#1770868676
+git pull
+#1770868677
+gb
+#1770868677
+gs
+#1770868682
+git apply ~/diff
+#1770868683
+gs
+#1770868796
+cd arch
+#1770868796
+gs
+#1770868799
+git diff
+#1770868803
+git checkout  ..
+#1770869728
+gs
+#1770869729
+cd arch
+#1770869729
+gs
+#1770870143
+git diff
+#1770860714
+tmux at -t main
+#1770878892
+ls
+#1770879378
+cd include
+#1770879378
+gs
+#1770879380
+git add -A
+#1770879381
+gs
+#1770879585
+git pull
+#1770879586
+gb
+#1770879591
+git checkout $dx5
+#1770879595
+git pull
+#1770880571
+gs
+#1770880572
+cd include
+#1770880572
+gs
+#1770880574
+git checkout  ..
+#1770881759
+gs
+#1770881762
+git checkout  -
+#1770881762
+gs
+#1770881766
+git pull
+#1770881818
+gs
+#1770881820
+git log 
+#1770881826
+git log -p
+#1770881852
+gb
+#1770881856
+git checkout  
+#1770881856
+temp_lcm_lk2
+#1770881860
+git checkout temp_lcm_lk2
+#1770881861
+git pull
+#1770881886
+gs
+#1770881888
+cd arch
+#1770881888
+gs
+#1770881889
+gb
+#1770881889
+gs
+#1770881891
+git pull
+#1770882310
+gs
+#1770882313
+git apply ~/diff
+#1770882313
+gs
+#1770882300
+cd arch
+#1770882301
+gs
+#1770882304
+git diff >~/diff
+#1770882997
+cd include
+#1770882998
+gs
+#1770883002
+git reset -A
+#1770883003
+gs
+#1770883005
+git reset ..
+#1770883006
+gs
+#1770883009
+git diff >~/diff
+#1770883016
+gs
+#1770883017
+git checkout  .
+#1770883020
+git apply ~/diff
+#1770883021
+gs
+#1770884199
+cd arch/arm64/boot/dts/mediatek/
+#1770884201
+rg 'ivo,wls-epp-camera-limit-enab'
+#1770884866
+gs
+#1770884868
+git add .
+#1770884870
+bluecode
+#1770885577
+gs
+#1770885580
+git add .
+#1770887166
+gs
+#1770887274
+cd arch
+#1770887275
+gs
+#1770887276
+git diff
+#1770887280
+git checkout  .
+#1770887283
+git checkout  ..
+#1770887307
+cd arch
+#1770887308
+gs
+#1770887312
+git add -A
+#1770887315
+commit
+#1770887336
+push
+#1770889203
+gs
+#1770876491
+tmux at  -t main
+#1770896721
+fd charge.c
+#1770899687
+ls
+#1770899691
+ls -la
+#1770899721
+cd
+#1770899728
+cd codecenter/dx5/
+#1770899731
+vim .repo/manifest.xml
+#1770899799
+repo sync -c VivoCode/vendor_vivo_pri-virtemp
+#1770899812
+cd ..
+#1770899814
+cd VIR/
+#1770899815
+ls
+#1770899818
+cd dx5/
+#1770899818
+ls
+#1770899820
+vim .repo/manifest.xml
+#1770899825
+repo sync -c vivo_virtemp_1.0
+#1770899837
+repo sync -c VivoCode/vendor_vivo_pri-virtemp
+#1770899840
+ls
+#1770900306
+ls -la
+#1770902240
+gb
+#1770902273
+gs
+#1770902274
+git add .
+#1770902275
+commit
+#1770902298
+push
+#1770902741
+gs
+#1770902744
+git add drivers/power/
+#1770902747
+git reset  tags
+#1770902748
+gs
+#1770904122
+cd include
+#1770904122
+gs
+#1770904125
+git diff >~/diff
+#1770904166
+gs
+#1770904169
+git apply ~/diff
+#1770904170
+gs
+#1770904142
+git add drivers/
+#1770904148
+commit
+#1770904191
+push
+#1770904540
+gs
+#1770904543
+git diff >~/diff
+#1770904614
+gs
+#1770896448
+tmux at -t main
+#1771900710
+cd include
+#1771900711
+gs
+#1771900713
+git diff
+#1771900791
+gs
+#1771900817
+git checkout  ..
+#1771910607
+cd include
+#1771910608
+gs
+#1771910610
+git pull
+#1771910610
+gb
+#1771910610
+gs
+#1771909905
+tmux at -t main
+#1771916502
+cd i
+#1771917154
+cd include
+#1771917154
+gs
+#1771927224
+cd include
+#1771927224
+gs
+#1771928069
+git status
+#1771928071
+gb
+#1771928074
+git add .
+#1771928074
+gs
+#1771928076
+commit
+#1771928147
+push
+#1771928818
+gs
+#1771928819
+git diff
+#1771928872
+gs
+#1771928873
+gb
+#1771928874
+git add .
+#1771928897
+gs
+#1771928899
+commit
+#1771928923
+push
+#1771933659
+tmux at -t main
+#1771982742
+gs
+#1771985991
+git apply ~/diff
+#1771985993
+gs
+#1771985996
+git pull
+#1771986000
+git apply ~/diff
+#1771986001
+gs
+#1771985980
+cd include
+#1771985980
+gs
+#1771985983
+git diff >~/diff
+#1771986955
+gs
+#1771986965
+git log -p
+#1771991327
+gs
+#1771991329
+git diff
+#1771996720
+tmux at -t main
+#1772001834
+gs
+#1772001864
+cd include/
+#1772001864
+gs
+#1772001866
+git add .
+#1772001866
+gs
+#1772001873
+git add ../drivers/
+#1772001873
+gs
+#1772001875
+commit
+#1772001909
+push
+#1772002242
+gs
+#1772002245
+git add drivers/
+#1772002247
+commit
+#1772002274
+push
+#1772002333
+gs
+#1772002334
+cd include
+#1772002335
+gs
+#1772002347
+cd include
+#1772002347
+gs
+#1772005692
+git pull
+#1772008127
+cd i
+#1772008131
+cd pri-charge/include
+#1772008131
+gs
+#1772010416
+cd include
+#1772010417
+gs
+#1772011737
+cd include
+#1772011737
+gs
+#1772012059
+gb
+#1772012060
+git pull
+#1772013167
+gs
+#1772013168
+gb
+#1772013169
+git pull
+#1772015608
+gs
+#1772015896
+git add .
+#1772015897
+commit
+#1772015913
+push
+#1772021265
+gs
+#1772021267
+git add .
+#1772021267
+gs
+#1772021272
+commit
+#1772021303
+push
+#1772022137
+cd include
+#1772022137
+gs
+#1772022156
+cd include
+#1772022156
+gs
+#1772022159
+git log -p
+#1772020171
+tmux at -t main
+#1772069517
+gs
+#1772069519
+git pull
+#1772070586
+cd i
+#1772070586
+gs
+#1772070587
+cd arch
+#1772070588
+gs
+#1772070590
+git add -A
+#1772070592
+commit
+#1772070600
+gs
+#1772070639
+cd arch
+#1772070639
+gs
+#1772070642
+git add -A
+#1772070643
+commit
+#1772070723
+push
+#1772070882
+cd i
+#1772070883
+cd arch
+#1772070883
+gs
+#1772070953
+cd arch
+#1772070953
+gs
+#1772070955
+git add  -A
+#1772070957
+commit
+#1772071002
+push
+#1772071228
+cd include
+#1772071228
+gs
+#1772079268
+cd i
+#1772079269
+gs
+#1772079270
+cd arch
+#1772079271
+gs
+#1772079277
+cd arch
+#1772079278
+gs
+#1772079279
+git pull
+#1772079280
+gbn
+#1772079282
+gb
+#1772079282
+gs
+#1772083311
+tmux at -t main
+#1772088858
+cd include
+#1772088858
+gs
+#1772091799
+git apply ~/diff
+#1772091799
+gs
+#1772091781
+cd include
+#1772091781
+gs
+#1772091784
+git diff >~/diff
+#1772093017
+cd include
+#1772093017
+gs
+#1772093019
+git diff
+#1772093025
+git add -A
+#1772093027
+commit
+#1772093066
+push
+#1772093290
+c di
+#1772093292
+cd -
+#1772093293
+cd include
+#1772093293
+gs
+#1772099397
+git pull
+#1772099440
+gs
+#1772099442
+git diff
+#1772099445
+git checkout  .
+#1772099446
+git pull
+#1772100032
+bluecode
+#1772101107
+gs
+#1772101108
+git add .
+#1772101109
+commit
+#1772101133
+push
+#1772101230
+cd include
+#1772101230
+gs
+#1772102446
+git pull
+#1772102449
+git log -p
+#1772102454
+git pull
+#1772102478
+git log -p
+#1772102518
+cd ..
+#1772102521
+rm -rf common/
+#1772102538
+cp -r ~/codecenter/v/common/ .
+#1772102539
+gs
+#1772102541
+git diff
+#1772102786
+cd include
+#1772102786
+gs
+#1772102790
+git log -p
+#1772103048
+cd include
+#1772103049
+gs
+#1772103051
+git log -p
+#1772106983
+cd i
+#1772106985
+cd arch
+#1772106985
+gs
+#1772106987
+git add  -A
+#1772106988
+commit
+#1772107008
+push
+#1772107817
+cd include
+#1772107817
+gs
+#1772107875
+git checkout  .
+#1772107876
+git pull
+#1772108021
+gs
+#1772108754
+git diff
+#1772108763
+gs
+#1772108768
+git diff >~/diff
+#1772108789
+gs
+#1772108791
+git pull
+#1772108794
+git stash 
+#1772108801
+git apply ~/diff
+#1772108802
+gs
+#1772108805
+git checkout  .
+#1772109109
+git apply ~/diff
+#1772109109
+gs
+#1772109114
+git diff
+#1772110326
+gs
+#1772110328
+git diff
+#1772111177
+c di
+#1772111179
+cd -
+#1772111180
+cd include
+#1772111180
+gs
+#1772106350
+tmux at -t main
+#1772157425
+gs
+#1772157428
+git diff
+#1772164953
+gs
+#1772164954
+git diff
+#1772164958
+git checkout  .
+#1772164959
+gs
+#1772164978
+git apply ~/diff
+#1772164978
+gs
+#1772164964
+cd include
+#1772164964
+gs
+#1772164966
+git diff
+#1772164972
+git diff >~/diff
+#1772166066
+gs
+#1772166067
+cd include
+#1772166067
+gs
+#1772166069
+git diff
+#1772166071
+git add -A
+#1772166072
+commit
+#1772166128
+push
+#1772166434
+gs
+#1772166436
+git checkout  .
+#1772166437
+pull
+#1772166442
+git pull
+#1772166448
+git log -p
+#1772172763
+gs
+#1772172765
+git diff
+#1772172772
+gs
+#1772172777
+git add drivers/power/
+#1772172777
+gs
+#1772172779
+commit
+#1772172809
+Push
+#1772172815
+push
+#1772173252
+gs
+#1772173254
+git pull
+#1772173257
+git log -p
+#1772174249
+gs
+#1772174254
+git pull
+#1772174258
+git apply ~/diff
+#1772174259
+gs
+#1772174263
+git apply ~/diff.diff
+#1772174264
+gs
+#1772177005
+git add drivers/power/
+#1772177006
+gb
+#1772177006
+gs
+#1772177008
+commit
+#1772177033
+push
+#1772177388
+cd arch
+#1772177389
+gs
+#1772177391
+git add -A
+#1772177392
+commit
+#1772177411
+push
+#1772177511
+cd arch
+#1772177512
+gs
+#1772177514
+git add -A
+#1772177515
+commit
+#1772177539
+push
+#1772184141
+cd arch/arm64/boot/dts/mediatek/
+#1772184142
+rg pd2545_battery_params_sh366101_fw.dtsi
+#1772172758
+tmux at -t main
+#1772244141
+gs
+#1772244142
+gb
+#1772244146
+git diff
+#1772244149
+git checkout  .
+#1772244151
+git pull
+#1772245433
+cd include
+#1772245434
+gs
+#1772245436
+git pull
+#1772246519
+gs
+#1772246551
+cd include/
+#1772246552
+gs
+#1772246555
+git add ../drivers/power/
+#1772246558
+git ad .
+#1772246559
+git add .
+#1772246560
+gs
+#1772246561
+commit
+#1772246655
+push
+#1772248607
+gs
+#1772248610
+git diff >~/diff
+#1772249693
+gs
+#1772249696
+git apply ~/diff
+#1772249696
+gs
+#1772249671
+cd i
+#1772249677
+cd pri-charge/include
+#1772249678
+ggs
+#1772249678
+gs
+#1772249683
+git diff >~/diff
+#1772252649
+gs
+#1772252652
+git diff >~/diff
+#1772262056
+cd arch
+#1772262057
+gs
+#1772262058
+git add .
+#1772262059
+commit
+#1772262090
+push
+#1772263067
+gs
+#1772266392
+git diff
+#1772266395
+gs
+#1772266399
+git diffdrivers/power/supply/vfcs/vfcs-fg/sh366101.c
+#1772266401
+git diff drivers/power/supply/vfcs/vfcs-fg/sh366101.c
+#1772266404
+gb
+#1772266405
+git add drivers/power/supply/vfcs/vfcs-fg/sh366101.c
+#1772266435
+git commit -m "PD2564:[B260225-82438]【性能测试】【MCR_1526_20578128】【基础性能(关键场景)】【手机选项重启时间】【12+256】测试机PD2564重启耗时均值38S(开log耗时41S)，对比机PD2548重启均值36S(开log耗时37S)，超出预期标准值T≦35S"
+#1772266443
+push
+#1772271776
+gs
+#1772271778
+git diff
+#1772271780
+git checkout  .
+#1772271782
+git pull
+#1772271785
+git apply ~/diff
+#1772271785
+gs
+#1772272950
+git add .
+#1772272952
+commit
+#1772272979
+push
+#1772273614
+cd include
+#1772273615
+gs
+#1772273616
+git diff
+#1772273620
+git checkout  ..
+#1772273622
+git pull
+#1772274001
+cd include
+#1772274002
+gs
+#1772271763
+cd include
+#1772271763
+gs
+#1772271768
+git diff >~/diff
+#1772272185
+gs
+#1772275219
+cd include
+#1772275219
+gs
+#1772275224
+git diff >~/diff
+#1772275229
+gs
+#1772275233
+git apply ~/diff
+#1772275234
+gs
+#1772259946
+tmux at -t main
+#1772279467
+gs
+#1772279468
+git diff
+#1772279472
+gs
+#1772279474
+git add .
+#1772279475
+commit
+#1772279491
+push
+#1772285102
+gs
+#1772285104
+git diff
+#1772285106
+git checkout  .
+#1772285107
+ls
+#1772285109
+cd
+#1772285110
+ls
+#1770169548
+v
+#1770170830
+cd
+#1770170830
+cd codecenter/
+#1770170831
+cd dx5/
+#1770170832
+cd kernel/kernel_device_modules-6.12/
+#1770170834
+git pull
+#1770170843
+git checkout  temp_gpio_driving_pd2545
+#1770170843
+gb
+#1770170843
+gs
+#1770170846
+gb
+#1770170847
+gs
+#1770170849
+git checkout  temp_gpio_driving_pd2545
+#1770170850
+v
+#1770170895
+gs
+#1770170897
+git add .
+#1770170899
+commit
+#1770170900
+push
+#1770170924
+v
+#1770171563
+cd
+#1770171564
+ls
+#1770171578
+rm -rf diff log_New.txt log.txt 
+#1770171579
+ls
+#1770171585
+rm -rf mediatek/ recovery/
+#1770171586
+ls
+#1770172471
+v
+#1770172520
+cd
+#1770172520
+cd codecenter/
+#1770172523
+cd dx5/system/core/healthd/
+#1770172524
+gb
+#1770172524
+gs
+#1770172526
+git checkout  temp_fold6_kpoc_v0
+#1770172528
+git pull
+#1770172531
+v
+#1770173974
+cd
+#1770173976
+cd -
+#1770173983
+git checkout vivo_qcom_common_ard16.0 
+#1770173984
+git pull
+#1770173985
+v
+#1770176235
+cd
+#1770176427
+cd c-
+#1770176429
+cd -
+#1770176435
+cd codecenter/dx5/system/core/healthd/
+#1770176437
+git pull
+#1770176466
+git checkout  
+#1770176712
+cd
+#1770176718
+cd codecenter/all/dx5/system/core/healthd/
+#1770176719
+v
+#1770186375
+cd
+#1770186375
+cd codecenter/
+#1770186382
+cd dx5/vendor/mediatek/proprietary/bootable/bootloader/preloader/
+#1770186384
+git pull
+#1770186387
+git checkout  temp_2564_pmic_config
+#1770186387
+gb
+#1770186387
+gs
+#1770186416
+gb
+#1770186417
+v
+#1770186580
+gs
+#1770186581
+git add .
+#1770186583
+commit
+#1770186584
+push
+#1770187787
+v
+#1770188306
+cd
+#1770188309
+cd codecenter/dx5/system/core/healthd/
+#1770188310
+gb
+#1770188310
+gs
+#1770188312
+gb
+#1770188313
+v
+#1770188648
+cd
+#1770188649
+cd codecenter/
+#1770188658
+cd
+#1770188659
+cd codecenter/
+#1770188662
+cd dx5/
+#1770188699
+cd
+#1770188702
+cd codecenter/dx5/
+#1770188703
+cd kernel/kernel_device_modules-6.12/
+#1770188704
+gb
+#1770188704
+gs
+#1770188707
+git checkout  temp_gpio_driving_pd2545
+#1770188709
+git pull
+#1770188722
+gb
+#1770188725
+v
+#1770188755
+git checkout $dx5
+#1770188756
+git pull
+#1770188758
+v
+#1770188824
+gs
+#1770188826
+git add .
+#1770188828
+commit
+#1770188862
+push
+#1770188885
+cdcdcd
+#1770188886
+cd
+#1770188887
+cd codecenter/
+#1770188887
+cd v
+#1770188888
+git pull
+#1770188894
+git checkout  
+#1770188901
+git checkout vivo_mtk_1.0
+#1770188903
+git pull
+#1770188903
+gs
+#1770188905
+git diff --cached 
+#1770188911
+git reset .
+#1770188913
+git checkout  .
+#1770188915
+git checkout vivo_mtk_1.0
+#1770188916
+git pull
+#1770188916
+gs
+#1770188920
+git clean -xfd
+#1770188920
+v
+#1770188922
+cd common/
+#1770188922
+v
+#1770188938
+gs
+#1770188939
+git add .
+#1770188941
+commit
+#1770188946
+gb
+#1770188958
+git commit --amend
+#1770188985
+push
+#1770189497
+git checkout  143829330b35530d2c830bbe71a40649ed68846b
+#1770189499
+v
+#1770193483
+clear
+#1770194355
+cd
+#1770194358
+mkdir temp
+#1770194359
+ls
+#1770194363
+mv fhdplus2312_low_battery.bmp  temp/
+#1770194364
+cd temp/
+#1770194368
+bluecode
+#1770194370
+cls
+#1770194370
+source ~/.bashrc
+#1770194370
+clear
+#1770194373
+bluecode
+#1770197415
+cd
+#1770197444
+cl
+#1770197444
+clear
+#1770200533
+cd  codecenter/
+#1770200533
+cd
+#1770200534
+cd m
+#1770200537
+cd PD2545_A_16.0.4.9.W10.V000L1/
+#1770200826
+vp
+#1770200905
+cd
+#1770200912
+v
+#1770202095
+gs
+#1770202100
+git clean -xfd
+#1770202100
+gs
+#1770202102
+git diff
+#1770202105
+git checkout  .
+#1770202106
+git pull
+#1770202108
+gs
+#1770202110
+git reset .
+#1770202111
+git checkout  .
+#1770202112
+gs
+#1770202117
+git checkout  vivo_mtk_common_ard16.0 
+#1770202118
+git pull
+#1770202118
+gs
+#1770202119
+gb
+#1770202122
+ls
+#1770202134
+cd -
+#1770202138
+cd ../../..
+#1770202150
+cl
+#1770202150
+clear
+#1770207843
+v
+#1770263030
+clear
+#1770296186
+cd
+#1770296188
+clear
+#1770611164
+v
+#1770618377
+cd
+#1770618378
+cd codecenter/
+#1770618380
+cd all/
+#1770618381
+cd PD
+#1770618382
+ls
+#1770618384
+cd 2564/
+#1770618384
+ls
+#1770618386
+. ./setenv.sh 
+#1770618542
+make lk -j8
+#1770627817
+vim  vendor/mediatek/proprietary/bootable/bootloader/lk2
+#1770628110
+vim vendor/mediatek/proprietary/bootable/bootloader/lk2/
+#1770628123
+make  lk --rebuild -j8
+#1770628455
+v
+#1770628872
+cp  out_alone/target/product/k6993v1_64/obj/EXECUTABLES/kpoc_charger_intermediates/kpoc_charger ~/
+#1770628882
+cp out/target/product/k6993v1_64/lk-verified.img ~/m
+#1770628909
+cp out/target/product/k6993v1_64/lk-verified.img ~
+#1770628971
+v
+#1770629036
+make logo -j8
+#1770631381
+cp ~/logo/* vendor/mediatek/proprietary/external/BootLogo/logo/fhdplus3168/
+#1770631388
+cd vendor/mediatek/proprietary/external/BootLogo/
+#1770631388
+gs
+#1770631389
+cd -
+#1770631395
+make logo --rebuild -j8
+#1770632254
+cp out/target/product/k6993v1_64/logo.img ~
+#1770632445
+cd vendor/mediatek/proprietary/external/BootLogo/
+#1770632445
+gs
+#1770632447
+git checkout  .
+#1770632458
+cp  logo/fhdplus3168/fhdplus3168_low_battery.bmp ~/logo
+#1770632464
+cp  logo/fhdplus3168/fhdplus3168_low_battery01_ex.bmp ~/logo
+#1770632470
+cp  logo/fhdplus3168/fhdplus3168_low_battery_remind.bmp ~/logo
+#1770632476
+cp logo/fhdplus3168/fhdplus3168_low_battery_remind_ex.bmp ~/logo
+#1770633303
+cd -
+#1770633308
+cp logo/fhdplus3168/fhdplus3168_low_battery_remind_ex.bmp ~/logo
+#1770633311
+ls
+#1770633311
+gs
+#1770633409
+cp ~/logo/* logo/fhdplus3168/
+#1770633411
+cd -
+#1770633413
+make logo --rebuild -j8
+#1770633720
+cp out/target/product/k6993v1_64/logo.img ~/
+#1770633803
+cd -
+#1770633804
+ls
+#1770633805
+gs
+#1770633809
+git checkout .
+#1770633837
+cp logo/fhdplus3168/fhdplus3168_low_battery.bmp logo/fhdplus3168/fhdplus3168_low_battery01_ex.bmp logo/fhdplus3168/fhdplus3168_low_battery_remind.bmp logo/fhdplus3168/fhdplus3168_low_battery_remind_ex.bmp ~/logo
+#1770633972
+cd
+#1770633973
+cd codecenter/
+#1770633974
+cd v
+#1770633974
+gs
+#1770633977
+git diff >~/diff
+#1770643067
+cd
+#1770643067
+clear
+#1770698496
+cd m
+#1770698512
+python download.py -n  PD2545_A_16.0.4.17.W10.V000L1 -f /images/PD2545/Base/SystemTest/PD2545_A_16.0.4.17.W10.V000L1
+#1770704321
+v
+#1770704790
+cd
+#1770704791
+ls
+#1770704795
+unzip PD2564_A_16.0.1.4.W10.V000L1--C_02.09---12+512G偏高.zip 
+#1770704807
+cd recovery/
+#1770704807
+ls
+#1770704826
+cp ~/.user/bin/klog .
+#1770704828
+vim klog 
+#1770704842
+./klog 
+#1770866640
+clear
+#1771925129
+cd
+#1771925129
+cd codecenter/
+#1771925131
+cd dx5/kernel/kernel_device_modules-6.12/
+#1771925132
+git pull
+#1771925134
+git checkout  c0a131b20a1eda251bc96c244acb1de95cd2be47
+#1771925136
+v
+#1772005320
+cd
+#1772005321
+cd m
+#1772005335
+cd PD2564_A_16.0.1.11.W10.V000L1/
+#1772005336
+vp
+#1772005681
+cd
+#1772005682
+cd m
+#1772005688
+cd PD2545_A_16.0.3.12.W10.V000L1/
+#1772005689
+vp
+#1772005714
+cd ..
+#1772005717
+rm -rf PD2545_A_16.0.3.12.W10.V000L1/ 
+#1772010093
+cd
+#1772010094
+cd codecenter/
+#1772010095
+cd v
+#1772010097
+git pull
+#1772010101
+git checkout vivo_mtk_1.0
+#1772010102
+gb
+#1772010102
+gs
+#1772010104
+git pull
+#1772010108
+git cherry-pick 4390a797dc45a98a069857eddd71cdec99ea7880
+#1772010110
+gs
+#1772010113
+git log -p
+#1772010121
+gs
+#1772010125
+git log 
+#1772010135
+git commit --amend
+#1772010245
+push
+#1772010414
+v
+#1772011229
+cdcd
+#1772011230
+cd
+#1772011231
+cd codecenter/
+#1772011233
+cd dx5/kernel/kernel_device_modules-6.12/
+#1772011233
+gb
+#1772011235
+git pull
+#1772011244
+git checkout  temp_2545_fg
+#1772011247
+git pull
+#1772011249
+git checkout temp_2545_fg
+#1772011252
+git pull
+#1772011254
+v
+#1772011323
+gs
+#1772011325
+git add .
+#1772011326
+commit
+#1772011328
+push
+#1772012206
+cdcd
+#1772012207
+cd
+#1772012208
+cd m
+#1772012213
+cd PD2564_A_16.0.1.6_rt6160.W10.V000L1/
+#1772012219
+cd kernel/kernel_device_modules-6.12/
+#1772012221
+git log -p
+#1772012331
+v
+#1772012578
+cd
+#1772012579
+cd m
+#1772012651
+v
+#1772013121
+cd
+#1772015459
+cd codecenter/
+#1772015462
+cd dx5/kernel/kernel_device_modules-6.12/
+#1772015463
+git checkout 851f44b57eaf351eee182f6a3c4d0a4432c35ae4
+#1772015464
+v
+#1772069616
+cd
+#1772069618
+cd codecenter/
+#1772069620
+cd v
+#1772069623
+git checkout 039b62e6bd96d152a461bec0e22257df8a0da6dc
+#1772069632
+cd common/
+#1772069632
+v
+#1772071379
+cd
+#1772071380
+cd m
+#1772071386
+cd PD2564_A_16.0.1.*rt*
+#1772071389
+cd kernel/kernel
+#1772071391
+cd kernel/kernel_device_modules-6.12/
+#1772071391
+gs
+#1772071401
+cd drivers/misc/mediatek/
+#1772071404
+git status .
+#1772071408
+cd -
+#1772071409
+cd ..
+#1772071410
+v
+#1772071533
+cd kernel_device_modules-6.12/drivers/regulator/
+#1772071534
+git status .
+#1772074031
+cd
+#1772074032
+cd codecenter/
+#1772074043
+cd dx5/vendor/vivo/config/
+#1772074043
+gb
+#1772074044
+git pull
+#1772074066
+gb
+#1772074066
+gs
+#1772074068
+gb
+#1772074068
+gs
+#1772074070
+ls
+#1772074071
+cd project/
+#1772074073
+v
+#1772088051
+cd
+#1772088052
+cd codecenter/
+#1772088052
+cd v
+#1772088053
+cd common/
+#1772088055
+git checkout  temp_pt_branch_new
+#1772088057
+git pull
+#1772088058
+v
+#1772093436
+cd
+#1772093436
+cd codecenter/
+#1772093441
+cd dx5/system/core/healthd/
+#1772093441
+v
+#1772093456
+cd
+#1772093460
+cd codecenter/all/dx5/system/core/healthd/
+#1772093460
+v
+#1772096001
+cd
+#1772096002
+cd codecenter/
+#1772096003
+cd v
+#1772096005
+git checkout  143829330b35530d2c830bbe71a40649ed68846b
+#1772096006
+gs
+#1772096008
+cd ..
+#1772096008
+cd vv
+#1772096039
+git checkout  60fb9c02b7d2e49852a4e40c2c38d69338d3b87f
+#1772096149
+cd
+#1772096150
+cd codecenter/
+#1772096154
+cd dx5/kernel/kernel_device_modules-6.12/
+#1772096155
+git pull
+#1772096157
+git checkout  904d8670bde726052b2ca6d22cbdfe0272d789b1
+#1772096162
+cp -r arch/arm64/boot/dts/mediatek/ ~
+#1772096179
+git checkout  7960b81d1d12ddc26b55273ac380f21d62d5c85f
+#1772096963
+v
+#1772097936
+cd
+#1772097938
+cd codecenter/v
+#1772097939
+gb
+#1772097940
+git pull
+#1772097942
+git checkout  635b56199b6853c4817e9061754acbd981cfe08b
+#1772097943
+cd
+#1772097945
+cd  codecenter/vv
+#1772097946
+gb
+#1772097948
+git checkout  vivo_mtk_1.0
+#1772097949
+git pull
+#1772097951
+gb
+#1772097951
+gs
+#1772097956
+git clean -xfd
+#1772097958
+git checkout  .
+#1772097961
+git checkout vivo_mtk_1.0
+#1772097962
+git pull
+#1772097963
+gb
+#1772097964
+gs
+#1772097966
+cd ..
+#1772097967
+cd v
+#1772097968
+gb
+#1772097968
+gs
+#1772098006
+cd
+#1772098008
+rm -rf mediatek/
+#1772098009
+l
+#1772098023
+cd codecenter/dx5/kernel/kernel_device_modules-6.12/
+#1772098024
+git pull
+#1772098027
+git checkout  bd899c92a3bc47fe90c25e0c120240e0e5a83726
+#1772098033
+cp -r arch/arm64/boot/dts/mediatek/ ~
+#1772098037
+git checkout  $dx5
+#1772098038
+git pull
+#1772099390
+cd
+#1772099390
+cd m
+#1772099393
+cd DPD2437_A_A25.06.23.01_eng.W10.V000L1/
+#1772099394
+vp
+#1772099422
+eng
+#1772099786
+vp
+#1772099807
+eng
+#1772099810
+cl
+#1772099810
+clear
+#1772099811
+eng
+#1772099984
+vp
+#1772100610
+cl
+#1772100610
+clear
+#1772100611
+eng
+#1772101106
+vp
+#1772101223
+v
+#1772101999
+cd
+#1772101999
+cd co
+#1772102008
+rm -rf common
+#1772102009
+cd codecenter/v
+#1772102010
+gb
+#1772102011
+git pull
+#1772102012
+cd common/
+#1772102012
+v
+#1772102056
+git revert 9ae9c47d45
+#1772102058
+gs
+#1772102059
+v
+#1772102145
+gs
+#1772102147
+git add drivers/
+#1772102149
+commit
+#1772102152
+gb
+#1772102153
+push
+#1772102158
+gs
+#1772102164
+git commit --amend
+#1772102182
+push
+#1772102226
+V
+#1772102229
+v
+#1772102349
+gs
+#1772102351
+git ad drivers/
+#1772102355
+git add drivers/power/
+#1772102355
+gs
+#1772102357
+commit
+#1772102362
+git commit --amend
+#1772102378
+push
+#1772102440
+cd
+#1772102441
+cd m
+#1772102443
+cd PD2545_A_16.0.5.6.W10.V000L1/
+#1772102444
+vp
+#1772102545
+user
+#1772102823
+cp out/target/product/k6993v1_64/boot.img ~/m
+#1772102825
+cp out/target/product/k6993v1_64/vendor_boot.img ~/m
+#1772103040
+v
+#1772107870
+vp
+#1772108064
+user
+#1772108751
+vp
+#1772108769
+cd
+#1772108770
+cd m
+#1772108773
+cd -
+#1772108774
+cd m
+#1772108776
+cd PD2545_A_16.0.5.6.W10.V000L1/
+#1772108777
+vp
+#1772108806
+v
+#1772108808
+vp
+#1772109036
+user
+#1772109078
+cp out/target/product/k6993v1_64/boot.img ~/m
+#1772109081
+cp out/target/product/k6993v1_64/vendor_boot.img ~/m
+#1772109092
+vp
+#1772109118
+user
+#1772109799
+cp out/target/product/k6993v1_64/boot.img ~/m
+#1772109804
+cp out/target/product/k6993v1_64/vendor_boot.img ~/m
+#1772110324
+vp
+#1772111172
+v
+#1772111543
+cd
+#1772111544
+cd codecenter/
+#1772111545
+cd v
+#1772111547
+gs
+#1772111548
+gb
+#1772111550
+git checkout temp_fold_bid_ttt
+#1772111552
+git pull
+#1772161924
+v
+#1772174055
+cd
+#1772174057
+cd codecenter/v
+#1772174058
+git pull
+#1772174060
+gb
+#1772174061
+git checkout  temp_fold_bid_ttt
+#1772174063
+git pull
+#1772174075
+cd  ..
+#1772174076
+cd vv
+#1772174079
+git checkout  vivo_mtk_1.0
+#1772174081
+git pull
+#1772174238
+gs
+#1772174242
+git diff >~/diff.diff
+#1772175801
+v
+#1772178445
+cd
+#1772178446
+cd m
+#1772178448
+cd PD2545_A_16.0.5.6.W10.V000L1/
+#1772178448
+vp
+#1772178458
+user
+#1772181502
+vp
+#1772181533
+user
+#1772182686
+cd
+#1772182687
+cd codecenter/
+#1772182688
+cd v
+#1772182690
+git checkout  f5e6f00e2f0fa18a2775f1701d0f8af82f3c6e61
+#1772182691
+cd ..
+#1772182692
+cd vv
+#1772182694
+git checkout vivo_mtk_1.0
+#1772182696
+git pull
+#1772182696
+gs
+#1772182698
+git diff
+#1772182701
+git checkout  .
+#1772182702
+gs
+#1772182704
+git pull
+#1772182705
+gb
+#1772182705
+gs
+#1772182707
+gb
+#1772183058
+cd
+#1772183078
+cd codecenter/dx5/vendor/vivo/system/
+#1772183078
+gb
+#1772183085
+cd sepolicy/
+#1772183086
+gb
+#1772183088
+v
+#1772183460
+gb
+#1772183463
+git log -p
+#1772183486
+git checkout 	
+#1772183486
+temp_fold6_bright_sep
+#1772183489
+git checkout  temp_fold6_bright_sep
+#1772183491
+git pull
+#1772183497
+cd ..
+#1772183498
+cd core/
+#1772183500
+git checkout  	
+#1772183500
+temp_fold6_bright_sep
+#1772183502
+git checkout  temp_fold6_bright_sep
+#1772183503
+gb
+#1772183503
+gs
+#1772183505
+v
+#1772183668
+vcd
+#1772183669
+cd
+#1772183676
+cd codecenter/dx5/bootable/recovery/minui
+#1772183677
+rg gr_flip
+#1772183678
+v
+#1772184051
+cd
+#1772184052
+cd codecenter/
+#1772184053
+cd dx5/kernel/kernel_device_modules-6.12/
+#1772184055
+git checkout  209eb9007f6e10e2d945dbcb3eee3ecec6955a23
+#1772184056
+v
+#1772184837
+cd
+#1772184843
+cd codecenter/dx5/vendor/vivo/system/sepolicy/
+#1772184843
+gb
+#1772184845
+git checkout  	temp_2545_chg_sepoly
+#1772184847
+git pull
+#1772184851
+v
+#1772184944
+gs
+#1772184945
+git add .
+#1772184948
+commit
+#1772184950
+push
+#1772185371
+rg vendor_sysfs_graphics
+#1772185373
+v
+#1772185380
+git pull
+#1772185421
+gb
+#1772185425
+git checkout  	
+#1772185425
+temp_fold6_bright_sep
+#1772185428
+git checkout  	
+#1772185428
+temp_fold6_bright_septemp_fold6_bright_sep
+#1772185431
+	
+#1772185431
+temp_fold6_bright_sep
+#1772185434
+git checkout  temp_fold6_bright_sep
+#1772185437
+git pull
+#1772185449
+git checkout  temp_2545_syscorchg
+#1772185451
+git pull
+#1772185454
+v
+#1772185894
+git pull
+#1772186033
+git checkout  temp_2545_chg_sepoly_v1
+#1772186047
+v
+#1772186696
+gs
+#1772186698
+git add .
+#1772186700
+commit 
+#1772186703
+push
+#1772186801
+cd
+#1772186802
+cd codecenter/
+#1772186804
+cd 2314
+#1772186810
+cd vendor/vivo/pri-kernel/
+#1772186812
+git pull
+#1772186817
+gb
+#1772186817
+gs
+#1772186830
+git checkout  	temp_osc_PD2219_13.0_13.1.7.0_SDA_119
+#1772186833
+ls
+#1772186836
+cp -r kernel-5.10/ ~
+#1772186858
+git checkout  tag_PD2219_13.0_13.1.7.0.W10.V000L1_vendor
+#1772186861
+git pull
+#1772186922
+git add .
+#1772186922
+gs
+#1772186940
+git commit -m B260119-81815	
+#1772186952
+push
+#1772188034
+v
+#1772197914
+cd
+#1772197916
+cd common/
+#1772197916
+gs
+#1772197926
+vim main_body_configs.c 
+#1772245408
+v
+#1772245412
+cd
+#1772245413
+v
+#1772245917
+cd m
+#1772245934
+python download.py -n  PD2564_A_16.0.2.1.W10.V000L1 -f /images/PD2564/Base/SystemTest/PD2564_A_16.0.2.1.W10.V000L1
+#1772246425
+cd
+#1772246427
+cd m
+#1772246440
+cd PD2564_A_16.0.2.1.W10.V000L1/
+#1772246441
+user
+#1772248489
+cp out/target/product/k6993v1_64/boot.img ~/m
+#1772248492
+cp out/target/product/k6993v1_64/vendor_boot.img ~/m
+#1772248502
+vp
+#1772248601
+user
+#1772248606
+vp
+#1772248612
+user
+#1772250046
+cp out/target/product/k6993v1_64/boot.img ~/m
+#1772250050
+cp out/target/product/k6993v1_64/vendor_boot.img ~/m
+#1772263864
+cd
+#1772263865
+ls
+#1772264645
+cd codecenter/dx5/kernel/kernel_device_modules-6.12/
+#1772264648
+git pull
+#1772264653
+git checkout  1c7ca32dd5fc87149dc155f476745dfe3c3b6b00
+#1772264654
+gb
+#1772264654
+gs
+#1772264680
+gb
+#1772264681
+gs
+#1772264683
+git checkout  1c7ca32dd5fc87149dc155f476745dfe3c3b6b00
+#1772264686
+v
+#1772264814
+cd
+#1772264814
+cd codecenter/
+#1772264839
+cd dx5/system/core/healthd/
+#1772264839
+gb
+#1772264847
+git checkout vivo_mtk_common_ard16.0 
+#1772264848
+git pull
+#1772264885
+gb
+#1772264991
+gs
+#1772265077
+v
+#1772265122
+cd
+#1772265129
+cd codecenter/dx5/vendor/vivo/system/sepolicy/
+#1772265129
+gb
+#1772265132
+cd ..
+#1772265133
+cd core/
+#1772265134
+gb
+#1772265136
+v
+#1772265148
+cd rootdir/
+#1772265148
+ls
+#1772265165
+rg bright
+#1772265247
+fd init.vivo.rc
+#1772265253
+vim init/android_36/init.vivo.rc
+#1772268942
+fd init.rc
+#1772268943
+ls
+#1772268951
+cd
+#1772268956
+cd codecenter/dx5/system/core/rootdir/
+#1772268957
+fd init.rc
+#1772268958
+ls
+#1772268958
+gb
+#1772268961
+vim init.rc
+#1772270135
+cd
+#1772270136
+v
+#1772270777
+cd codecenter/dx5/kernel/kernel_device_modules-6.12/
+#1772270779
+git checkout ea1d371e0c6c56f8b185719030a3cf2db41925eb
+#1772270779
+v
+#1772280159
+cd
+#1772280165
+cd codecenter/all/dx5/system/core/healthd/
+#1772280166
+v 
+#1772280779
+cd
+#1772280780
+cd codecenter/
+#1772280786
+cd dx5/
+#1772280799
+cd vendor/vivo/system/sepolicy/
+#1772280799
+v
+#1772281519
+gs
+#1772281523
+git add mtk-common/
+#1772281524
+commit
+#1772281525
+push
+#1772281697
+cd
+#1772281698
+cd codecenter/
+#1772281701
+cd dx5/system/core/healthd/
+#1772281701
+gb
+#1772281701
+gs
+#1772281705
+git checkout vivo_mtk_common_ard16.0 
+#1772281706
+git pull
+#1772281708
+git log -p
+#1772281715
+git log -p .
+#1772281942
+cd
+#1772281943
+cd cdo
+#1772281944
+cd codecenter/
+#1772281948
+cd dx5/system/core/healthd/
+#1772281948
+gb
+#1772281949
+gs
+#1772281949
+v
+#1772282364
+cd 
+#1772282368
+cd codecenter/all/dx5/system/core/healthd/
+#1772282369
+v
+#1772282442
+cd
+#1772282447
+cd codecenter/dx5/vendor/vivo/system/sepolicy/
+#1772282447
+gb
+#1772282448
+gs
+#1772282496
+v
+#1772282962
+cd
+#1772282968
+cd codecenter/all/dx5/bootable/recovery/minui
+#1772282969
+rg gr_flip
+#1772282970
+v
+#1772283224
+gs
+#1772283228
+git checkout  .
+#1772284408
+cd
+#1772284409
+cd codecenter/v
+#1772284410
+gb
+#1772284412
+git checkout  dfa170a8a27e894e1c4490d0a19813df3e09527f
+#1772284421
+git reset --hard HEAD^
+#1772284489
+cd
+#1772284493
+mkdir pric
+#1772284497
+cd pric/
+#1772284498
+mkdir old
+#1772284518
+cp -r ~/codecenter/v/kernel_platform/ old/
+#1772284521
+tree
+#1772284522
+ls
+#1772284526
+mkdir new
+#1772284528
+cd
+#1772284532
+cd codecenter/v
+#1772284534
+git checkout  	temp_osc_PD2528F_0.8.6_30s
+#1772284535
+git pull
+#1772284536
+gb
+#1772284536
+gs
+#1772284537
+gb
+#1772284538
+gs
+#1772284539
+git pull
+#1772284540
+cd
+#1772284543
+cd pric/
+#1772284547
+cp -r ~/codecenter/v/kernel_platform/ new/
+#1772284614
+cd
+#1772284620
+cd m
+#1772284622
+cd PD2545_A_16.0.5.9.W10.V000L1/
+#1772284623
+vp
+#1772285003
+ls
+#1772285101
+vp
+#1772285121
+ls
+#1772285128
+cd vendor/vivo/pri-charge/
+#1772285128
+ls
+#1772285131
+fd fg-comm
+#1772285157
+cp  -r  common/drivers/power/supply/vfcs/vfcs-fg ~/pric/
+#1772285158
+cd
+#1772285163
+cd pric/
+#1772285166
+fd fg-common
+#1772285199
+rm -rf vfcs-fg/
+#1772285199
+cd
+#1772285200
+cd m
+#1772285202
+cd PD2545_A_16.0.5.9.W10.V000L1/
+#1772285208
+cd vendor/vivo/pri-charge/common/drivers/power/supply/vfcs/
+#1772285209
+fd vfcs-fg-commo
+#1772285232
+cp  include/vfcs-fg-common.h ~/pric/
+#1772285250
+cp  vfcs-fg/vfcs-fg-common.c ~/pric/
+#1772285251
+cd
+#1772285252
+cd pric/
+#1772285254
+fd vfcs-fg-commo
+#1772285514
+cd
+#1772285515
+cd m
+#1772285518
+cd PD2545_A_16.0.5.9.W10.V000L1/
+#1772285527
+cd vendor/vivo/pri-charge/common/drivers/power/supply/vfcs/vfcs-fg/
+#1772285528
+ls
+#1772285536
+cp ~/pric/vfcs-fg-common.c  .
+#1772285536
+gs
+#1772285542
+git diff
+#1772285548
+cd ..
+#1772285559
+cp  ~/pric/vfcs-fg-common.h   include/
+#1772285559
+gs
+#1772285562
+git diff
+#1772285888
+gs
+#1772285891
+git add .
+#1772285895
+commit
+#1772286007
+push
+#1772279465
+tmux at  -t main
+#1772328252
+gs
+#1772328254
+git pull
+#1772328266
+cd include
+#1772328266
+gs
+#1772328268
+git diff
+#1772328275
+git stash 
+#1772328278
+git pull
+#1772329182
+gb
+#1772329183
+gs
+#1772329187
+git apply ~/diff
+#1772329187
+gs
+#1772329189
+gb
+#1772329192
+git pull
+#1772329205
+cd ..
+#1772329208
+rm -rf common/
+#1772329213
+cp -r ~/codecenter/v/common/ .
+#1772329214
+gs
+#1772329216
+git diff
+#1772329224
+git pull
+#1772329226
+git log -p
+#1772329869
+gs
+#1772329871
+gb
+#1772329880
+cd ..
+#1772329895
+cd common/drivers/power/supply/vfcs/vfcs-fg/
+#1772329912
+cp ~/codecenter/v/common/drivers/power/supply/vfcs/vfcs-fg/vfcs-fg-common.c  .
+#1772329913
+gs
+#1772329915
+cd ..
+#1772329933
+cp ~/codecenter/v/common/drivers/power/supply/vfcs/include/vfcs-fg-common.h  include/
+#1772329934
+gs
+#1772328238
+ls
+#1772328241
+tmux at -t main
+#1772416950
+git apply ~/diff
+#1772416951
+gs
+#1772416965
+git diff
+#1772416967
+git checkout  .
+#1772416969
+git apply ~/diff
+#1772416970
+gs
+#1772416971
+git idff
+#1772416973
+git diff
+#1772416937
+c diu
+#1772416939
+cd -
+#1772416939
+cd include
+#1772416939
+gs
+#1772416942
+git diff  >~/diff
+#1772418634
+gs
+#1772418636
+git add drivers/
+#1772418636
+gs
+#1772418638
+commit
+#1772418660
+push
+#1772422822
+gs
+#1772422824
+git diff
+#1772422828
+git checkout  .
+#1772422830
+git pull
+#1772422840
+cd include
+#1772422840
+gs
+#1772422842
+git diff
+#1772422844
+git checkout  ..
+#1772423903
+gs
+#1772423906
+git apply ~/diff
+#1772423907
+gs
+#1772423888
+cd include
+#1772423888
+gs
+#1772423891
+git reset ..
+#1772423891
+gs
+#1772423894
+git diff >~/diff
+#1772423913
+git add -A
+#1772424321
+cd i
+#1772424323
+cd arch
+#1772424323
+gs
+#1772424325
+git add .
+#1772424326
+commit
+#1772424353
+push
+#1772424509
+gs
+#1772424513
+gb
+#1772424514
+gs
+#1772424516
+git diff
+#1772424518
+git add .
+#1772424519
+commit
+#1772424538
+push
+#1772432261
+g
+#1772432263
+gs
+#1772432267
+git apply ~/diff
+#1772432267
+gs
+#1772432250
+cd include
+#1772432250
+gs
+#1772432256
+git diff >~/diff
+#1772432271
+git add -A
+#1772432273
+commit
+#1772432365
+push
+#1772424878
+cd include
+#1772424878
+gs
+#1772424895
+git diff --cached 
+#1772433006
+cd include
+#1772433006
+gs
+#1772433008
+git add -A
+#1772433017
+cd include
+#1772433017
+gs
+#1772433020
+commit
+#1772433038
+push
+#1772433267
+gs
+#1772433268
+git pull
+#1772433270
+git log -p
+#1772434719
+cd include
+#1772434719
+gs
+#1772434723
+git diff >~/diff
+#1772434338
+gs
+#1772434340
+git diff
+#1772434343
+git checkout  .
+#1772434344
+git pull
+#1772434727
+git apply ~/diff
+#1772434727
+gs
+#1772436014
+cd include
+#1772436015
+gs
+#1772436017
+git add -A
+#1772436018
+commit
+#1772436035
+push
+#1772432128
+tmux at -t main
+#1772438638
+cd i
+#1772438641
+cd arch
+#1772438641
+gs
+#1772438643
+git add .
+#1772438644
+commit
+#1772438663
+push
+#1772439274
+cd include
+#1772439274
+gs
+#1772439276
+git diff
+#1772439354
+gs
+#1772439356
+git diff
+#1772439590
+gs
+#1772439592
+git add .
+#1772439593
+commit
+#1772439610
+push
+#1772443765
+cd include
+#1772443765
+gs
+#1772443766
+git diff
+#1772443802
+gs
+#1772443805
+git diff >~/diff
+#1772443814
+gs
+#1772443819
+git apply ~/diff
+#1772443819
+gs
+#1772444799
+git diff
+#1772445631
+gs
+#1772445912
+git diff
+#1772445913
+git add .
+#1772445914
+gs
+#1772445915
+commit
+#1772445933
+push
+#1772445977
+cd include
+#1772445977
+ggs
+#1772445978
+gs
+#1772445979
+git diff
+#1772452062
+c di
+#1772452064
+cd -
+#1772452067
+cd include
+#1772452068
+gs
+#1772452070
+git pull
+#1772452104
+cd include/
+#1772452105
+gs
+#1772452108
+git add -A
+#1772452110
+commit
+#1772452135
+Push
+#1772452138
+push
+#1772456289
+cd include
+#1772456289
+gs
+#1772456295
+git diff >~/diff
+#1772457061
+gs
+#1772457064
+git apply ~/diff
+#1772457065
+gs
+#1772457958
+git diff
+#1772458551
+gs
+#1772458553
+git diff
+#1772458560
+git diff >~/diff
+#1772459197
+gs
+#1772451688
+tmux at -t main
+#1772505947
+gs
+#1772505949
+git diff
+#1772507625
+gs
+#1772507627
+git diff
+#1772507735
+gs
+#1772507739
+git diff >~/diff
+#1772507910
+cd include
+#1772507911
+gs
+#1772507915
+git diff
+#1772507927
+git checkout  ..
+#1772507929
+git pull
+#1772507975
+cd include
+#1772507975
+gs
+#1772508056
+cd arch/arm64/configs/
+#1772508057
+gb
+#1772508057
+gs
+#1772508060
+rg DATA_ENGINE
+#1772508254
+git apply ~/diff
+#1772508255
+gs
+#1772501804
+tmux at -t mainm
+#1772501808
+tmux at -t main
+#1772543546
+gs
+#1772543548
+git diff
+#1772543553
+gs
+#1772543562
+git diff drivers/power/supply/vfcs/vfcs-cms/vfcs-cms-class.c >~/diff
+#1772547676
+gs
+#1772547730
+git checkout  .
+#1772547731
+gs
+#1772548134
+git add .
+#1772548135
+commit
+#1772548154
+push
+#1772550121
+gs
+#1772593473
+gb
+#1772594136
+gs
+#1772594139
+gb
+#1772594139
+gs
+#1772594140
+git diff
+#1772594151
+gs
+#1772594159
+git add drivers/power/supply/vfcs/vfcs-chg/charge.c
+#1772594160
+v
+#1772594179
+gs
+#1772594181
+commit
+#1772594201
+push
+#1772594434
+cd include
+#1772594434
+gs
+#1772594435
+gb
+#1772594437
+git pull
+#1772594442
+gb
+#1772594442
+gs
+#1772588559
+tmux at -t main
+#1772607798
+cd include
+#1772607799
+gs
+#1772607799
+gb
+#1772607800
+gs
+#1772615673
+fd sh3
+#1772615681
+cat ~/vfcs-fg-sh366101.c > drivers/power/supply/vfcs/vfcs-fg/vfcs-fg-sh366101.c
+#1772615682
+gs
+#1772615684
+git diff
+#1772623704
+tmux at -t main
+#1772691695
+cd include
+#1772691695
+gs
+#1772716503
+git pull
+#1772716504
+gb
+#1772716504
+gs
+#1772716505
+gb
+#1772718314
+gs
+#1772718315
+git pull
+#1772718316
+gb
+#1772718316
+gs
+#1772718343
+git cherry-pick 9325be08c4b5dfd33abb41e6cf6b4216e009fc36
+#1772711120
+tmux at -t main
+#1772764014
+cd include
+#1772764014
+gs
+#1772764016
+git pull
+#1772760669
+tmux at t- main
+#1772760672
+tmux at -t main
+#1772793763
+gs
+#1772793764
+cd include
+#1772793764
+gs
+#1772793765
+git diff
+#1772797735
+gs
+#1772797742
+cd include
+#1772797742
+gs
+#1772797745
+git diff >~/diff
+#1772797748
+gs
+#1772797751
+git apply ~/diff
+#1772797751
+gs
+#1772798687
+cd arch
+#1772798687
+gs
+#1772798701
+git add -A
+#1772798702
+gs
+#1772798703
+commit
+#1772798726
+push
+#1772799761
+gs
+#1772799778
+git apply ~/diff
+#1772799780
+gs
+#1772799783
+cd ..
+#1772799786
+rm -rf common/
+#1772799791
+cp -r ~/codecenter/v/common/ .
+#1772799792
+gs
+#1772799817
+git checkout  .
+#1772799818
+gs
+#1772799827
+git clean -xfd
+#1772799827
+gs
+#1772799829
+git pull
+#1772800849
+gs
+#1772800850
+cd ..
+#1772800853
+rm -rf common/
+#1772800857
+cp -r ~/codecenter/v/common/ .
+#1772800858
+gs
+#1772797709
+tmux at -t main
+#1772856636
+cd arch
+#1772856637
+gs
+#1772856638
+git add .
+#1772856639
+commit
+#1772856653
+push
+#1772856657
+gb
+#1772856657
+gs
+#1772856657
+gb
+#1772856658
+gs
+#1772946276
+tmux at -t main

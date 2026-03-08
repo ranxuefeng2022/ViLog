@@ -1,0 +1,51 @@
+{
+  "coc.nodePath": "/home/ranxuefeng/.user/node-v24.11.1-linux-x64/bin/node",
+  
+  "diagnostic": {
+    "enable": false,
+    "level": "information",
+    "enableSigns": false,
+    "virtualText": false
+  },
+  
+  "snippets": {
+    "enable": true,
+    "ultisnips": {
+      "enable": true,
+      "pythonPrompt": false
+    },
+    "snipmate": {
+      "enable": false
+    },
+    "extends": {
+      "c": ["c"]
+    }
+  },
+  
+  "suggest": {
+    "autoTrigger": "always",
+    "noselect": false,
+    "floatConfig": {
+      "relative": "cursor",
+      "row": 0,
+      "col": 1,
+      "anchor": "NE",
+      "maxWidth": 80,
+      "maxHeight": 20
+    },
+    "completionItemKindLabels": {
+      "snippet": "✂️"
+    }
+  },
+  
+  "languageserver": {
+    "clangd": {
+      "command": "clangd",
+      "filetypes": ["c", "cpp", "objc", "objcpp"],
+      "rootPatterns": ["compile_commands.json", ".git/"],
+      "initializationOptions": {
+        "clangd.compilationDatabasePath": "build/"
+      }
+    }
+  }
+}
