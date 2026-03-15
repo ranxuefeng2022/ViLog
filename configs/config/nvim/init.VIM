@@ -7,6 +7,9 @@ Plug 'folke/noice.nvim'
 Plug 'MunifTanjim/nui.nvim'
 Plug 'petertriho/nvim-scrollbar'
 
+Plug 'yuttie/comfortable-motion.vim'
+Plug 'psliwka/vim-smoothie'
+
 Plug 'phaazon/hop.nvim'
 Plug 'rebelot/kanagawa.nvim'
 endif
@@ -24,7 +27,7 @@ Plug 'haya14busa/incsearch.vim'
 Plug 'haya14busa/incsearch-easymotion.vim'
 Plug 'haya14busa/incsearch-fuzzy.vim'
 Plug 'ojroques/vim-oscyank', {'branch': 'main'}
-Plug 'catppuccin/nvim'
+Plug 'catppuccin/nvim', { 'branch': 'vim', 'as': 'catppuccin' }
 Plug 'ibhagwan/fzf-lua'
 Plug 'nvim-tree/nvim-web-devicons'
 
@@ -89,6 +92,13 @@ set linebreak
 set nocompatible
 set signcolumn=yes
 set encoding=utf-8
+set smoothscroll
+set updatetime=300
+set timeoutlen=500
+set ttimeoutlen=50
+set completeopt=menu,menuone,noselect
+set pumheight=10
+set shortmess+=c
 set fileencoding=utf-8
 set showcmd
 set ruler
@@ -494,7 +504,7 @@ let g:ranger_replace_netrw = 0
 let g:osc52_trim_newline = 1
 let g:oscyank_term = 'tmux'
 
-let g:python3_host_prog = '/usr/bin/python3'
+let g:python3_host_prog = '/opt/homebrew/bin/python3'
 let g:UltiSnipsExpandTrigger="<tab>"
 let g:UltiSnipsJumpForwardTrigger="<c-j>"
 
@@ -743,7 +753,7 @@ endif "neovide config
 
 """""""""""""""""""""""""""""""COC.NVIM"""""""""""""""""""""""""""""""""""
 if !exists("g:neovide")
-let g:coc_node_path='~/.user/node-v24.0.1-linux-x64/bin/node'
+let g:coc_node_path='/Users/ranxuefeng/.nvm/versions/node/v22.17.0/bin/node'
 endif
 inoremap <expr> <CR> pumvisible() ? "\<C-y>" : "\<CR>"
 inoremap <silent><expr> <C-@> coc#refresh()
