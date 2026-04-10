@@ -7,11 +7,14 @@ Plug 'folke/noice.nvim'
 Plug 'MunifTanjim/nui.nvim'
 Plug 'petertriho/nvim-scrollbar'
 
-Plug 'yuttie/comfortable-motion.vim'
-Plug 'psliwka/vim-smoothie'
-
 Plug 'phaazon/hop.nvim'
-Plug 'rebelot/kanagawa.nvim'
+
+Plug 'lukas-reineke/indent-blankline.nvim'
+
+Plug 'folke/zen-mode.nvim'
+Plug 'NeogitOrg/neogit'
+Plug 'folke/flash.nvim'
+Plug 'karb94/neoscroll.nvim'
 endif
 "Plug 'yetone/avante.nvim', { 'branch': 'main', 'do': 'make' }
 
@@ -19,15 +22,12 @@ Plug 'rbgrouleff/bclose.vim'
 Plug 'skywind3000/asyncrun.vim'
 Plug 'Yggdroot/LeaderF', { 'do': ':LeaderfInstallCExtension' }
 
-Plug 'rose-pine/neovim'
 Plug 'folke/tokyonight.nvim'
-Plug 'tomasr/molokai'
 
 Plug 'haya14busa/incsearch.vim'
 Plug 'haya14busa/incsearch-easymotion.vim'
 Plug 'haya14busa/incsearch-fuzzy.vim'
 Plug 'ojroques/vim-oscyank', {'branch': 'main'}
-Plug 'catppuccin/nvim', { 'branch': 'vim', 'as': 'catppuccin' }
 Plug 'ibhagwan/fzf-lua'
 Plug 'nvim-tree/nvim-web-devicons'
 
@@ -38,20 +38,11 @@ Plug 'neoclide/coc-snippets'                    " 片段引擎
 Plug 'honza/vim-snippets'                       " 通用片段库
 Plug 'SirVer/ultisnips'         " 片段引擎
 
-
-Plug 'Shougo/deoplete.nvim', { 'do': ':UpdateRemotePlugins' }
-Plug 'nvim-treesitter/nvim-treesitter', { 'do': ':TSInstallSync all' }
-Plug 'nvim-treesitter/nvim-treesitter-context'
-
-Plug 'vim-scripts/taglist.vim'
-
 Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
 Plug 'junegunn/fzf.vim'
 
 Plug 'easymotion/vim-easymotion'
-Plug 'haya14busa/incsearch-easymotion.vim'
 
-Plug 'git@github.com:vim-scripts/c.vim.git'
 Plug 'vim-scripts/c.vim'
 
 Plug 'voldikss/vim-floaterm'
@@ -71,20 +62,16 @@ Plug 'kshenoy/vim-signature'
 Plug 'terryma/vim-expand-region'
 call plug#end()
 
-filetype indent off
 syntax on
 if has('nvim')
-"colorscheme kanagawa
 colorscheme tokyonight-night
 set shada+=!
 set cmdheight=0
 else
 colorscheme default
 endif
-set foldcolumn=0
 set nowrapscan
 set history=500
-set t_Co=256
 set mouse=a
 set hlsearch
 set cindent
@@ -92,22 +79,17 @@ set linebreak
 set nocompatible
 set signcolumn=yes
 set encoding=utf-8
-set smoothscroll
-set updatetime=300
-set timeoutlen=500
-set ttimeoutlen=50
-set completeopt=menu,menuone,noselect
-set pumheight=10
-set shortmess+=c
 set fileencoding=utf-8
 set showcmd
 set ruler
-set nocursorline
+set updatetime=300
 set showtabline=0
+set splitbelow
+set splitright
 set nomore
 set incsearch
 set showmatch
-set matchtime=50
+set matchtime=10
 set helplang=cn
 set langmenu=zh_CN.UTF-8
 set noswapfile
@@ -124,12 +106,11 @@ set nobackup
 set foldcolumn=0
 set noautowrite
 set copyindent
-set ttyfast
 set report=0
-set synmaxcol=1000
+set synmaxcol=500
+set regexpengine=0
 set autoread
 "set lazyredraw
-set lbr
 set tw=500
 set ai "Auto indent
 set nu
@@ -139,12 +120,15 @@ set nowrap "Wrap lines
 set switchbuf+=useopen
 set switchbuf+=usetab
 set wildmenu
+set wildmode=longest:full,full
 set wildignore+=.*
+set wildignore+=*.o,*.obj,*.so,*.a,*.pyc,*.class
 set foldenable
 set sessionoptions-=options
 set completeopt=longest,menu
-set list
-set listchars=tab:›\ ,trail:.,extends:#,nbsp:.
+set shortmess+=c
+set nolist
+"set listchars=tab:›\ ,trail:.,extends:#,nbsp:.
 set fileencodings=utf-8,gbk,gb18030,gb2312,ucs-bom,cp936,latin1
 set hid
 set backspace=eol,start,indent
@@ -489,7 +473,8 @@ let g:EasyMotion_do_mapping = 0
 let g:EasyMotion_smartcase = 1
 let g:EasyMotion_use_smartsign_us = 1 " US layout
 let g:move_key_modifier_visualmode = 'S'
-let loaded_matchparen=1
+let g:matchparen_timeout = 300
+let g:matchparen_insert_timeout = 300
 let g:ranger_map_keys = 0
 
 let g:floaterm_width = 900  " 宽度为屏幕的 80%
@@ -504,7 +489,7 @@ let g:ranger_replace_netrw = 0
 let g:osc52_trim_newline = 1
 let g:oscyank_term = 'tmux'
 
-let g:python3_host_prog = '/opt/homebrew/bin/python3'
+let g:python3_host_prog = '/usr/bin/python3'
 let g:UltiSnipsExpandTrigger="<tab>"
 let g:UltiSnipsJumpForwardTrigger="<c-j>"
 
@@ -620,8 +605,8 @@ nnoremap z z
 vnoremap z z
 vnoremap zf zfzf
 
-nnoremap n nzz
-nnoremap N Nzz
+nnoremap n nzzzv
+nnoremap N Nzzzv
 
 nnoremap <C-j> 6<C-e>
 nnoremap <C-k> 6<C-y>
@@ -674,8 +659,12 @@ nnoremap E <Plug>(expand_region_expand)
 nnoremap 0 ^
 nnoremap <leader>cd :cd %:p:h<cr>:pwd<cr>
 
-set cursorline
-autocmd BufWritePost * GitGutter
+" Zen Mode
+nnoremap <leader>z :ZenMode<CR>
+
+" Neogit
+nnoremap <leader>ng :Neogit<CR>
+
 autocmd InsertLeave * silent! write
 autocmd FocusGained,BufEnter * silent! checktime
 autocmd BufRead,BufNewFile * source ~/.vim/plugged/c.vim/ftplugin/c.vim
@@ -686,14 +675,18 @@ autocmd VimLeave * call system("mv *2025_Will_Rich* tags/")
 autocmd BufRead * silent! call LoadTags()
 autocmd Syntax * source ~/.vim/plugged/c.vim/ftplugin/c.vim
 autocmd User FloatermExit :FloatermNew --autoclose=0 exit 0
-autocmd BufRead,BufNewFile *  hi clear SignColumn
-autocmd BufRead,BufNewFile *  hi clear LineNr
-autocmd BufRead,BufNewFile *  highlight LineNr ctermfg=darkgrey guifg=#555555
-autocmd BufRead,BufNewFile *  hi Search ctermfg=0 ctermbg=11 guifg=Black guibg=Yellow
-autocmd BufRead,BufNewFile *  highlight CursorLineNr ctermfg=yellow guifg=#FFFF00
-autocmd BufRead,BufNewFile *  highlight CursorLine ctermbg=NONE guibg=NONE
+autocmd BufRead,BufNewFile * call <SID>SetHighlights()
 autocmd BufEnter * if !g:initial_directory_set | silent! lcd %:p:h | let g:initial_directory_set = 1 | endif
 autocmd FileType python setlocal makeprg=python3\ %
+
+function! s:SetHighlights()
+  hi clear SignColumn
+  hi clear LineNr
+  highlight LineNr ctermfg=darkgrey guifg=#555555
+  hi Search ctermfg=0 ctermbg=11 guifg=Black guibg=Yellow
+  highlight CursorLineNr ctermfg=yellow guifg=#FFFF00
+  highlight CursorLine ctermbg=NONE guibg=NONE
+endfunction
 
 nnoremap <leader>pp :setlocal paste!<cr>
 nnoremap <leader>L :call LoadTags()<cr>
@@ -753,17 +746,14 @@ endif "neovide config
 
 """""""""""""""""""""""""""""""COC.NVIM"""""""""""""""""""""""""""""""""""
 if !exists("g:neovide")
-let g:coc_node_path='/Users/ranxuefeng/.nvm/versions/node/v22.17.0/bin/node'
+let g:coc_node_path='~/.user/node-v24.0.1-linux-x64/bin/node'
 endif
-inoremap <expr> <CR> pumvisible() ? "\<C-y>" : "\<CR>"
 inoremap <silent><expr> <C-@> coc#refresh()
-inoremap <silent><expr> <S-Tab> pumvisible() ? "\<C-p>" : "\<S-Tab>"
-inoremap <silent><expr> <Tab> pumvisible() ? "\<C-n>" : "\<Tab>"
-inoremap <silent><expr> <CR> pumvisible() ? coc#_select_confirm() : "\<CR>"
+inoremap <silent><expr> <S-Tab> coc#pum#visible() ? coc#pum#prev(1) : "\<S-Tab>"
+inoremap <silent><expr> <Tab> coc#pum#visible() ? coc#pum#confirm() : "\<Tab>"
 inoremap <silent><expr> <C-j> coc#pum#visible() ? coc#pum#next(1) : "\<C-j>"
 inoremap <silent><expr> <C-k> coc#pum#visible() ? coc#pum#prev(1) : "\<C-k>"
 inoremap <silent><expr> <CR> coc#pum#visible() ? coc#pum#confirm() : "\<CR>"
-imap <silent><expr> <Tab> coc#pum#visible() ? coc#pum#confirm() : "\<Tab>"
 
 " 跳转片段占位符
 let g:coc_snippet_next = '<C-j>'
@@ -784,7 +774,6 @@ function! GrepCurrentFileOrWord()
 endfunction
 nnoremap <leader>g :call GrepCurrentFileOrWord()<CR>
 xnoremap <leader>g :<C-u>call GrepCurrentFileOrWord()<CR>
-
 
 " ------------------------------------------------------------
 " 功能：删除所有包含指定关键字的行（默认使用光标所在单词）
@@ -808,3 +797,14 @@ endfunction
 
 " 绑定快捷键，例如 <leader>d
 nnoremap <leader>d :call DeleteLinesWithKeyword()<CR>
+
+" Alt+鼠标滚轮实现左右滚动
+if has('mouse')
+    set mouse=a
+    nmap <M-ScrollWheelUp> 5zh
+    nmap <M-ScrollWheelDown> 5zl
+    imap <M-ScrollWheelUp> <Esc>5zh
+    imap <M-ScrollWheelDown> <Esc>5zl
+    vmap <M-ScrollWheelUp> 5zh
+    vmap <M-ScrollWheelDown> 5zl
+endif
