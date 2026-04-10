@@ -880,6 +880,7 @@
       // 文件树相关变量
       let fileTreeData = [];
       let selectedFiles = [];
+      let lastLoadedSelectionKeys = ''; // 🚀 上次 loadSelectedFiles 时的选中快照，避免重复加载
       let selectionOrderCounter = 0; // 🚀 文件选择顺序计数器，确保按点击顺序加载
       let isDragging = false;
       let dragStartIndex = -1;
@@ -1138,6 +1139,7 @@
       let fileTreeRowHeightPx = 0; // 单行高度（offsetHeight + margin）
       const fileTreeVirtualBuffer = 40; // 上下缓冲行数
       let fileTreeVirtualRaf = null;
+      let fileTreeRebuildRaf = null; // 🚀 scheduleRebuildAndRenderFileTree 的 RAF 去重标志
       let fileTreeVirtualLastStart = -1;
       let fileTreeVirtualLastEnd = -1;
       let fileTreeVirtualTopSpacer = null;
@@ -3993,7 +3995,7 @@
         }
 
         // 确保面板顶部不低于工具栏
-        const toolbarHeight = 44;
+        const toolbarHeight = 25;
         if (newY < toolbarHeight) {
           newY = toolbarHeight;
           // 调整高度以保持面板底部位置
@@ -4025,7 +4027,7 @@
           aiAssistantPanel.classList.add("maximized");
 
           // 设置最大化后的位置和大小
-          const toolbarHeight = 44; // 工具栏高度
+          const toolbarHeight = 25; // 工具栏高度
           const hScrollHeight = 16; // 横向滚动条高度
 
           if (document.fullscreenElement) {
@@ -4116,7 +4118,7 @@
         } else {
           // 否则设置默认位置和大小
           const windowHeight = window.innerHeight;
-          const toolbarHeight = 44; // 工具栏高度
+          const toolbarHeight = 25; // 工具栏高度
           const hScrollHeight = 16; // 横向滚动条高度
           const halfHeight = (windowHeight - toolbarHeight - hScrollHeight) / 2;
 
@@ -4184,6 +4186,10 @@
           if (filteredPanelState.position) {
             filteredPanel.style.left = filteredPanelState.position.left || "";
             filteredPanel.style.top = filteredPanelState.position.top || "";
+            // 🔧 同步 --filtered-panel-top CSS变量
+            if (filteredPanelState.position.top) {
+              filteredPanel.style.setProperty('--filtered-panel-top', filteredPanelState.position.top);
+            }
             // 🔧 不设置 width 和 height，让 CSS 的 left/right/bottom 控制尺寸
             filteredPanel.style.width = "";
             filteredPanel.style.height = "";
@@ -4551,10 +4557,12 @@
         };
 
         // 更新状态显示
-        secondaryFilterStatus.textContent = `已应用 (${filteredLines.length}行)`;
-        secondaryFilterStatus.className =
-          "secondary-filter-status secondary-filter-active";
-        filteredPanelFilterStatus.textContent = `${filteredLines.length}行`;
+        if (secondaryFilterStatus) {
+          secondaryFilterStatus.textContent = `已应用 (${filteredLines.length}行)`;
+          secondaryFilterStatus.className =
+            "secondary-filter-status secondary-filter-active";
+        }
+        filteredPanelFilterStatus.textContent = `二级: ${filteredLines.length}行`;
 
         // 🔧 重要：不要调用 updateFilteredPanelWithSecondaryFilter() 来替换过滤面板
         // 过滤面板继续显示一级过滤结果，二级过滤结果显示在右侧边栏
@@ -4589,9 +4597,11 @@
         console.log('Secondary filter cleared');
 
         // 更新状态显示
-        secondaryFilterStatus.textContent = "未应用";
-        secondaryFilterStatus.className =
-          "secondary-filter-status secondary-filter-inactive";
+        if (secondaryFilterStatus) {
+          secondaryFilterStatus.textContent = "未应用";
+          secondaryFilterStatus.className =
+            "secondary-filter-status secondary-filter-inactive";
+        }
         filteredPanelFilterStatus.textContent = "";
         filteredPanelFilterBox.value = "";
 
@@ -6493,7 +6503,8 @@
         );
       }
 
-      // 新增：调整过滤面板高度以保持与内容框底部对齐
+      // 调整过滤面板高度以保持与内容框底部对齐
+      // 🔧 修复：不设置显式 height 和 top，让 CSS (top/bottom) 自动控制面板大小和位置
       function adjustFilteredPanelHeight() {
         if (
           !filteredPanel.classList.contains("visible") ||
@@ -6502,39 +6513,21 @@
           return;
         }
 
-        const toolbarHeight = 44;
-        const hScrollHeight = 16;
-        const windowHeight = window.innerHeight;
+        // 🔧 清除内联 height，让 CSS 的 bottom: 16px 自动计算高度
+        filteredPanel.style.height = '';
+        filteredPanel.style.removeProperty('height');
 
-        // 检查用户是否自定义了高度（通过拖动调整高度设置的）
-        const customHeight = filteredPanel.style.height;
-        if (customHeight && customHeight.includes('px')) {
-          // 用户自定义了高度，只调整位置确保底部对齐
-          const currentHeight = parseInt(customHeight);
-          const newTop = windowHeight - currentHeight - hScrollHeight;
-          filteredPanel.style.top = newTop + 'px';
-          return;
+        // 🔧 不再设置 style.top——让 CSS 的 top: calc(50vh + 60px) 生效
+        // 如果用户通过拖动调整过 top（style.top 有值），保持它
+        // 如果 style.top 为空，CSS 的默认 top 值会自动生效
+
+        // 🔧 同步 --filtered-panel-top CSS变量
+        const currentTop = filteredPanel.style.top || '';
+        if (currentTop) {
+          filteredPanel.style.setProperty('--filtered-panel-top', currentTop);
+        } else {
+          filteredPanel.style.removeProperty('--filtered-panel-top');
         }
-
-        // 获取当前面板的top位置，如果没有则使用默认值（中间位置）
-        let currentTop = parseInt(filteredPanel.style.top);
-        if (isNaN(currentTop) || currentTop === 0) {
-          // 如果没有有效的top值，设置为中间位置
-          currentTop = toolbarHeight + (windowHeight - toolbarHeight - hScrollHeight) / 2;
-        }
-
-        // 计算面板高度，确保底部与水平滚动条对齐
-        const panelHeight = windowHeight - currentTop - hScrollHeight;
-
-        // 确保面板高度不会太小或太大
-        const minHeight = 200; // 最小高度
-        const maxHeight = windowHeight - toolbarHeight - hScrollHeight - 100; // 最大高度，留出一些空间
-
-        const finalHeight = Math.max(minHeight, Math.min(panelHeight, maxHeight));
-        const finalTop = windowHeight - finalHeight - hScrollHeight;
-
-        filteredPanel.style.height = finalHeight + "px";
-        filteredPanel.style.top = finalTop + "px";
       }
 
       function forcetoggleFullscreen() {
@@ -6884,8 +6877,9 @@
               isFilterPanelMaximized = false;
 
               // 恢复到默认大小（从工具栏下方到窗口底部）
-              const toolbarHeight = 23;
+              const toolbarHeight = 25;
               filteredPanel.style.top = toolbarHeight + 'px';
+              filteredPanel.style.setProperty('--filtered-panel-top', toolbarHeight + 'px');
               filteredPanel.style.left = '0';
               filteredPanel.style.width = '';
               filteredPanel.style.height = '';
@@ -6934,7 +6928,7 @@
               const deltaY = e.clientY - dragStartY;
               const windowHeight = window.innerHeight;
               const hScrollHeight = 16;
-              const toolbarHeight = 23; // 工具栏高度
+              const toolbarHeight = 25; // 工具栏高度
               const minHeight = 200; // 最小高度
 
               // 往上拖动时 deltaY 为负，top 减小；往下拖动时 deltaY 为正，top 增大
@@ -7044,6 +7038,12 @@
               filteredPanel.classList.add('maximized');
             }
 
+            // 🔧 同步最大化按钮图标状态
+            const maximizeBtnEl = document.getElementById('filteredPanelMaximize');
+            if (maximizeBtnEl) {
+              maximizeBtnEl.textContent = wasMaximized ? '❐' : '□';
+            }
+
             // 保存初始状态
             saveFilteredPanelState();
 
@@ -7096,6 +7096,10 @@
             // 🚀 隐藏过滤面板并重置最大化状态
             filteredPanel.classList.remove('visible', 'maximized');
             isFilterPanelMaximized = false;
+
+            // 🔧 重置最大化按钮图标
+            const maxBtn = document.getElementById('filteredPanelMaximize');
+            if (maxBtn) maxBtn.textContent = '□';
 
             // 🚀 清除可能残留的内联样式
             filteredPanel.style.left = '';
@@ -7332,14 +7336,15 @@
 
       // 新增：初始化过滤面板大小和位置 - 使用 CSS 的 bottom 属性
       function initFilteredPanelSize() {
-        // 🔧 修改：只清除不需要的属性，让 CSS 的 top 和 bottom: 0 控制面板大小
+        // 🔧 修改：清除所有内联定位样式，让 CSS 的 top/bottom/left/right 控制面板大小
         filteredPanel.style.width = "";
-        filteredPanel.style.height = ""; // 清除 height，让 CSS 的 bottom: 0 生效
+        filteredPanel.style.height = ""; // 清除 height，让 CSS 的 bottom 生效
+        filteredPanel.style.top = ""; // 🔧 清除 top，让 CSS 的 top: calc(50vh + 60px) 生效
         filteredPanel.style.left = "0";
         filteredPanel.style.removeProperty('right'); // 让 CSS 的 right 默认值生效
-        // 🔧 重置 --filtered-panel-top CSS 变量，让 max-height 计算正确
+        filteredPanel.style.removeProperty('bottom'); // 🔧 清除 bottom，让 CSS 的 bottom: 16px 生效
         filteredPanel.style.removeProperty('--filtered-panel-top');
-        // 保持 CSS 中的 top: calc(50vh + 60px) 和 bottom: 0
+        // 保持 CSS 中的 top: calc(50vh + 60px) 和 bottom: 16px
 
         // 保存初始状态
         saveFilteredPanelState();
@@ -7363,6 +7368,10 @@
         if (filteredPanelState.position) {
           filteredPanel.style.left = filteredPanelState.position.left || "";
           filteredPanel.style.top = filteredPanelState.position.top || "";
+          // 🔧 同步 --filtered-panel-top CSS变量
+          if (filteredPanelState.position.top) {
+            filteredPanel.style.setProperty('--filtered-panel-top', filteredPanelState.position.top);
+          }
           // 不恢复 width 和 height，让 CSS 控制
           filteredPanel.style.width = "";
           filteredPanel.style.height = "";
@@ -7500,7 +7509,7 @@
           }
 
           // 确保面板顶部不低于工具栏
-          const toolbarHeight = 44;
+          const toolbarHeight = 25;
           if (newY < toolbarHeight) {
             newY = toolbarHeight;
             // 调整高度以保持面板底部位置
@@ -7519,11 +7528,23 @@
           }
 
           // 🚀 性能优化：批量设置DOM样式，减少reflow
-          // 使用CSS transform代替top/left，提升性能
           filteredPanel.style.left = newX + "px";
           filteredPanel.style.top = newY + "px";
+          filteredPanel.style.setProperty('--filtered-panel-top', newY + 'px');
           filteredPanel.style.width = newWidth + "px";
-          filteredPanel.style.height = newHeight + "px";
+          // 🔧 修复：不再设置 style.height，改为使用 CSS bottom 控制高度
+          // 对于调整顶部的方向（nw, ne），只设置 top，让 bottom:0 自动计算高度
+          // 对于调整底部的方向（sw, se），设置 bottom 偏移
+          if (resizeDirection === "sw" || resizeDirection === "se") {
+            // 调整底部方向：通过设置 bottom 值来控制高度
+            const newBottom = window.innerHeight - (newY + newHeight);
+            filteredPanel.style.bottom = newBottom + "px";
+            filteredPanel.style.height = '';
+          } else {
+            // 调整顶部方向：只改 top，不设 height，让 bottom:0 自动计算
+            filteredPanel.style.height = '';
+            filteredPanel.style.removeProperty('bottom'); // 让 CSS 的 bottom:0 生效
+          }
 
           // 🚀 性能优化：节流虚拟滚动更新，避免频繁调用
           // 只在尺寸变化超过10px时才更新虚拟滚动
@@ -7817,19 +7838,19 @@
         // 🔧 修复：检查 DOM 的实际状态，而不是依赖变量
         // 这样可以避免从最小化展开时状态不一致的问题
         const isCurrentlyMaximized = filteredPanel.classList.contains("maximized");
+        const maximizeBtn = document.getElementById('filteredPanelMaximize');
 
         if (!isCurrentlyMaximized) {
           // 保存当前状态
           saveFilteredPanelState();
           // 最大化面板
           filteredPanel.classList.add("maximized");
-          // 🔧 修复：只设置必要的样式，让 CSS 的 !important 规则控制其他属性
-          // CSS 中 .maximized 已经设置了 top: 0; left: 0; right: 0; bottom: 0; 等
-          // 只需要确保移除可能冲突的内联样式即可
-          filteredPanel.style.removeProperty('height'); // 🔧 让 CSS 的 bottom: 0 控制高度
-          filteredPanel.style.removeProperty('width'); // 🔧 让 CSS 控制
-          filteredPanel.style.removeProperty('--filtered-panel-top'); // 🔧 重置 CSS 变量
+          filteredPanel.style.removeProperty('height');
+          filteredPanel.style.removeProperty('width');
+          filteredPanel.style.removeProperty('--filtered-panel-top');
           isFilterPanelMaximized = true;
+          // 🔧 切换图标为还原图标
+          if (maximizeBtn) maximizeBtn.textContent = '❐';
           console.log('[toggleFilterPanelMaximize] 面板已最大化，isFilterPanelMaximized =', isFilterPanelMaximized);
         } else {
           // 还原面板
@@ -7847,6 +7868,8 @@
           filteredPanel.style.removeProperty('--filtered-panel-top');
 
           isFilterPanelMaximized = false;
+          // 🔧 切换图标为最大化图标
+          if (maximizeBtn) maximizeBtn.textContent = '□';
           console.log('[toggleFilterPanelMaximize] 面板已还原，isFilterPanelMaximized =', isFilterPanelMaximized);
         }
 
@@ -7965,30 +7988,14 @@
       function updateFilteredPanelVisibleLines(forceHighlight = false) {
         if (filteredPanelAllLines.length === 0) return;
 
-        // 🚀 性能优化2：防御性检查 - 如果文件头索引为空或可能过期，自动预计算
-        // 这确保了在快速操作（如重置后立即滚动）时文件头能正确显示
-        // 检查条件：索引为空，或者索引数量与当前行数不匹配（可能过期），或者外部标记需要重新计算
+        // 🚀 性能优化：fileHeaderIndices 已在 updateFilteredPanel() 中预计算
+        // 只在 updateFilteredPanelVisibleLines 被独立调用（如滚动事件）时才需要重新计算
         let needsRecompute = false;
         if (fileHeaderIndices.size === 0 && filteredPanelAllLines.length > 0) {
           needsRecompute = true;
-          console.log(`[性能优化] fileHeaderIndices 为空，需要预计算`);
-        } else if (fileHeaderIndices.size > 0) {
-          // 检查索引是否可能过期：如果最大索引超过当前行数，说明数据已更新
-          let maxIndex = 0;
-          for (const idx of fileHeaderIndices) {
-            if (idx > maxIndex) maxIndex = idx;
-          }
-          if (maxIndex >= filteredPanelAllLines.length) {
-            needsRecompute = true;
-            console.log(`[性能优化] fileHeaderIndices 过期（maxIndex=${maxIndex} >= length=${filteredPanelAllLines.length}），需要重新计算`);
-          }
-        }
-
-        // 🚀 检查外部标志（ripgrep 过滤后设置的标志）
-        if (window.needsFileHeaderRecompute) {
+        } else if (window.needsFileHeaderRecompute) {
           needsRecompute = true;
-          window.needsFileHeaderRecompute = false; // 重置标志
-          console.log(`[性能优化] 外部标志指示需要重新计算 fileHeaderIndices`);
+          window.needsFileHeaderRecompute = false;
         }
 
         if (needsRecompute && filteredPanelAllLines.length > 0) {
@@ -7998,7 +8005,6 @@
               fileHeaderIndices.add(i);
             }
           }
-          console.log(`[性能优化] 预计算了 ${fileHeaderIndices.size} 个文件头索引`);
         }
 
         // 🚀 性能优化1：使用缓存的屏幕可见行数，只在窗口 resize 时重新计算
@@ -8671,18 +8677,20 @@
         let lastCheckTime = 0; // 🚀 性能优化：节流，避免频繁检查
         const CHECK_INTERVAL = 100; // 🚀 每100ms最多检查一次（提高响应速度）
 
-        const enforceHeaderHeight = () => {
+        const enforceHeaderHeight = (force = false) => {
           // 🔧 防止递归调用
           if (isFixing) {
             return;
           }
 
-          // 🚀 性能优化：节流，避免频繁调用
-          const now = Date.now();
-          if (now - lastCheckTime < CHECK_INTERVAL) {
-            return;
+          // 🚀 性能优化：节流，避免频繁调用（外部强制调用跳过节流）
+          if (!force) {
+            const now = Date.now();
+            if (now - lastCheckTime < CHECK_INTERVAL) {
+              return;
+            }
+            lastCheckTime = now;
           }
-          lastCheckTime = now;
 
           try {
             isFixing = true;
@@ -8695,7 +8703,6 @@
             const currentPaddingRight = header.style.paddingRight;
             const currentPaddingBottom = header.style.paddingBottom;
             const currentPaddingLeft = header.style.paddingLeft;
-            const currentOverflow = header.style.overflow;
             const currentFlexShrink = header.style.flexShrink;
             const currentDisplay = header.style.display;
             const currentPosition = header.style.position;
@@ -8712,32 +8719,33 @@
               needsFix = true;
             }
 
-            // 🔧 保护 height：确保是 auto，不被设置为固定值
-            if (currentHeight_inline && currentHeight_inline !== 'auto') {
-              header.style.setProperty('height', 'auto', 'important');
+            // 🔧 保护 height：确保是 26px，与 CSS 定义一致
+            // 不再设置为 auto，因为 CSS 已经通过 !important 锁定为 26px
+            if (currentHeight_inline && currentHeight_inline !== '26px') {
+              header.style.setProperty('height', '26px', 'important');
               needsFix = true;
             }
 
-            // 🔧 修复：检查完整的 padding（上右下左：3px 8px 4px 8px）
-            // 🔧 重要：top padding 必须是 3px，bottom padding 必须是 4px，与 CSS 定义一致
-            if (currentPaddingTop !== '3px' || currentPaddingRight !== '8px' ||
-                currentPaddingBottom !== '4px' || currentPaddingLeft !== '8px') {
-              header.style.setProperty('padding-top', '3px', 'important');
-              header.style.setProperty('padding-right', '8px', 'important');
-              header.style.setProperty('padding-bottom', '4px', 'important');
-              header.style.setProperty('padding-left', '8px', 'important');
+            // 🔧 修复：根据面板状态使用不同的 padding
+            // 最大化状态：3px 8px 4px 8px（与 CSS #filteredPanel.maximized 定义一致）
+            // 普通状态：2px 6px 3px 6px（与 CSS #filteredPanelHeader 定义一致）
+            const isMaximized = filteredPanel && filteredPanel.classList.contains('maximized');
+            const expectedPT = isMaximized ? '3px' : '2px';
+            const expectedPR = isMaximized ? '8px' : '6px';
+            const expectedPB = isMaximized ? '4px' : '3px';
+            const expectedPL = isMaximized ? '8px' : '6px';
+            if (currentPaddingTop !== expectedPT || currentPaddingRight !== expectedPR ||
+                currentPaddingBottom !== expectedPB || currentPaddingLeft !== expectedPL) {
+              header.style.setProperty('padding-top', expectedPT, 'important');
+              header.style.setProperty('padding-right', expectedPR, 'important');
+              header.style.setProperty('padding-bottom', expectedPB, 'important');
+              header.style.setProperty('padding-left', expectedPL, 'important');
               needsFix = true;
             }
 
             // 🔧 保护 box-sizing：确保是 border-box
             if (currentBoxSizing !== 'border-box') {
               header.style.setProperty('box-sizing', 'border-box', 'important');
-              needsFix = true;
-            }
-
-            // 保护 overflow
-            if (currentOverflow === 'hidden') {
-              header.style.setProperty('overflow', 'visible', 'important');
               needsFix = true;
             }
 
@@ -8884,10 +8892,15 @@
           initHeaderHeightProtector();
         }
 
-        // 🔧 修复：强制保护头部高度，防止被虚拟滚动更新影响
+        // 🔧 修复：立即同步保护头部高度，避免首帧被裁剪（force=true 跳过节流）
+        if (headerHeightProtector) {
+          headerHeightProtector.enforce(true);
+        }
+
+        // 🔧 修复：在下一帧再次确认，防止虚拟滚动更新覆盖
         requestAnimationFrame(() => {
           if (headerHeightProtector) {
-            headerHeightProtector.enforce();
+            headerHeightProtector.enforce(true);
           }
         });
 
@@ -8949,16 +8962,15 @@
         // 重置过滤结果框搜索
         filteredPanelResetSearch();
 
-        // 延迟更新可见行，确保DOM已更新
-        setTimeout(() => {
+        // 🚀 性能优化：使用 requestAnimationFrame 替代嵌套 setTimeout
+        // 之前是两层 setTimeout（0 + 100ms），造成至少 100ms 延迟
+        requestAnimationFrame(() => {
           if (typeof updateFilteredPanelVisibleLines === 'function') {
             updateFilteredPanelVisibleLines();
           }
-          // 恢复高亮
-          setTimeout(() => {
-            restoreHighlight();
-          }, 100);
-        }, 0);
+          // 恢复高亮 - 同帧内执行，无需额外延迟
+          restoreHighlight();
+        });
       }
 
       // ============ 服务器连接相关函数 ============
@@ -14808,9 +14820,11 @@
             }
           }
 
-          // 添加临时包含的节点（展开的文件夹及其子项）
+          // 🚀 性能优化：使用 Set 替代 includes()，避免 O(N²)
+          const finalIndexSet = new Set(finalIndices);
           for (const idx of temporarilyIncludedNodes) {
-            if (!finalIndices.includes(idx)) {
+            if (!finalIndexSet.has(idx)) {
+              finalIndexSet.add(idx);
               finalIndices.push(idx);
             }
           }
@@ -14887,6 +14901,13 @@
           Math.max(0, (total - end) * fileTreeRowHeightPx) + "px";
 
         const frag = document.createDocumentFragment();
+
+        // 🚀 性能优化：预构建 Set，避免循环内 O(N) 查找
+        const selectedIndexSet = new Set(selectedFiles.map(f => f.index));
+        const matchedIndexSet = fileTreeMatchedIndices.length > 0
+          ? new Set(fileTreeMatchedIndices)
+          : null;
+
         for (let i = start; i < end; i++) {
           const index = fileTreeAllVisibleIndices[i];
           const item = fileTreeHierarchy[index];
@@ -14898,19 +14919,18 @@
           element.style.setProperty("--ft-level", String(item.level || 0));
           element.dataset.index = index;
 
-          // 检查当前文件是否被选中
-          const isSelected = selectedFiles.some(fileObj => fileObj.index === index);
-          if (isSelected) {
+          // 🚀 性能优化：使用 Set.has() O(1) 替代 Array.some() O(N)
+          if (selectedIndexSet.has(index)) {
             element.classList.add("selected");
           }
-          
+
           // 检查是否在多选集合中
           if (archiveMultiSelectedFiles.has(index)) {
             element.classList.add("multi-selected");
           }
 
-          // 添加搜索高亮样式
-          if (fileTreeMatchedIndices.includes(index)) {
+          // 🚀 性能优化：使用 Set.has() O(1) 替代 Array.includes() O(N)
+          if (matchedIndexSet && matchedIndexSet.has(index)) {
             element.classList.add("search-matched");
           }
 
@@ -14936,6 +14956,15 @@
             }
           }
 
+          // 🚀 VS Code 风格缩进参考线：为每级缩进生成竖线 span
+          const level = item.level || 0;
+          let indentGuidesHtml = '';
+          if (level > 0) {
+            for (let lv = 1; lv <= level; lv++) {
+              indentGuidesHtml += '<span class="ft-indent-guide" style="left:' + (2 + lv * 14 - 7) + 'px"></span>';
+            }
+          }
+
           if (item.type === "folder") {
             element.classList.add(
               item.expanded
@@ -14955,6 +14984,7 @@
 
             // 🚀 不转义HTML，直接使用原始内容
             element.innerHTML =
+              indentGuidesHtml +
               `<span class="file-tree-toggle ${toggleClass}" ${toggleStyle} aria-hidden="true"></span>` +
               `<span class="icon"></span><span class="file-tree-name">${item.name}</span>` +
               loadingMark;
@@ -14974,6 +15004,7 @@
 
             // 🚀 不转义HTML，直接使用原始内容
             element.innerHTML =
+              indentGuidesHtml +
               `<span class="file-tree-toggle ${toggleClass}" aria-hidden="true"></span>` +
               `<span class="icon">💽</span><span class="file-tree-name">${item.name}</span>` +
               loadingMark;
@@ -15000,6 +15031,7 @@
                 : "";
             // 🚀 不转义HTML，直接使用原始内容
             element.innerHTML =
+              indentGuidesHtml +
               `<span class="file-tree-toggle ${isExpanded ? "expanded" : ""}" aria-hidden="true"></span>` +
               `<span class="icon">📦</span><span class="file-tree-name">${item.name}</span>` +
               (item.fileCount ? `<span class="file-count">(${item.fileCount} 个文件)</span>` : "") +
@@ -15017,7 +15049,7 @@
             else if (nameLower.endsWith('.css')) icon = "🎨";
 
             // 🚀 不转义HTML，直接使用原始内容
-            element.innerHTML = `<span class="icon">${icon}</span><span class="file-tree-name">${item.name}</span>`;
+            element.innerHTML = indentGuidesHtml + `<span class="icon">${icon}</span><span class="file-tree-name">${item.name}</span>`;
           }
 
           frag.appendChild(element);
@@ -15033,8 +15065,10 @@
       }
 
       function scheduleRebuildAndRenderFileTree() {
-        // 合并同一帧内多次触发（搜索输入会频繁触发）
-        requestAnimationFrame(() => {
+        // 🚀 性能优化：RAF 去重，避免同一帧内多次触发导致重复重建
+        if (fileTreeRebuildRaf) return;
+        fileTreeRebuildRaf = requestAnimationFrame(() => {
+          fileTreeRebuildRaf = null;
           if (!fileTreeHierarchy || fileTreeHierarchy.length === 0) return;
           ensureFileTreeVirtualDom();
           if (!fileTreeRowHeightPx || fileTreeRowHeightPx < 10) {
@@ -17541,6 +17575,14 @@
             // 🔧 没有拖动（只是单击或多选）
             console.log(`[mouseup] 没有拖动，selectedFiles.length=${selectedFiles.length}`);
             if (selectedFiles.length > 0) {
+              // 🚀 性能优化：生成当前选中的快照，与上次比较，避免重复加载
+              const currentKey = selectedFiles.map(f => f.index + ':' + f.order).join(',');
+              if (currentKey === lastLoadedSelectionKeys) {
+                console.log(`[mouseup] 选中未变化，跳过加载`);
+                return;
+              }
+              lastLoadedSelectionKeys = currentKey;
+
               if (selectedFiles.length > 1) {
                 // 🔧 多选（Ctrl+点击）：加载所有选中的文件
                 console.log(`[mouseup] 多选模式，加载 ${selectedFiles.length} 个选中的文件`);
@@ -18694,6 +18736,9 @@
         console.log(`[loadSelectedFiles] 开始加载，selectedFiles.length=${selectedFiles.length}`);
         console.log(`[loadSelectedFiles] selectedFiles=`, selectedFiles.map(f => ({index: f.index, order: f.order})));
 
+        // 🚀 性能优化：记录本次加载的选中快照（供 handleFileTreeMouseUp 比较使用）
+        lastLoadedSelectionKeys = selectedFiles.map(f => f.index + ':' + f.order).join(',');
+
         // 🚀 新增：过滤模式检测
         if (!isFileLoadMode) {
           // 过滤模式：不加载文件内容，只记录文件路径
@@ -18988,9 +19033,10 @@
             });
           }, 50);
 
-          if (totalFiles > 0) {
-            showMessage(`已加载 ${totalFiles} 个文件 (${originalLines.length} 行)`);
-          }
+          // 已禁用加载提示
+          // if (totalFiles > 0) {
+          //   showMessage(`已加载 ${totalFiles} 个文件 (${originalLines.length} 行)`);
+          // }
 
           // 🔧 标记已加载的文件索引
           filesToLoad.forEach(f => loadedFileIndices.add(f.index));
@@ -19136,9 +19182,10 @@
           });
         }, 50);  // 50ms延迟，让浏览器有时间处理事件队列
 
-        if (totalFiles > 0) {
-          showMessage(`已加载 ${totalFiles} 个文件 (${originalLines.length} 行)`);
-        }
+        // 已禁用加载提示
+        // if (totalFiles > 0) {
+        //   showMessage(`已加载 ${totalFiles} 个文件 (${originalLines.length} 行)`);
+        // }
 
         // 🔧 标记已加载的文件索引
         filesToLoad.forEach(f => loadedFileIndices.add(f.index));
@@ -23516,9 +23563,10 @@
         selectedOriginalIndex = -1;
         loadBookmarksForCurrentSession();
         showLoading(false);
-        showMessage(
-          `已加载 ${files.length} 个文件 (${originalLines.length} 行)`
-        );
+        // 已禁用加载提示
+        // showMessage(
+        //   `已加载 ${files.length} 个文件 (${originalLines.length} 行)`
+        // );
       }
 
       async function processFileBatch(files, sessionId, onProgress) {
@@ -24444,7 +24492,7 @@
             const totalTime = (performance.now() - startTime).toFixed(2);
             console.log(`[Filter] 过滤完成: ${filteredLines.length} 个匹配, 耗时 ${totalTime}ms`);
 
-            finishFiltering();
+            finishFiltering(totalTime);
           }
         }
 
@@ -24452,7 +24500,7 @@
         processBatch(0);
 
         // 过滤完成后的处理
-        function finishFiltering() {
+        function finishFiltering(totalTime) {
           // 🔧 内存优化：清除过滤标志，重新启用HTML缓存
           isFiltering = false;
 
@@ -24489,13 +24537,28 @@
           document.getElementById("status").textContent =
             `显示 ${filteredLines.length} / ${originalLines.length} 行`;
 
-          resetSearch();
-          renderLogLines();
-          outer.scrollTop = 0;
-          updateVisibleLines();
+          // 🔧 显示过滤耗时
+          const filteredTimeEl = document.getElementById('filteredTime');
+          if (filteredTimeEl && totalTime) {
+            const ms = parseFloat(totalTime);
+            filteredTimeEl.textContent = ms >= 1000
+              ? `(${(ms / 1000).toFixed(2)}s)`
+              : `(${ms}ms)`;
+          }
 
-          // 最终更新悬浮过滤内容框
+          resetSearch();
+
+          // 🚀 性能优化：先更新过滤面板（用户最关心的），再延迟更新主日志框
+          // 之前是先 renderLogLines()（重建15万行DOM池）再 updateFilteredPanel()
+          // 导致过滤面板显示有明显延迟
           updateFilteredPanel();
+
+          // 🚀 延迟执行主日志框的重渲染，让过滤面板先呈现
+          requestAnimationFrame(() => {
+            renderLogLines();
+            outer.scrollTop = 0;
+            updateVisibleLines();
+          });
 
           // 🚀 高效方案：使用 Map 实现 O(1) 查找（不依赖内容匹配）
           if (lastClickedOriginalIndex >= 0) {
@@ -24613,9 +24676,11 @@
           };
 
           // 更新二级过滤状态显示
-          secondaryFilterStatus.textContent = "未应用";
-          secondaryFilterStatus.className =
-            "secondary-filter-status secondary-filter-inactive";
+          if (secondaryFilterStatus) {
+            secondaryFilterStatus.textContent = "未应用";
+            secondaryFilterStatus.className =
+              "secondary-filter-status secondary-filter-inactive";
+          }
           filteredPanelFilterStatus.textContent = "";
           filteredPanelFilterBox.value = "";
           updateRegexStatus();
@@ -24782,6 +24847,12 @@
         unescapeCache.clear();
         lastFilterCacheKey = "";
 
+        // 🔧 修复：清空 HTML 渲染缓存，        // 解决过滤模式下第二次输入不同关键词后无法正常过滤的问题
+        if (typeof invalidateFilteredLineCache === 'function') {
+          invalidateFilteredLineCache();
+          console.log('[Memory] 已清空 HTML 渲染缓存');
+        }
+
         // 清空搜索相关数据
         resetSearch();
 
@@ -24820,6 +24891,10 @@
         // 当过滤关键词变化时，必须清空缓存，否则会显示错误的高亮
         clearHtmlParseCache();
         console.log('[Memory] HTML 解析缓存已清空');
+
+        // 🔧 清空过滤耗时显示
+        const filteredTimeEl = document.getElementById('filteredTime');
+        if (filteredTimeEl) filteredTimeEl.textContent = '';
 
         console.log('[Memory] 过滤内存释放完成');
       }
@@ -24868,6 +24943,8 @@
         inner.innerHTML = "";
         lastVisibleStart = -1;
         lastVisibleEnd = -1;
+        // 🚀 性能优化：重置过滤高亮清理标志，新内容需要重新检查
+        window._mainLogFilterCleaned = false;
 
         // 初始化DOM池（计算屏幕可见行数+buffer作为初始池大小）
         const screenVisibleLines = Math.ceil(outer.clientHeight / lineHeight);
@@ -25100,18 +25177,25 @@
         const hasCustomHighlights = customHighlights.length > 0;
         const currentMatchLine = totalMatchCount > 0 ? searchMatches[currentMatchIndex] : -1;
 
-        // 🔧 强制移除主日志框中可能存在的过滤高亮类（防止被误应用）
-        // 这是防御性编程，确保过滤关键词永远不会在主日志框中高亮
-        const allMainLogLines = document.querySelectorAll('#outerContainer > .log-line');
-        const filterHighlightClassPrefix = 'filter-highlight-';
-        for (const line of allMainLogLines) {
-          const classes = line.className.split(' ');
-          for (let i = classes.length - 1; i >= 0; i--) {
-            if (classes[i].startsWith(filterHighlightClassPrefix)) {
-              classes.splice(i, 1);
+        // 🚀 性能优化：延迟执行过滤高亮清理，避免每次滚动都 querySelectorAll
+        // 只在首次渲染或内容变化时才需要清理，滚动时跳过
+        if (!window._mainLogFilterCleaned) {
+          window._mainLogFilterCleaned = true;
+          // 只在可见范围内查找，而非整个 DOM
+          const filterHighlightClassPrefix = 'filter-highlight-';
+          for (let i = visibleStart; i <= visibleEnd; i++) {
+            const line = inner.querySelector(`[data-index="${i}"]`);
+            if (!line) continue;
+            const classes = line.className.split(' ');
+            let modified = false;
+            for (let j = classes.length - 1; j >= 0; j--) {
+              if (classes[j].startsWith(filterHighlightClassPrefix)) {
+                classes.splice(j, 1);
+                modified = true;
+              }
             }
+            if (modified) line.className = classes.join(' ');
           }
-          line.className = classes.join(' ');
         }
 
         // 使用DocumentFragment批量添加新元素（减少重绘）
@@ -26519,6 +26603,15 @@ async function applyFilterWithRipgrepAsync(filterText) {
       statusEl.textContent = `✓ ripgrep: ${sortedIndices.length}个匹配 (${elapsed}秒)`;
     }
 
+    // 🔧 显示过滤耗时
+    const filteredTimeEl = document.getElementById('filteredTime');
+    if (filteredTimeEl) {
+      const elapsedMs = (performance.now() - startTime);
+      filteredTimeEl.textContent = elapsedMs >= 1000
+        ? `(${(elapsedMs / 1000).toFixed(2)}s)`
+        : `(${elapsedMs.toFixed(0)}ms)`;
+    }
+
     // 更新占位符高度
     const filteredPanelPlaceholder = document.getElementById('filteredPanelPlaceholder');
     if (filteredPanelPlaceholder) {
@@ -26536,6 +26629,14 @@ async function applyFilterWithRipgrepAsync(filterText) {
         filteredPanelVirtualContent.removeChild(child);
       }
       filteredPanelVirtualContent.innerHTML = '';
+    }
+
+    // 🔧 修复：重置虚拟滚动状态，确保重复过滤时不会因范围相同而跳过渲染
+    filteredPanelVisibleStart = 0;
+    filteredPanelVisibleEnd = 0;
+    filteredPanelScrollPosition = 0;
+    if (filteredPanelContent) {
+      filteredPanelContent.scrollTop = 0;
     }
 
     // 🚀 性能优化：分批渲染，彻底避免黑屏

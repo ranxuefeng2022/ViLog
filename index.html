@@ -88,7 +88,7 @@
           id="filterBox"
           placeholder="f键聚焦 (使用 | 分隔多个关键词, \| 表示字面量 |)"
         />
-        <button id="expandFilterBtn" title="展开过滤输入框">📝</button>
+        <button id="expandFilterBtn" title="展开过滤输入框">+</button>
         <!-- 自动建议下拉菜单 -->
         <div id="filterSuggestions" class="filter-suggestions"></div>
       </div>
@@ -107,9 +107,10 @@
       </div>
 
       <!-- 状态信息组 -->
-      <div class="toolbar-group" style="gap: 12px;">
+      <div class="toolbar-group" style="gap: 8px;">
         <span id="status"></span>
         <span id="fileInfo" class="file-info"></span>
+        <span id="fileCount" class="file-count"></span>
         <span id="systemStats" class="system-stats" title="系统资源占用率（CPU=系统CPU使用率, MEM=系统内存使用率, APP=Electron进程内存占用）">CPU: --% | MEM: --% | APP: --MB</span>
       </div>
 
@@ -117,17 +118,11 @@
         <div class="progress-fill" id="progressFill"></div>
       </div>
 
-      <!-- 文件计数组 -->
-      <div class="toolbar-group">
-        <span id="fileCount" class="file-count"></span>
-      </div>
-
       <div style="flex: 1"></div>
 
       <!-- 高亮功能已移至右键菜单中 -->
 
       <div class="toolbar-group">
-        <button id="fullscreenBtn" onclick="toggleFullscreen()">全屏</button>
         <button id="bookmarksBtn" onclick="toggleBookmarksPanel()" title="书签/注释/导出：B 切换当前行书签；Ctrl+B 打开/关闭面板">书签</button>
       </div>
 
@@ -461,7 +456,7 @@
           <button id="filteredPanelMinimize" title="最小化">─</button>
           <button id="filteredPanelClose" title="关闭">×</button>
           <button id="filteredPanelMaximize" title="最大化">□</button>
-          <span class="filtered-result-info">过滤结果 <span id="filteredCount" style="display: none;"></span> <span id="filteredTime" style="display: none;"></span></span>
+          <span class="filtered-result-info">过滤结果 <span id="filteredCount"></span> <span id="filteredTime"></span></span>
         </div>
 
         <!-- 中间：搜索和二级过滤 -->
@@ -507,21 +502,9 @@
             id="filteredPanelRegexStatus"
             title="正则表达式状态"
           ></span>
-          <button id="filteredPanelFilterBtn" onclick="applySecondaryFilter()">
-            应用
-          </button>
-          <button
-            id="filteredPanelClearFilterBtn"
-            onclick="clearSecondaryFilter()"
-          >
-            清除
-          </button>
-          <button id="filteredPanelCopyBtn" onclick="copyFilteredLogs()" title="复制过滤结果">📋</button>
-          <button id="filteredPanelExportBtn" onclick="exportFilteredAsHTML()" title="导出为HTML">📥</button>
+          <button id="filteredPanelCopyBtn" onclick="copyFilteredLogs()" title="复制过滤结果">C</button>
+          <button id="filteredPanelExportBtn" onclick="exportFilteredAsHTML()" title="导出为HTML">E</button>
           <span id="filteredPanelFilterStatus"></span>
-          <span class="secondary-filter-status" id="secondaryFilterStatus"
-            >未应用</span
-          >
         </div>
       </div>
 

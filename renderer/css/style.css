@@ -362,26 +362,21 @@
 
 
       #toolbar {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        background: linear-gradient(135deg, #f0f0f0 0%, #d8d8d8 50%, #c0c0c0 100%); /* 🔧 银色渐变背景 */
+        position: relative;
+        background: linear-gradient(180deg, #e8e8e8 0%, #d4d4d4 100%);
         backdrop-filter: blur(12px);
         -webkit-backdrop-filter: blur(12px);
-        padding: 4px 12px;
+        padding: 1px 6px;
         display: flex;
         align-items: center;
-        gap: 8px;
-        border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+        gap: 3px;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.1);
         z-index: 1000;
         transition: all 0.3s ease;
-        box-shadow: 0 1px 10px rgba(0, 0, 0, 0.05);
-        height: 18px; /* 🔧 减小头部高度 */
-        /* 禁止拖拽，防止单击触发放大/缩小 */
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+        height: 24px;
         -webkit-app-region: no-drag;
         app-region: no-drag;
-        position: relative; /* 为调整大小手柄提供定位上下文 */
       }
 
       /* 窗口拖拽区域 - 整个工具栏（除按钮外）可拖拽 */
@@ -570,27 +565,26 @@
         position: relative;
         z-index: 10; /* 确保按钮在拖拽区域之上 */
       }
-      /* 🎨 主窗口控制按钮 - 与过滤面板样式一致，圆形 */
       .window-controls button {
-        width: 18px;
-        height: 18px;
+        width: 14px;
+        height: 14px;
         padding: 0;
         flex-shrink: 0;
-        font-size: 12px;
+        font-size: 10px;
         font-weight: bold;
         border: none;
-        border-radius: 50%; /* 🔧 改成圆形 */
+        border-radius: 50%;
         cursor: pointer;
-        transition: all 0.2s ease;
+        transition: all 0.15s ease;
         display: inline-flex;
         align-items: center;
         justify-content: center;
         line-height: 1;
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
         -webkit-app-region: no-drag;
         app-region: no-drag;
         position: relative;
-        z-index: 11; /* 确保按钮在拖拽区域之上 */
+        z-index: 11;
       }
 
       /* 最小化按钮 - 黄色系（与过滤面板一致） */
@@ -645,77 +639,73 @@
       }
       #filterBox {
         flex: 1;
-        min-width: 200px;
-        max-width: 600px;
-        padding: 4px 10px;
+        min-width: 160px;
+        max-width: 500px;
+        padding: 0 6px;
         border: 1px solid rgba(0, 0, 0, 0.15);
-        border-radius: 6px;
-        background: rgba(255, 255, 255, 0.8);
-        font-size: 12px;
-        /* 防止输入框触发拖拽 */
+        border-radius: 3px;
+        background: rgba(255, 255, 255, 0.85);
+        font-size: 11px;
         -webkit-app-region: no-drag;
         app-region: no-drag;
-        transition: all 0.2s ease;
-        height: 22px;
+        transition: all 0.15s ease;
+        height: 18px;
         box-sizing: border-box;
         position: relative;
-        color: #000000;  /* 添加这一行：设置为纯黑色 */
-        text-align: center;  /* 居中对齐 */
+        color: #333;
+        text-align: center;
       }
-      
+
       /* 过滤输入框容器 */
       .toolbar-group:has(#filterBox) {
         position: relative;
       }
       #filterBox:focus {
-        min-width: 300px;
-        max-width: 1500px;
-      }
-      #filterBox:focus {
+        min-width: 220px;
+        max-width: 700px;
         outline: none;
-        border-color: #0071e3;
-        box-shadow: 0 0 0 2px rgba(0, 113, 227, 0.2);
+        border-color: rgba(0, 122, 255, 0.5);
+        box-shadow: 0 0 0 1.5px rgba(0, 122, 255, 0.15);
         background: white;
       }
       #searchBox {
-        padding: 4px 10px;
+        padding: 0 6px;
         border: 1px solid rgba(0, 0, 0, 0.15);
-        border-radius: 6px;
-        background: rgba(255, 255, 255, 0.8);
-        font-size: 12px;
-        /* 防止输入框触发拖拽 */
+        border-radius: 3px;
+        background: rgba(255, 255, 255, 0.85);
+        font-size: 11px;
         -webkit-app-region: no-drag;
         app-region: no-drag;
-        transition: all 0.2s ease;
-        height: 22px;
+        transition: all 0.15s ease;
+        height: 18px;
         box-sizing: border-box;
-        width: 180px;
-        text-align: center;  /* 居中对齐 */
+        width: 130px;
+        text-align: center;
+        color: #333;
       }
       #searchBox:focus {
         outline: none;
-        border-color: #0071e3;
-        box-shadow: 0 0 0 2px rgba(0, 113, 227, 0.2);
+        border-color: rgba(0, 122, 255, 0.5);
+        box-shadow: 0 0 0 1.5px rgba(0, 122, 255, 0.15);
         background: white;
       }
       #searchStatus {
-        color: #6e6e73;
-        font-size: 11px;
-        margin-left: 5px;
+        color: #888;
+        font-size: 10px;
+        margin-left: 3px;
       }
       button {
-        padding: 4px 10px;
+        padding: 0 8px;
         border: none;
-        border-radius: 6px;
-        background: #0071e3;
-        color: white;
-        /* 防止按钮触发拖拽 */
+        border-radius: 4px;
+        background: rgba(0, 0, 0, 0.06);
+        color: #444;
         -webkit-app-region: no-drag;
         app-region: no-drag;
-        font-size: 12px;
+        font-size: 11px;
         cursor: pointer;
-        transition: all 0.2s ease;
-        height: 22px;
+        transition: all 0.15s ease;
+        height: 18px;
         box-sizing: border-box;
         display: inline-flex;
         align-items: center;
@@ -723,152 +713,144 @@
         box-shadow: none;
         position: relative;
         z-index: 20;
+        line-height: 1;
       }
       button:hover {
-        background: #0077ed;
-        transform: translateY(-0.5px);
-        box-shadow: 0 1px 3px rgba(0, 113, 227, 0.2);
+        background: rgba(0, 0, 0, 0.12);
+        color: #222;
       }
       button:active {
-        transform: translateY(0);
-        box-shadow: none;
+        background: rgba(0, 0, 0, 0.18);
       }
       button:disabled {
-        background: #d1d5db;
+        background: rgba(0, 0, 0, 0.04);
+        color: #aaa;
         cursor: not-allowed;
-        transform: none;
-        box-shadow: none;
       }
 
-      /* 🎨 更新代码按钮 - 橙色系 */
-      #updateCodeBtn {
-        background: rgba(255, 149, 0, 0.9);
-        color: #ffffff;
-        font-weight: 600;
-        box-shadow: 0 1px 2px rgba(255, 149, 0, 0.3);
-      }
-
-      #updateCodeBtn:hover {
-        background: rgba(255, 159, 10, 1);
-        transform: translateY(-1px);
-        box-shadow: 0 2px 4px rgba(255, 149, 0, 0.4);
-      }
-
-      #updateCodeBtn:active {
-        transform: translateY(0);
-        box-shadow: 0 1px 2px rgba(255, 149, 0, 0.3);
-      }
-
-      #fullscreenBtn {
-        display: none !important; /* 🔧 隐藏全屏按钮 */
-      }
-
-      #prevBtn,
-      #nextBtn,
-      #fullscreenBtn {
-        background: #f5f5f7;
-        color: #1d1d1f;
-        width: 26px;
-        padding: 0;
-      }
-      #prevBtn:hover:not(:disabled),
-      #nextBtn:hover:not(:disabled),
-      #fullscreenBtn:hover:not(:disabled) {
-        background: #ebecee;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-      }
-
-      /* 书签按钮：绿色渐变 */
-      #bookmarksBtn {
-        background: linear-gradient(135deg, #34c759 0%, #30d158 100%);
-        color: white !important;
-        font-weight: 500;
-        padding: 4px 14px;
-        border: 1px solid rgba(52, 199, 89, 0.3);
-        box-shadow: 0 1px 3px rgba(52, 199, 89, 0.2);
-        position: relative;
-        overflow: hidden;
-      }
-
-      #bookmarksBtn::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: -100%;
-        width: 100%;
-        height: 100%;
-        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-        transition: left 0.5s ease;
-      }
-
-      #bookmarksBtn:hover::before {
-        left: 100%;
-      }
-
-      #bookmarksBtn:hover {
-        background: linear-gradient(135deg, #42d873 0%, #34c759 100%);
-        transform: translateY(-1px);
-        box-shadow: 0 2px 6px rgba(52, 199, 89, 0.3);
-      }
-
-      #bookmarksBtn:active {
-        transform: translateY(0);
-        box-shadow: 0 1px 2px rgba(52, 199, 89, 0.2);
-      }
-
-      /* 书签激活状态（当有书签时） */
-      #bookmarksBtn.has-bookmarks {
-        background: linear-gradient(135deg, #30d158 0%, #34c759 100%);
-        border-color: rgba(48, 209, 88, 0.5);
-        box-shadow: 0 2px 6px rgba(52, 199, 89, 0.3);
-      }
-
-      #bookmarksBtn.has-bookmarks:hover {
-        background: linear-gradient(135deg, #34c759 0%, #30d158 100%);
-        box-shadow: 0 3px 8px rgba(52, 199, 89, 0.4);
-      }
-      #copyAllBtn {
-        background: #34c759;
-      }
-      #copyAllBtn:hover:not(:disabled) {
-        background: #30d158;
-        box-shadow: 0 1px 3px rgba(52, 199, 89, 0.2);
-      }
+      /* 刷新按钮 */
       #clearAllBtn {
-        background: #ff3b30;
+        background: rgba(255, 59, 48, 0.12);
+        color: #d32f2f;
       }
       #clearAllBtn:hover:not(:disabled) {
-        background: #ff453a;
-        box-shadow: 0 1px 3px rgba(255, 59, 48, 0.2);
+        background: rgba(255, 59, 48, 0.22);
+        color: #b71c1c;
+      }
+
+      /* 网站库按钮 */
+      #toggleQuickLinksBtn {
+        background: rgba(0, 122, 255, 0.1);
+        color: #1976d2;
+      }
+      #toggleQuickLinksBtn:hover {
+        background: rgba(0, 122, 255, 0.2);
+        color: #1565c0;
+      }
+
+      /* 更新工具按钮 */
+      #updateCodeBtn {
+        background: rgba(255, 149, 0, 0.12);
+        color: #e65100;
+        font-weight: 500;
+      }
+      #updateCodeBtn:hover {
+        background: rgba(255, 149, 0, 0.22);
+        color: #bf360c;
+      }
+
+      /* 书签按钮 */
+      #bookmarksBtn {
+        background: rgba(52, 199, 89, 0.12);
+        color: #2e7d32;
+        font-weight: 500;
+      }
+      #bookmarksBtn:hover {
+        background: rgba(52, 199, 89, 0.22);
+        color: #1b5e20;
+      }
+      #bookmarksBtn.has-bookmarks {
+        background: rgba(52, 199, 89, 0.2);
+        color: #1b5e20;
+        font-weight: 600;
+      }
+
+      /* AI助手按钮 */
+      #aiAssistantToolbarBtn {
+        background: rgba(156, 39, 176, 0.1);
+        color: #7b1fa2;
+      }
+      #aiAssistantToolbarBtn:hover {
+        background: rgba(156, 39, 176, 0.2);
+        color: #6a1b9a;
+      }
+
+      /* 展开过滤按钮 */
+      #expandFilterBtn {
+        background: rgba(0, 0, 0, 0.06);
+        color: #444;
+        padding: 0 6px;
+        min-width: 18px;
+      }
+      #expandFilterBtn:hover {
+        background: rgba(0, 0, 0, 0.12);
+      }
+
+      /* 搜索上下导航 */
+      #prevBtn,
+      #nextBtn {
+        background: rgba(0, 0, 0, 0.05);
+        color: #666;
+        width: 18px;
+        height: 18px;
+        padding: 0;
+        font-size: 10px;
+        border-radius: 3px;
+      }
+      #prevBtn:hover:not(:disabled),
+      #nextBtn:hover:not(:disabled) {
+        background: rgba(0, 0, 0, 0.12);
+        color: #333;
       }
       #status {
-        color: #6e6e73;
-        font-size: 12px;
-        margin-left: 6px;
-        display: none; /* 隐藏主日志框的状态信息 */
+        color: #888;
+        font-size: 10px;
+        margin-left: 2px;
+        white-space: nowrap;
+      }
+
+      #status:empty {
+        display: none;
       }
 
       /* 过滤时间显示样式 */
       #filteredTime {
-        color: #6e6e73;
-        font-size: 11px;
-        margin-left: 8px;
+        color: #888;
+        font-size: 10px;
+        margin-left: 4px;
       }
 
       /* 系统资源占用率显示样式 */
       .system-stats {
         color: #6e6e73;
-        font-size: 11px;
-        margin-left: 8px;
-        padding: 2px 6px;
+        font-size: 10px;
+        margin-left: 4px;
+        padding: 1px 5px;
         background: rgba(0, 0, 0, 0.03);
         border-radius: 3px;
         font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+        white-space: nowrap;
+        display: none; /* 🔧 默认隐藏，通过 JS 按需显示 */
+      }
+
+      /* 开发调试时可通过 body.debug-stats 显示 */
+      body.show-stats .system-stats {
+        display: inline-block;
       }
       #outerContainer {
         position: fixed;
-        top: 44px;
-        bottom: 16px; /* 🚀 给横向滚动条留出空间 */
+        top: 25px;
+        bottom: 16px;
         left: 0;
         right: 0;
         overflow-y: auto;
@@ -1150,10 +1132,10 @@
         top: 20%;
       }
       .file-info {
-        color: #6e6e73;
+        color: #888;
         font-size: 10px;
-        margin-left: 6px;
-        max-width: 220px;
+        margin-left: 2px;
+        max-width: 180px;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
@@ -1161,9 +1143,8 @@
       .toolbar-group {
         display: flex;
         align-items: center;
-        gap: 6px;
-        position: relative; /* 使其成为定位上下文，用于子元素的绝对定位 */
-        /* 防止被窗口拖拽区域遮挡 */
+        gap: 3px;
+        position: relative;
         -webkit-app-region: no-drag;
         app-region: no-drag;
         z-index: 10;
@@ -1178,10 +1159,10 @@
       .quick-links-panel {
         position: fixed;
         background: #ffffff;
-        top: 44px; /* 工具栏高度 */
+        top: 25px; /* 工具栏高度 */
         left: 0;
         width: 380px; /* 稍微减小宽度，更紧凑 */
-        height: calc(100vh - 44px - 16px); /* 减去工具栏和水平滚动条高度 */
+        height: calc(100vh - 25px - 16px); /* 减去工具栏和水平滚动条高度 */
         z-index: 1001; /* 高于工具栏(1000) */
         display: none;
         flex-direction: column;
@@ -1217,10 +1198,10 @@
       /* 书签面板：右侧悬浮（用于关键行书签/注释/导出分享） */
       #bookmarksPanel {
         position: fixed;
-        top: 44px;
+        top: 25px;
         right: 0;
         width: 360px;
-        height: calc(100vh - 44px - 16px);
+        height: calc(100vh - 25px - 16px);
         background: rgba(255, 255, 255, 0.96);
         backdrop-filter: blur(10px);
         -webkit-backdrop-filter: blur(10px);
@@ -1722,9 +1703,9 @@
       }
 
       .file-count {
-        color: #6e6e73;
+        color: #888;
         font-size: 10px;
-        margin-left: 6px;
+        margin-left: 2px;
       }
       /* 高亮输入框样式 - 已移至右键菜单
       #highlightKeyword {
@@ -1855,7 +1836,7 @@
       }
       #fileTreeContainer {
         position: fixed;
-        top: 44px;
+        top: 25px;
         bottom: 16px;
         left: 0;
         /* 停靠文件树默认更宽一点 */
@@ -2928,7 +2909,7 @@
         background: rgba(0, 0, 0, 0.32);
       }
       .file-tree-item {
-        padding: 6px 8px;
+        padding: 6px 8px 6px 0;
         margin: 2px 0;
         border-radius: 4px;
         cursor: pointer;
@@ -2939,12 +2920,12 @@
         transition: background 0.2s ease;
         user-select: none;
         position: relative;
-        /* 让层级更“有层次”：节点对齐 + 按 level 缩进 */
+        /* 让层级更"有层次"：节点对齐 + 按 level 缩进 */
         display: flex;
         align-items: center;
         gap: 4px;
-        /* 根节点左侧留白更紧凑：减少基础缩进与每级缩进 */
-        padding-left: calc(2px + (var(--ft-level, 0) * 10px));
+        /* 🚀 缩进从10px增大到14px，层级更分明 */
+        padding-left: calc(2px + (var(--ft-level, 0) * 14px));
       }
       .file-tree-name {
         flex: 1;
@@ -2952,6 +2933,22 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+      }
+
+      /* 🚀 VS Code 风格缩进参考线 */
+      .ft-indent-guide {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 1px;
+        background: rgba(0, 0, 0, 0.06);
+        pointer-events: none;
+      }
+      .file-tree-item:hover .ft-indent-guide {
+        background: rgba(0, 113, 227, 0.12);
+      }
+      .file-tree-item.selected .ft-indent-guide {
+        background: rgba(0, 113, 227, 0.18);
       }
       /* 🚀 hover样式已在前面统一定义，删除重复定义 */
       .file-tree-item.selected {
@@ -3021,6 +3018,15 @@
       .file-tree-level-5 {
         --ft-level: 5;
       }
+      .file-tree-level-6 {
+        --ft-level: 6;
+      }
+      .file-tree-level-7 {
+        --ft-level: 7;
+      }
+      .file-tree-level-8 {
+        --ft-level: 8;
+      }
 
       .file-tree-folder-expanded .icon::before {
         content: "📂";
@@ -3064,25 +3070,24 @@
         color: rgba(0, 113, 227, 0.9);
       }
 
-      /* 优化：文件树边框上的展开/隐藏按钮 - 极简黑色设计 */
+      /* 优化：文件树边框上的展开/隐藏按钮 - 加宽并增强hover效果 */
       #fileTreeCollapseBtn {
         position: fixed;
         top: 50%;
         left: 0;
         transform: translateY(-50%);
-        width: 6px; /* 🔧 更窄，减少空间占用 */
-        height: 32px; /* 🔧 更小 */
-        background: rgba(0, 0, 0, 0.3); /* 🔧 黑色半透明背景 */
-        border-radius: 0 4px 4px 0; /* 🔧 右侧圆角，与文件树框平滑对接 */
+        width: 8px;
+        height: 48px;
+        background: rgba(180, 180, 180, 0.35);
         cursor: pointer;
         z-index: 820;
         display: flex;
         align-items: center;
         justify-content: center;
-        color: rgba(255, 255, 255, 0.7); /* 🔧 白色半透明箭头 */
-        font-size: 6px; /* 🔧 更小的箭头 */
-        line-height: 1;
-        transition: background 0.2s ease, color 0.2s ease;
+        font-size: 0;
+        color: transparent;
+        transition: all 0.2s ease;
+        border-radius: 0 3px 3px 0;
       }
 
       /* 🔧 文件树折叠后按钮仍然可见，方便用户重新展开 */
@@ -3091,12 +3096,14 @@
         display: none !important;
       }
       #fileTreeCollapseBtn:hover {
-        background: rgba(0, 0, 0, 0.5); /* 🔧 hover时更深 */
-        color: rgba(255, 255, 255, 0.9); /* 🔧 hover时箭头更明显 */
+        background: rgba(0, 113, 227, 0.5);
+        width: 12px;
+        box-shadow: 1px 0 4px rgba(0, 113, 227, 0.3);
       }
       #fileTreeCollapseBtn:active {
-        background: rgba(0, 0, 0, 0.7); /* 🔧 点击时最深 */
-        transform: translateY(-50%) scale(0.95); /* 🔧 轻微缩小反馈 */
+        background: rgba(0, 113, 227, 0.7);
+        width: 10px;
+        box-shadow: 1px 0 6px rgba(0, 113, 227, 0.4);
       }
 
       /* 拖拽文件树调宽时：禁用动画，防止边沿/按钮分离 */
@@ -3113,17 +3120,18 @@
         top: calc(50vh + 60px); /* 🔧 修改：往下移60px，让底部与功能区按钮区域对齐 */
         left: 0;
         right: 0;
-        bottom: 0; /* 🔧 保持 bottom: 0，确保面板始终延伸到窗口底部 */
+        bottom: 16px; /* 🔧 为水平滚动条预留16px空间，与 outerContainer 一致 */
         background: rgba(230, 240, 255, 0.98);
         border: none;
         border-top: 1px solid rgba(0, 0, 0, 0.15); /* 🚀 添加顶部边框 */
-        border-bottom: 1px solid rgba(0, 0, 0, 0.15); /* 🔧 添加底部边框 */
+        /* 🔧 移除 border-bottom，bottom:0 时边框会造成底部留白 */
         border-radius: 10px 10px 0 0; /* 只有顶部圆角，底部紧贴屏幕 */
         box-shadow: none;
         z-index: 10000; /* 🚀 修复：提高到10000，确保始终显示在toolbar（9999）之上 */
         display: none;
         flex-direction: column;
-        overflow: hidden;
+        /* 🔧 移除 overflow:hidden，改用 visible 防止头部被裁剪；内容区自己控制滚动 */
+        overflow: visible;
         /* 🔧 只对特定属性应用过渡，不包括 top（避免拖动延迟） */
         transition: opacity 0.3s ease;
         user-select: none;
@@ -3133,8 +3141,7 @@
         margin: 0; /* 🚀 移除边距，确保紧贴 */
         /* 🚀 性能优化：提示浏览器这些属性会频繁变化 */
         will-change: top;
-        /* 🚀 减少重绘范围 */
-        contain: layout style;
+        /* 🔧 修复：移除 contain，避免裁剪/干扰 flex 子元素（header）布局 */
         /* 修复：使用box-sizing确保宽度计算正确 */
         box-sizing: border-box;
       }
@@ -3227,10 +3234,10 @@
         animation: bounceIn 0.3s ease;
       }
 
-      /* 快捷键说明按钮 - 小圆形，左下角，显眼的"快"字 */
+      /* 快捷键说明按钮 - 小圆形，右下角，显眼的"快"字 */
       #shortcutsToggleBtn {
         position: fixed;
-        left: 16px;
+        right: 16px;
         bottom: 16px;
         width: 32px;
         height: 32px;
@@ -3264,7 +3271,7 @@
       /* 快捷键说明面板 */
       #shortcutsPanel {
         position: fixed;
-        left: 16px;
+        right: 16px;
         bottom: 60px;
         width: 200px;
         background: rgba(255, 255, 255, 0.98);
@@ -3368,12 +3375,9 @@
         right: 0;
       }
 
-      /* 内容区域保持overflow: auto以支持滚动 */
+      /* 内容区域 - 占位，具体样式在后面的 #filteredPanelContent 定义中 */
       #filteredPanelContent {
-        overflow: auto;
-        flex: 1 1 auto; /* 填充剩余空间，但不压缩头部 */
         min-height: 0; /* 允许收缩 */
-        max-height: calc(100vh - var(--filtered-panel-top, calc(50vh + 60px)) - 18px); /* 🔧 更新头部高度为18px，与按钮高度齐平 */
       }
 
       #filteredPanel.visible {
@@ -3417,29 +3421,27 @@
 
       /* 修改：合并头部和搜索容器到同一行 */
       #filteredPanelHeader {
-        padding: 3px 8px 4px 8px; /* 🔧 增加下边距 */
+        padding: 2px 6px 3px 6px;
         border-bottom: 1px solid rgba(0, 0, 0, 0.08);
         font-weight: 500;
-        font-size: 12px; /* 增大字体以提升可读性 */
+        font-size: 12px;
         display: flex;
         align-items: center;
-        background: linear-gradient(135deg, #f0f0f0 0%, #d8d8d8 50%, #c0c0c0 100%); /* 🔧 银色渐变背景 */
+        background: linear-gradient(135deg, #f0f0f0 0%, #d8d8d8 50%, #c0c0c0 100%);
         justify-content: flex-start;
-        gap: 6px; /* 适度增加元素间距 */
+        gap: 4px;
         user-select: none;
         -webkit-user-select: none;
         -moz-user-select: none;
         -ms-user-select: none;
         flex-shrink: 0 !important;
         flex-wrap: nowrap;
-        /* 🔧 严格固定高度，防止任何情况下高度变化 */
         min-height: 26px !important;
         height: 26px !important;
         max-height: 26px !important;
         box-sizing: border-box !important;
         box-shadow: 0 1px 3px rgba(102, 126, 234, 0.1);
-        line-height: 1.4; /* 调整行高以改善可读性 */
-        overflow: hidden !important; /* 🔧 隐藏溢出，防止撑大头部 */
+        line-height: 1.4;
         position: relative;
         z-index: 10;
       }
@@ -3460,7 +3462,6 @@
         padding: 3px 8px 4px 8px !important;
         flex: 0 0 auto !important;
         flex-shrink: 0 !important;
-        overflow: hidden !important;
       }
 
       #filteredPanelSearchContainer {
@@ -3471,7 +3472,7 @@
       .filtered-panel-header-left {
         display: flex;
         align-items: center;
-        gap: 4px;
+        gap: 3px;
         min-width: 0;
         flex: none;
         justify-content: flex-start;
@@ -3481,7 +3482,7 @@
         text-shadow: 0 1px 1px rgba(255, 255, 255, 0.5);
         -webkit-app-region: no-drag;
         app-region: no-drag;
-        padding-left: 4px; /* 🔧 减少左边距，让高度调整按钮更贴近边缘 */
+        padding-left: 4px;
         flex-shrink: 0;
       }
 
@@ -3489,32 +3490,26 @@
       .filtered-panel-header-center {
         display: flex;
         align-items: center;
-        gap: 2px;
+        gap: 4px;
         min-width: 0;
         flex: 1;
-        justify-content: center;
+        justify-content: flex-start;
         font-size: 9px;
         position: relative;
         color: #1a4a8c;
-        flex-wrap: nowrap; /* 不换行，保持在一行 */
-        overflow: visible; /* 🚀 允许建议框显示 */
+        flex-wrap: nowrap;
+        overflow: visible;
         z-index: 5;
         pointer-events: auto;
         -webkit-app-region: no-drag;
         app-region: no-drag;
-        margin-left: -120px; /* 向左移动正则搜索框及后面的元素 */
       }
 
-      /* 🚀 新增：输入框包装器，用于定位建议框 */
+      /* 🚀 输入框包装器，用于定位建议框 */
       .filtered-panel-input-wrapper {
         position: relative;
-        display: inline-block;
+        display: inline-flex;
         flex: 0 0 auto;
-      }
-
-      /* 🔧 让搜索框后面的输入框包装器（即第一个箭头按钮之前）靠近箭头按钮 */
-      .filtered-panel-input-wrapper:has(#filteredPanelSearchBox) {
-        margin-right: -45px; /* 负边距让搜索框靠近箭头按钮 */
       }
 
       /* 为搜索组和二级过滤组之间添加间距 */
@@ -3569,12 +3564,12 @@
 
       /* 过滤结果文字样式 */
       .filtered-result-info {
-        font-size: 11px;
+        font-size: 10px;
         color: #1a4a8c;
         font-weight: 600;
         white-space: nowrap;
         padding-right: 4px;
-        margin-left: 8px; /* 往右边移一点 */
+        margin-left: 4px;
       }
 
       /* 调整二级过滤输入框和按钮 */
@@ -3607,25 +3602,7 @@
       }
 
       #filteredPanelFilterBtn {
-        display: none !important; /* 🔧 隐藏应用按钮 */
-        color: white;
-        white-space: nowrap;
-        padding: 2px 6px;
-        font-size: 10px;
-        height: 16px;
-        min-width: 28px;
-        box-sizing: border-box;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        border: 1px solid rgba(255, 255, 255, 0.3);
-        border-radius: 3px;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        font-weight: 500;
-        flex-shrink: 0; /* 不收缩 */
-        -webkit-app-region: no-drag;
-        app-region: no-drag;
+        display: none !important; /* 🔧 隐藏应用按钮（通过 Enter 键触发） */
       }
 
       #filteredPanelFilterBtn:hover {
@@ -3641,25 +3618,7 @@
       }
 
       #filteredPanelClearFilterBtn {
-        display: none !important; /* 🔧 隐藏清除按钮 */
-        color: white;
-        white-space: nowrap;
-        padding: 2px 6px;
-        font-size: 10px;
-        height: 16px;
-        min-width: 28px;
-        box-sizing: border-box;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        border: 1px solid rgba(255, 255, 255, 0.3);
-        border-radius: 3px;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        font-weight: 500;
-        flex-shrink: 0; /* 不收缩 */
-        -webkit-app-region: no-drag;
-        app-region: no-drag;
+        display: none !important; /* 🔧 隐藏清除按钮（通过清空输入框触发） */
       }
 
       #filteredPanelClearFilterBtn:hover {
@@ -3738,67 +3697,69 @@
         box-shadow: none;
       }
 
-      /* 复制按钮 */
+      /* 复制按钮 - 蓝色系，圆形，与窗口按钮统一尺寸 */
       #filteredPanelCopyBtn {
-        background: rgba(52, 199, 89, 0.9);
-        color: white;
-        white-space: nowrap;
-        padding: 4px 10px;
-        height: 22px;
-        font-size: 12px;
-        min-width: 28px;
-        box-sizing: border-box;
+        background: rgba(90, 142, 240, 0.85);
+        color: #ffffff;
+        width: 18px;
+        height: 18px;
+        padding: 0;
+        flex-shrink: 0;
+        font-size: 10px;
+        border: none;
+        border-radius: 50%;
+        cursor: pointer;
+        transition: all 0.2s ease;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        border: 1px solid rgba(255, 255, 255, 0.3);
-        border-radius: 6px;
-        cursor: pointer;
-        transition: all 0.2s ease;
+        line-height: 1;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
         -webkit-app-region: no-drag;
         app-region: no-drag;
       }
 
       #filteredPanelCopyBtn:hover:not(:disabled) {
-        background: rgba(52, 199, 89, 1);
+        background: rgba(90, 142, 240, 1);
         transform: translateY(-1px);
-        box-shadow: 0 2px 4px rgba(52, 199, 89, 0.3);
+        box-shadow: 0 2px 4px rgba(90, 142, 240, 0.3);
       }
 
       #filteredPanelCopyBtn:active {
-        transform: translateY(0);
+        transform: scale(0.95);
         box-shadow: none;
       }
 
-      /* 导出按钮 */
+      /* 导出按钮 - 蓝色系，圆形，与窗口按钮统一尺寸 */
       #filteredPanelExportBtn {
-        background: rgba(52, 199, 89, 0.9);
-        color: white;
-        white-space: nowrap;
-        padding: 4px 10px;
-        height: 22px;
-        font-size: 12px;
-        min-width: 28px;
-        box-sizing: border-box;
+        background: rgba(90, 142, 240, 0.85);
+        color: #ffffff;
+        width: 18px;
+        height: 18px;
+        padding: 0;
+        flex-shrink: 0;
+        font-size: 10px;
+        border: none;
+        border-radius: 50%;
+        cursor: pointer;
+        transition: all 0.2s ease;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        border: 1px solid rgba(255, 255, 255, 0.3);
-        border-radius: 6px;
-        cursor: pointer;
-        transition: all 0.2s ease;
+        line-height: 1;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
         -webkit-app-region: no-drag;
         app-region: no-drag;
       }
 
       #filteredPanelExportBtn:hover:not(:disabled) {
-        background: rgba(52, 199, 89, 1);
+        background: rgba(90, 142, 240, 1);
         transform: translateY(-1px);
-        box-shadow: 0 2px 4px rgba(52, 199, 89, 0.3);
+        box-shadow: 0 2px 4px rgba(90, 142, 240, 0.3);
       }
 
       #filteredPanelExportBtn:active {
-        transform: translateY(0);
+        transform: scale(0.95);
         box-shadow: none;
       }
 
@@ -3910,14 +3871,18 @@
       /* 调整状态显示 */
       #filteredPanelFilterStatus,
       #filteredPanelSearchStatus {
-        color: #1a4a8c; /* 深蓝色文字，与浅蓝色背景协调 */
-        font-size: 10px;
-        margin-left: 3px;
-        min-width: 30px;
-        min-height: 12px; /* 🔧 添加最小高度，防止空内容时塌陷 */
+        color: #5a8ec0;
+        font-size: 9px;
+        margin-left: 2px;
+        min-width: 0;
+        min-height: 12px;
         white-space: nowrap;
-        text-shadow: 0 1px 1px rgba(255, 255, 255, 0.5);
-        display: inline-block; /* 🔧 确保高度设置生效 */
+        display: inline-block;
+      }
+
+      #filteredPanelFilterStatus:empty,
+      #filteredPanelSearchStatus:empty {
+        display: none;
       }
 
       /* 调整正则表达式状态指示器 */
@@ -3933,30 +3898,50 @@
       /* 调整二级过滤状态 */
       .secondary-filter-status {
         display: none !important; /* 🔧 隐藏二级过滤状态提示 */
-        color: rgba(255, 255, 255, 0.85);
-        font-size: 10px;
-        margin-left: 3px;
-        min-height: 12px; /* 🔧 添加最小高度，防止空内容时塌陷 */
-        white-space: nowrap;
-        text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-        display: inline-block; /* 🔧 确保高度设置生效 */
       }
 
       /* 调整计数显示 */
       #filteredCount {
         font-weight: bold;
-        color: #1a4a8c; /* 深蓝色文字，与浅蓝色背景协调 */
+        color: #1a4a8c;
         text-shadow: 0 1px 1px rgba(255, 255, 255, 0.5);
       }
 
-      /* 响应式调整：在小屏幕上保持单行，只允许水平滚动 */
+      /* 调整耗时显示 */
+      #filteredTime {
+        font-weight: normal;
+        font-size: 9px;
+        color: #5a8ec0;
+        margin-left: 2px;
+      }
+
+      #filteredTime:empty {
+        display: none;
+      }
+
+      /* 响应式调整 */
+      /* 中等屏幕：缩小输入框宽度 */
+      @media (max-width: 1400px) {
+        #filteredPanelSearchBox {
+          min-width: 60px;
+          max-width: 90px;
+        }
+        #filteredPanelFilterBox {
+          min-width: 55px;
+          max-width: 90px;
+        }
+        .filtered-result-info {
+          font-size: 10px;
+        }
+      }
+
+      /* 小屏幕：允许水平滚动，增加头部高度 */
       @media (max-width: 1200px) {
         #filteredPanelHeader {
           flex-direction: row;
           align-items: center;
           gap: 4px;
-          /* 🔧 严格固定高度 */
-          min-height: 37px !important; /* 37px = 30px内容 + 3px顶部padding + 4px底部padding */
+          min-height: 37px !important;
           height: 37px !important;
           max-height: 37px !important;
           overflow-x: auto;
@@ -3969,6 +3954,21 @@
         .filtered-panel-header-right {
           width: auto;
           flex-shrink: 0;
+        }
+      }
+
+      /* 极小屏幕：进一步压缩 */
+      @media (max-width: 900px) {
+        #filteredPanelSearchBox {
+          min-width: 50px;
+          max-width: 70px;
+        }
+        #filteredPanelFilterBox {
+          min-width: 45px;
+          max-width: 65px;
+        }
+        .filtered-result-info {
+          font-size: 9px;
         }
       }
 
@@ -4822,7 +4822,7 @@
       /* AI助手面板 - 改为与过滤结果框相同样式 */
       #aiAssistantPanel {
         position: fixed;
-        top: 44px;
+        top: 25px;
         right: 0;
         width: 600px;
         height: 400px;
@@ -4849,7 +4849,7 @@
 
       /* 最大化状态样式 */
       #aiAssistantPanel.maximized {
-        top: 44px !important;
+        top: 25px !important;
         left: 0 !important;
         right: 0 !important;
         bottom: 0 !important;
