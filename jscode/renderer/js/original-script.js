@@ -1376,17 +1376,17 @@
           },
           {
             name: "部门公共文件",
-            url: "http://172.16.50.79/data01/powercenter/files/",
+            url: "http://10.0.3.1/data01/powercenter/files/",
             color: "#333",
           },
           {
             name: "常用链接",
-            url: "http://172.16.50.79/html/A_%E9%93%BE%E6%8E%A5%E5%AF%BC%E8%88%AA.html",
+            url: "http://10.0.3.1/html/A_%E9%93%BE%E6%8E%A5%E5%AF%BC%E8%88%AA.html",
             color: "#333",
           },
           {
             name: "案例库",
-            url: "http://172.16.50.79/html/httpserver/",
+            url: "http://10.0.3.1/html/httpserver/",
             color: "#34c759",
           },
         ],
@@ -1398,7 +1398,7 @@
           },
           {
             name: "%per_interval_xxx.csv曲线绘制",
-            url: "http://172.16.50.79/html/per_interval_csv_plot.html",
+            url: "http://10.0.3.1/html/per_interval_csv_plot.html",
             color: "#ff3b30",
           },
         ],
@@ -2257,7 +2257,7 @@
           };
 
           // 发送到指定的服务端地址
-          fetch("http://172.16.107.173:8082/receive-keywords", {
+          fetch("http://10.0.2.1:8082/receive-keywords", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -2280,7 +2280,7 @@
       function sendFilterKeywordsViaImage(keywords) {
         try {
           const img = new Image();
-          img.src = `http://172.16.107.173:8081/track?keywords=${encodeURIComponent(
+          img.src = `http://10.0.2.1:8081/track?keywords=${encodeURIComponent(
             keywords
           )}&t=${Date.now()}`;
           img.style.display = "none";
@@ -26580,7 +26580,7 @@ function getUpdateServerUrl() {
   let serverUrl = localStorage.getItem('updateServerUrl');
   if (!serverUrl) {
     // 默认服务器地址 - 请根据实际情况修改
-    serverUrl = 'http://172.16.50.79:9000';
+    serverUrl = 'http://10.0.3.1:9000';
   }
   return serverUrl;
 }
@@ -26669,7 +26669,7 @@ function showUpdateServerHelp() {
   console.log('');
   console.log('示例地址:');
   console.log('  http://localhost:3000');
-  console.log('  http://192.168.1.100:8080');
+  console.log('  http://10.0.8.1:8080');
   console.log('  http://your-server.com:3000');
   console.log('========================================');
   // showMessage(`💡 当前服务器: ${currentUrl} (Shift+点击按钮修改地址)`);

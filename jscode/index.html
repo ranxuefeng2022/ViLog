@@ -125,8 +125,8 @@
             type="text"
             id="serverAddress"
             placeholder="IP地址"
-            value="172.16.191.214:8082"
-            title="服务器地址 (如: 172.16.50.79:8082)"
+            value="10.0.1.1:8082"
+            title="服务器地址 (如: 10.0.3.1:8082)"
           />
           <button id="serverAddressDropdownBtn" type="button" title="选择常用服务器地址">▼</button>
           
@@ -142,14 +142,14 @@
 
           <!-- 下拉菜单保持不变 -->
           <div id="serverAddressDropdownMenu" role="listbox" aria-label="常用服务器地址">
-            <button class="server-address-option" type="button" data-value="172.16.191.214:8082">(172.16.191.214:8082)BPM生产环境服务器</button>
-            <button class="server-address-option" type="button" data-value="172.16.107.173:8082">(172.16.107.173:8082)BPM测试环境服务器</button>
-            <button class="server-address-option" type="button" data-value="172.16.50.79:8082">(172.16.50.79:8082)充电小组个人空间</button>
-			<button class="server-address-option" type="button" data-value="172.16.50.79:8083">(172.16.50.79:8083)充电小组windows目录挂载</button>
-			<button class="server-address-option" type="button" data-value="172.16.144.154:8083">(172.16.144.154:8083)冉雪峰-编译服务器</button>
-			<button class="server-address-option" type="button" data-value="192.168.70.130:8082">(192.168.70.130:8082)冉雪峰vmware-本地EF盘</button>
-			<button class="server-address-option" type="button" data-value="172.16.144.162:8082">(172.16.144.162:8082)姚国通-编译服务器</button>
-			<button class="server-address-option" type="button" data-value="172.16.144.46:8082">(172.16.144.46:8082)史晓生-编译服务器</button>
+            <button class="server-address-option" type="button" data-value="10.0.1.1:8082">(10.0.1.1:8082)BPM生产环境服务器</button>
+            <button class="server-address-option" type="button" data-value="10.0.2.1:8082">(10.0.2.1:8082)BPM测试环境服务器</button>
+            <button class="server-address-option" type="button" data-value="10.0.3.1:8082">(10.0.3.1:8082)充电小组个人空间</button>
+			<button class="server-address-option" type="button" data-value="10.0.3.1:8083">(10.0.3.1:8083)充电小组windows目录挂载</button>
+			<button class="server-address-option" type="button" data-value="10.0.4.1:8083">(10.0.4.1:8083)用户A-编译服务器</button>
+			<button class="server-address-option" type="button" data-value="10.0.5.1:8082">(10.0.5.1:8082)用户A-vmware-本地EF盘</button>
+			<button class="server-address-option" type="button" data-value="10.0.6.1:8082">(10.0.6.1:8082)用户B-编译服务器</button>
+			<button class="server-address-option" type="button" data-value="10.0.7.1:8082">(10.0.7.1:8082)用户C-编译服务器</button>
           </div>
         </div>
         <!-- 移除原来的 pathInputGroup，已合并到上面 -->
@@ -350,7 +350,7 @@
         <div class="dialog-body">
           <div class="form-group">
             <label for="remoteConnectIp">IP地址</label>
-            <input type="text" id="remoteConnectIp" placeholder="例如: 192.168.1.100" />
+            <input type="text" id="remoteConnectIp" placeholder="例如: 10.0.8.1" />
           </div>
           <div class="form-group">
             <label for="remoteConnectPort">端口</label>
