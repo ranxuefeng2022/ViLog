@@ -5,7 +5,29 @@
     "enable": false,
     "level": "information",
     "enableSigns": false,
-    "virtualText": false
+    "virtualText": false,
+    "virtualTextCurrentLine": false,
+    "virtualTextPrefix": "",
+    "virtualTextFormat": ""
+  },
+
+  "inlayHint": {
+    "enable": false
+  },
+
+  "hover": {
+    "floatConfig": {
+      "border": true,
+      "rounded": true
+    }
+  },
+
+  "signature": {
+    "enable": false
+  },
+
+  "codeLens": {
+    "enable": false
   },
   
   "snippets": {

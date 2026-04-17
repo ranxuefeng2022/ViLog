@@ -1,65 +1,89 @@
+if !has('ttyin')
+  finish
+endif
 set runtimepath^=~/.vim
 call plug#begin('~/.vim/plugged')
 if has('nvim')
-Plug 'stevearc/dressing.nvim'
-Plug 'rcarriga/nvim-notify'
-Plug 'folke/noice.nvim'
-Plug 'MunifTanjim/nui.nvim'
-Plug 'petertriho/nvim-scrollbar'
+Plug 'stevearc/dressing.nvim'           " UI 增强：美化 input/select 弹窗
+Plug 'rcarriga/nvim-notify'             " 通知弹窗：替代默认 message 显示
+Plug 'folke/noice.nvim'                 " 消息/UI 框架：美化命令行、弹窗、搜索
+Plug 'MunifTanjim/nui.nvim'             " UI 组件库：noice 的依赖
 
-Plug 'phaazon/hop.nvim'
+Plug 'phaazon/hop.nvim'                 " 快速跳转：跳到任意可见字符位置
 
-Plug 'lukas-reineke/indent-blankline.nvim'
-
-Plug 'folke/zen-mode.nvim'
-Plug 'NeogitOrg/neogit'
-Plug 'folke/flash.nvim'
-Plug 'karb94/neoscroll.nvim'
+Plug 'lukas-reineke/indent-blankline.nvim' " 缩进线：显示缩进对齐竖线
+Plug 'NeogitOrg/neogit'                 " Git 界面：交互式 Git 操作面板
+Plug 'echasnovski/mini.animate'         " 动画效果：光标移动、窗口开关动画
+Plug 'sphamba/smear-cursor.nvim'        " 光标拖尾：光标移动时的涂抹效果
+Plug 'nyngwang/NeoNoName.lua'           " 缓冲区淡入淡出：切换缓冲区时的过渡动画
+Plug 'andymass/vim-matchup'            " 增强 % 匹配：支持 if/end、html 标签等
+Plug 'adelarsq/neovim-luxmotion'        " 流畅光标动画：60fps 光标移动效果
+Plug 'shellRaining/hlchunk.nvim'        " 代码块高亮：当前代码块缩进范围可视化
+Plug 'DreamMaoMao/yazi.nvim'            " 文件管理：集成 Yazi 终端文件浏览器
+Plug 'greggh/claude-code.nvim'          " AI 助手：集成 Claude Code
+Plug 'kdheepak/lazygit.nvim'            " Git UI：集成 LazyGit 终端界面
+Plug 'stevearc/aerial.nvim'             " 代码大纲：显示函数/变量结构树
 endif
 "Plug 'yetone/avante.nvim', { 'branch': 'main', 'do': 'make' }
 
-Plug 'rbgrouleff/bclose.vim'
-Plug 'skywind3000/asyncrun.vim'
-Plug 'Yggdroot/LeaderF', { 'do': ':LeaderfInstallCExtension' }
+Plug 'rbgrouleff/bclose.vim'            " 关闭缓冲区：不关闭窗口
+Plug 'skywind3000/asyncrun.vim'         " 异步执行：后台运行命令并显示结果
+Plug 'Yggdroot/LeaderF', { 'do': ':LeaderfInstallCExtension' } " 模糊查找：文件/Buffer/标签搜索
 
-Plug 'folke/tokyonight.nvim'
+Plug 'folke/tokyonight.nvim'            " 主题：TokyoNight 配色方案
+Plug 'tanvirtin/monokai.nvim'           " 主题：经典 Sublime Monokai
+Plug 'rebelot/kanagawa.nvim'            " 主题：日式浮世绘风格
+Plug 'catppuccin/nvim'                  " 主题：柔和马卡龙配色
+Plug 'ellisonleao/gruvbox.nvim'         " 主题：复古暖色
+Plug 'rose-pine/neovim'                 " 主题：松木玫瑰色
+Plug 'sainnhe/sonokai'                  " 主题：绿色高对比度
+Plug 'AlexvZyl/nordic.nvim'             " 主题：北极蓝灰
+Plug 'sainnhe/everforest'               " 主题：绿色森林护眼
+Plug 'olimorris/onedarkpro.nvim'        " 主题：One Dark VSCode 风格
+Plug 'Mofiqul/dracula.nvim'             " 主题：紫色调高对比度
+Plug 'sainnhe/edge'                     " 主题：蓝紫渐变清爽
+Plug 'fcpg/vim-farout'                  " 主题：暖橘色调
+Plug 'cpea2506/one_monokai.nvim'        " 主题：One+Monokai 混合
 
-Plug 'haya14busa/incsearch.vim'
-Plug 'haya14busa/incsearch-easymotion.vim'
-Plug 'haya14busa/incsearch-fuzzy.vim'
-Plug 'ojroques/vim-oscyank', {'branch': 'main'}
-Plug 'ibhagwan/fzf-lua'
-Plug 'nvim-tree/nvim-web-devicons'
+Plug 'haya14busa/incsearch.vim'         " 增量搜索：高亮所有匹配项
+Plug 'haya14busa/incsearch-easymotion.vim' " 搜索增强：incsearch + easymotion 联合
+Plug 'haya14busa/incsearch-fuzzy.vim'   " 模糊搜索：模糊匹配搜索
+Plug 'ojroques/vim-oscyank', {'branch': 'main'} " 系统剪贴板：通过 OSC52 远程复制
+Plug 'ibhagwan/fzf-lua'                 " 模糊搜索：Lua 版 fzf 集成
+Plug 'nvim-tree/nvim-web-devicons'      " 图标：文件类型图标显示
 
-Plug 'nvim-lua/plenary.nvim'
-Plug 'neoclide/coc.nvim', {'branch': 'release'}  " LSP框架 [citation](1)
+Plug 'nvim-lua/plenary.nvim'            " Lua 工具库：多种插件的公共依赖
+Plug 'neoclide/coc.nvim', {'branch': 'release'}
 
-Plug 'neoclide/coc-snippets'                    " 片段引擎
-Plug 'honza/vim-snippets'                       " 通用片段库
-Plug 'SirVer/ultisnips'         " 片段引擎
+Plug 'neoclide/coc-snippets'            " 片段引擎：代码片段扩展
+Plug 'honza/vim-snippets'               " 通用片段库：多语言代码片段集合
+Plug 'SirVer/ultisnips'                 " 片段引擎：UltiSnips 片段系统
 
-Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
-Plug 'junegunn/fzf.vim'
+Plug 'junegunn/fzf', { 'do': { -> fzf#install() } } " 模糊查找器：fzf 二进制核心
+Plug 'junegunn/fzf.vim'                 " fzf 集成：Vim 版 fzf 命令封装
 
-Plug 'easymotion/vim-easymotion'
+Plug 'easymotion/vim-easymotion'        " 快速跳转：行间/屏幕内快速移动
 
-Plug 'vim-scripts/c.vim'
+Plug 'vim-scripts/c.vim'                " C 语言增强：C/C++ 语法和缩进
 
-Plug 'voldikss/vim-floaterm'
-Plug 'francoiscabrol/ranger.vim'
 
-Plug 'matze/vim-move'
+Plug 'folke/snacks.nvim'                " QoL 工具集：大文件、缩进、滚动等
+Plug 'folke/drop.nvim'                  " 屏保动画：节日主题下落动画
+Plug 'akinsho/toggleterm.nvim'          " 浮动终端：多终端管理，支持多种布局
+Plug 'francoiscabrol/ranger.vim'        " 文件管理：集成 Ranger 文件浏览器
 
-Plug 'tpope/vim-fugitive'
-Plug 'airblade/vim-gitgutter'
-Plug 'junegunn/gv.vim'
+Plug 'matze/vim-move'                   " 行移动：Alt+j/k 上下移动行
 
-Plug 'terryma/vim-multiple-cursors'
-Plug 'mg979/vim-visual-multi'
+Plug 'tpope/vim-fugitive'               " Git 集成：在 Vim 中操作 Git 命令
+Plug 'airblade/vim-gitgutter'           " Git 标记：侧边栏显示文件修改状态
+Plug 'junegunn/gv.vim'                  " Git 历史：可视化 commit 历史
 
-Plug 'preservim/tagbar'
-Plug 'kshenoy/vim-signature'
-Plug 'terryma/vim-expand-region'
+Plug 'terryma/vim-multiple-cursors'     " 多光标：多位置同时编辑
+Plug 'mg979/vim-visual-multi'           " 多光标：高级多位置选中编辑
+
+Plug 'preservim/tagbar'                 " 标签栏：显示文件函数/变量大纲
+Plug 'kshenoy/vim-signature'            " 标记管理：增强 mark 功能和显示
+Plug 'terryma/vim-expand-region'        " 选区扩展：逐步扩大选中范围
 call plug#end()
 
 syntax on
@@ -81,7 +105,7 @@ set signcolumn=yes
 set encoding=utf-8
 set fileencoding=utf-8
 set showcmd
-set ruler
+set noruler
 set updatetime=300
 set showtabline=0
 set splitbelow
@@ -98,9 +122,10 @@ set sm
 set mousemodel=extend
 set smartcase
 set smarttab
-set title
+set notitle
 set tabstop=4
 set shiftwidth=4
+set noexpandtab
 set nowritebackup
 set nobackup
 set foldcolumn=0
@@ -128,7 +153,7 @@ set sessionoptions-=options
 set completeopt=longest,menu
 set shortmess+=c
 set nolist
-"set listchars=tab:›\ ,trail:.,extends:#,nbsp:.
+set listchars=tab:>\ ,trail:·,nbsp:␣
 set fileencodings=utf-8,gbk,gb18030,gb2312,ucs-bom,cp936,latin1
 set hid
 set backspace=eol,start,indent
@@ -154,67 +179,125 @@ let g:Color_Insert      = '#8B0000'  " Insert模式背景
 let g:Color_Visual      = '#006400'  " Visual模式背景
 let g:Color_Command     = '#e46876'  " Command模式背景
 let g:Color_Other       = '#c8c093'  " 其他模式文字
-let g:Color_Text_Alt    = '#FFFFFF'  " 用于模式文字的前景深色
-
-" ===============================
-" 更新状态栏函数
-" ===============================
-function! StatusLineUpdate()
-    " 函数名、文件名、Git分支、模式、百分比
-    set statusline=%#ColorT#[%{get(b:,'current_func','')}][%t]
-    set statusline+=%#ColorGit#%{fugitive#statusline()}
-    set statusline+=%#ColorT#[%{Mode()}][%p%%]
-endfunction
-
-call StatusLineUpdate()
+let g:Color_Text_Alt    = '#FFFFFF'  " 模式背景色上的文字
+let g:Color_File        = '#7aa2f7'  " 文件名颜色
+let g:Color_Sep         = '#565f89'  " 分隔符颜色
+let g:Color_Info        = '#a9b1d6'  " 右侧信息颜色
 
 " ===============================
 " 初始化高亮组
 " ===============================
 execute 'hi ColorT guifg=' . g:Color_Text . ' guibg=' . g:Color_BG
 execute 'hi ColorGit guifg=' . g:Color_Git . ' guibg=' . g:Color_BG
+execute 'hi ColorFile guifg=' . g:Color_File . ' guibg=' . g:Color_BG
+execute 'hi ColorSep guifg=' . g:Color_Sep . ' guibg=' . g:Color_BG
+execute 'hi ColorInfo guifg=' . g:Color_Info . ' guibg=' . g:Color_BG
+execute 'hi StatusLine guibg=' . g:Color_BG . ' gui=none cterm=none'
+execute 'hi StatusLineNC guibg=' . g:Color_BG . ' gui=none cterm=none'
 
 " ===============================
-" 动态模式函数
+" Git 分支缓存（事件驱动更新，不在每次重绘时调用 system）
 " ===============================
+function! UpdateGitBranch()
+    let b:git_branch = ''
+    let dir = expand('%:p:h')
+    if dir ==# '' | return | endif
+    let branch = system('cd ' . shellescape(dir) . ' 2>/dev/null && git rev-parse --abbrev-ref HEAD 2>/dev/null')
+    let branch = trim(branch)
+    if branch !=# '' && branch !=# 'HEAD'
+        let b:git_branch = branch
+    endif
+endfunction
+augroup GitBranch | autocmd!
+    autocmd BufEnter,FocusGained,BufReadPost * call UpdateGitBranch()
+augroup END
+
+function! StGit()
+    return exists('b:git_branch') && b:git_branch !=# '' ? ' ' . b:git_branch . ' ' : ''
+endfunction
+
+" ===============================
+" 更新状态栏函数
+" ===============================
+function! StatusLineUpdate()
+    let l:sl = "%#ColorT# %{Mode()} "
+    let l:sl .= "%#ColorSep#│ "
+    let l:sl .= "%#ColorT# %{get(b:,'current_func','')} "
+    let l:sl .= "%#ColorSep#│ "
+    let l:sl .= "%#ColorFile# %t%{&modified?' [+]':''} "
+    " 右侧：Git │ 文件类型 │ 行:列 │ 百分比
+    let l:sl .= "%="
+    let l:sl .= "%#ColorGit#%{StGit()}"
+    let l:sl .= "%#ColorSep#│ "
+    let l:sl .= "%#ColorInfo# %{&ft!=#''?&ft:'-'} "
+    let l:sl .= "%#ColorSep#│ "
+    let l:sl .= "%#ColorInfo# %l:%c "
+    let l:sl .= "%#ColorSep#│ "
+    let l:sl .= "%#ColorT# %p%% "
+    " 用 set 命令强制覆盖全局 statusline，防止 Neovim 默认值拼接
+    execute 'set statusline=' . escape(l:sl, ' %')
+endfunction
+
+call StatusLineUpdate()
+
+" ===============================
+" 动态模式函数（根据模式切换整个状态栏配色）
+" ===============================
+function! s:SetModeColors(fg, bg)
+  call nvim_set_hl(0, 'ColorT',    {'fg': a:fg, 'bg': a:bg})
+  call nvim_set_hl(0, 'ColorGit',  {'fg': a:fg, 'bg': a:bg})
+  call nvim_set_hl(0, 'ColorFile', {'fg': a:fg, 'bg': a:bg})
+  call nvim_set_hl(0, 'ColorSep',  {'fg': a:fg, 'bg': a:bg})
+  call nvim_set_hl(0, 'ColorInfo', {'fg': a:fg, 'bg': a:bg})
+endfunction
+
 function! Mode()
   let l:mode = mode()
 
   if l:mode ==# 'n'
-    execute 'hi ColorT guifg=' . g:Color_Normal . ' guibg=' . g:Color_BG
-    execute 'hi ColorGit guifg=' . g:Color_Git . ' guibg=' . g:Color_BG
+    call s:SetModeColors(g:Color_Normal, g:Color_BG)
+    call nvim_set_hl(0, 'ColorGit',  {'fg': g:Color_Git,   'bg': g:Color_BG})
+    call nvim_set_hl(0, 'ColorFile', {'fg': g:Color_File,  'bg': g:Color_BG})
+    call nvim_set_hl(0, 'ColorSep',  {'fg': g:Color_Sep,   'bg': g:Color_BG})
+    call nvim_set_hl(0, 'ColorInfo', {'fg': g:Color_Info,  'bg': g:Color_BG})
     return 'N'
 
   elseif l:mode ==# 'i'
-    execute 'hi ColorT guifg=' . g:Color_Text_Alt . ' guibg=' . g:Color_Insert
-    execute 'hi ColorGit guifg=' . g:Color_Text_Alt . ' guibg=' . g:Color_Insert
+    call s:SetModeColors(g:Color_Text_Alt, g:Color_Insert)
     return 'I'
 
   elseif l:mode ==# 'v' || l:mode ==# 'V' || l:mode ==# '' || l:mode ==# 's'
-    execute 'hi ColorT guifg=' . g:Color_Text_Alt . ' guibg=' . g:Color_Visual
-    execute 'hi ColorGit guifg=' . g:Color_Text_Alt . ' guibg=' . g:Color_Visual
+    call s:SetModeColors(g:Color_Text_Alt, g:Color_Visual)
     return 'V'
 
   elseif l:mode ==# 'c'
-    execute 'hi ColorT guifg=' . g:Color_Text_Alt . ' guibg=' . g:Color_Command
-    execute 'hi ColorGit guifg=' . g:Color_Text_Alt . ' guibg=' . g:Color_Command
+    call s:SetModeColors(g:Color_Text_Alt, g:Color_Command)
     return 'C'
 
   else
-    execute 'hi ColorT guifg=' . g:Color_Other . ' guibg=' . g:Color_BG
-    execute 'hi ColorGit guifg=' . g:Color_Git . ' guibg=' . g:Color_BG
+    call s:SetModeColors(g:Color_Other, g:Color_BG)
+    call nvim_set_hl(0, 'ColorGit',  {'fg': g:Color_Git,   'bg': g:Color_BG})
+    call nvim_set_hl(0, 'ColorFile', {'fg': g:Color_File,  'bg': g:Color_BG})
+    call nvim_set_hl(0, 'ColorSep',  {'fg': g:Color_Sep,   'bg': g:Color_BG})
+    call nvim_set_hl(0, 'ColorInfo', {'fg': g:Color_Info,  'bg': g:Color_BG})
     return l:mode
   endif
 endfunction
-autocmd ModeChanged * call Mode()
+autocmd ModeChanged * call Mode() | call StatusLineUpdate()
+autocmd BufEnter,FileType * call StatusLineUpdate()
 
 "=====================================================begin func====================================
 
 function! UpdateCurrentFunc()
     let lnum = line('.')
+    " 只在函数名变化时更新，避免无谓的状态栏刷新
+    if exists('b:current_func_lnum') && b:current_func_lnum == lnum
+        return
+    endif
+    let start = max([1, lnum - 200])
     let fname = ''
-    let reserved = ['if', 'else', 'elseif', 'return']
-    for i in reverse(range(1, lnum))
+    let reserved = ['if', 'else', 'elseif', 'return', 'for', 'while', 'switch']
+    for i in range(lnum, start, -1)
         let line_text = getline(i)
         if line_text =~# '^\s*\(if\|else\>\)'
             continue
@@ -227,12 +310,10 @@ function! UpdateCurrentFunc()
             break
         endif
     endfor
-    let b:current_func = fname
-
-	if winnr('$') > 1
-	else
-	execute "resize +3"
-	endif
+    if !exists('b:current_func') || b:current_func !=# fname
+        let b:current_func = fname
+    endif
+    let b:current_func_lnum = lnum
 endfunction
 augroup CFileAutocmds
     autocmd!
@@ -371,6 +452,7 @@ endfunction
 "=====================================================begin func====================================
 function! s:execute_command_cd()
  let g:command_list = [
+  \ ':cd ~/de/pri-charge/',
   \ ':cd ~/codecenter/vimcode/dx5/kernel/',
   \ ':cd ~/codecenter/vimcode/dx5/lk/',
   \ ':cd ~/codecenter/vimcode/dx5/pl/',
@@ -477,12 +559,6 @@ let g:matchparen_timeout = 300
 let g:matchparen_insert_timeout = 300
 let g:ranger_map_keys = 0
 
-let g:floaterm_width = 900  " 宽度为屏幕的 80%
-let g:floaterm_height = 35 " 高度为屏幕的 60%
-"let g:floaterm_height = 40 " 高度为屏幕的 60%
-let g:floaterm_autoinsert = 1
-let g:floaterm_autohide = 1
-let g:floaterm_autoclose = 2
 let current_file_dir = expand('%:p:h')
 let current_working_dir = getcwd()
 let g:ranger_replace_netrw = 0
@@ -490,7 +566,7 @@ let g:osc52_trim_newline = 1
 let g:oscyank_term = 'tmux'
 
 let g:python3_host_prog = '/usr/bin/python3'
-let g:UltiSnipsExpandTrigger="<tab>"
+let g:UltiSnipsExpandTrigger="<c-e>"
 let g:UltiSnipsJumpForwardTrigger="<c-j>"
 
 cabbrev rg Rg
@@ -574,7 +650,7 @@ nnoremap <Leader>i <Plug>(easymotion-linebackward)
 
 let g:EasyMotion_startofline = 0 " keep cursor column when JK motion
 
-nnoremap<leader>t :FloatermToggle<CR>
+" ToggleTerm 由 init.lua 中的 open_mapping 处理
 vnoremap <S-j> :m '>+1<CR>gv=gv
 vnoremap <S-k> :m '<-2<CR>gv=gv
 
@@ -647,11 +723,12 @@ nnoremap Y ve<Plug>OSCYankVisual
 nnoremap e :e<cr>
 
 nnoremap ce :Rg<cr>
-nnoremap cf :NERDTreeFind<cr>
+nnoremap cf :Yazi<cr>
 nnoremap cc :TagbarToggle<cr>
 nnoremap cs :sp<cr>
 nnoremap cv :vsp<cr>
-nnoremap ca :Ranger<cr>
+"nnoremap ca :Ranger<cr>
+nnoremap ca :Yazi<cr>
 nnoremap cq :copen 20<cr>
 nnoremap ct :call GenerateTags()<cr>
 nnoremap cl :call system('rm -rf *2025_Will_Rich* tags \n')<cr>
@@ -659,11 +736,65 @@ nnoremap E <Plug>(expand_region_expand)
 nnoremap 0 ^
 nnoremap <leader>cd :cd %:p:h<cr>:pwd<cr>
 
-" Zen Mode
-nnoremap <leader>z :ZenMode<CR>
+" 快捷键列表：用 FzfLua 列出所有快捷键及说明
+nnoremap <silent> <leader>hk :FzfLua keymaps<CR>
+
+" LazyGit
+nnoremap <silent> <leader>lg :LazyGit<CR>
+nnoremap <silent> <leader>lf :LazyGitFilter<CR>
+
+" Aerial
+nnoremap <silent> <leader>ao :AerialToggle!<CR>
+
 
 " Neogit
-nnoremap <leader>ng :Neogit<CR>
+nnoremap <leader>ng :lua require('neogit').open({cwd = vim.fn.expand('%:p:h')})<CR>
+
+" =============================== 主题切换 ===============================
+let g:my_colorschemes = [
+\ 'tokyonight-night',
+\ 'tokyonight-storm',
+\ 'tokyonight-moon',
+\ 'tokyonight-day',
+\ 'monokai',
+\ 'kanagawa',
+\ 'kanagawa-dragon',
+\ 'kanagawa-lotus',
+\ 'catppuccin-mocha',
+\ 'catppuccin-macchiato',
+\ 'catppuccin-frappe',
+\ 'gruvbox',
+\ 'rose-pine',
+\ 'rose-pine-moon',
+\ 'rose-pine-dawn',
+\ 'sonokai',
+\ 'nordic',
+\ 'everforest',
+\ 'onedarkpro',
+\ 'onedark_dark',
+\ 'onedark_vivid',
+\ 'dracula',
+\ 'edge',
+\ 'farout',
+\ 'one_monokai',
+\ ]
+
+function! s:colorscheme_sink(line)
+  let l:scheme = split(a:line)[0]
+  execute 'colorscheme ' . l:scheme
+  let g:my_last_colorscheme = l:scheme
+endfunction
+
+function! s:SelectColorscheme()
+  let l:preview = []
+  call fzf#run(fzf#wrap({
+  \ 'source': g:my_colorschemes,
+  \ 'sink': function('s:colorscheme_sink'),
+  \ 'options': '--prompt="Colorscheme> " --no-multi --reverse',
+  \ }))
+endfunction
+
+nnoremap <leader>cs :call <SID>SelectColorscheme()<CR>
 
 autocmd InsertLeave * silent! write
 autocmd FocusGained,BufEnter * silent! checktime
@@ -674,7 +805,6 @@ autocmd InsertLeave * if pumvisible() == 0|pclose|endif
 autocmd VimLeave * call system("mv *2025_Will_Rich* tags/")
 autocmd BufRead * silent! call LoadTags()
 autocmd Syntax * source ~/.vim/plugged/c.vim/ftplugin/c.vim
-autocmd User FloatermExit :FloatermNew --autoclose=0 exit 0
 autocmd BufRead,BufNewFile * call <SID>SetHighlights()
 autocmd BufEnter * if !g:initial_directory_set | silent! lcd %:p:h | let g:initial_directory_set = 1 | endif
 autocmd FileType python setlocal makeprg=python3\ %
@@ -684,6 +814,8 @@ function! s:SetHighlights()
   hi clear LineNr
   highlight LineNr ctermfg=darkgrey guifg=#555555
   hi Search ctermfg=0 ctermbg=11 guifg=Black guibg=Yellow
+  highlight! Whitespace guifg=#2a2a3a ctermfg=darkgrey
+  highlight! NonText guifg=#2a2a3a ctermfg=darkgrey
   highlight CursorLineNr ctermfg=yellow guifg=#FFFF00
   highlight CursorLine ctermbg=NONE guibg=NONE
 endfunction
@@ -693,7 +825,6 @@ nnoremap <leader>L :call LoadTags()<cr>
 " ======================= NEVIDIA 专属配置 =======================
 if exists("g:neovide")
 set linespace=8
-let g:neovide_cursor_trail_size = 0.5          " 光标拖尾长度（0-1）
 let g:neovide_floating_blur = 1                " 浮动窗口模糊效果
 let g:neovide_multigrid = v:true               " 启用多网格渲染（提升性能）
 let g:neovide_underline_automatic_scaling = v:true  " 下划线自动缩放
@@ -736,11 +867,6 @@ let g:fzf_colors = {
 	\ 'spinner': ['fg', 'Label'],
 	\ 'header':  ['fg', 'Comment'] }
 
-command! -bang -nargs=* Rg
-  \ call fzf#vim#grep(
-  \   'rg --threads 5  -L --column --line-number --no-heading --color=always --smart-case  '.shellescape(<q-args>), 1,
-  \   fzf#vim#with_preview(), <bang>0)
-
 endif "neovide config
 " ======================= NEVIDIA 专属配置 =======================
 
@@ -759,6 +885,29 @@ inoremap <silent><expr> <CR> coc#pum#visible() ? coc#pum#confirm() : "\<CR>"
 let g:coc_snippet_next = '<C-j>'
 let g:coc_snippet_prev = '<C-k>'
 let g:coc_disable_startup_warning = 1
+
+" 非代码文件类型列表（这些文件类型不启用 coc）
+let g:coc_non_code_filetypes = [
+    \ 'text', 'markdown', 'txt', 'log', 'gitcommit', 'gitrebase',
+    \ 'help', 'man', 'qf', 'fugitive', 'diff', 'mail',
+    \ 'json', 'yaml', 'toml', 'xml', 'csv',
+    \ 'vim', 'dockerfile', 'ini', 'conf', 'cfg',
+    \ 'bash', 'sh', 'zsh', 'fish',
+    \ 'html', 'css', 'scss', 'sass', 'less',
+    \ ]
+
+" 非 coc 文件类型的 buffer 里禁用 coc 服务
+function! s:DisableCocForNonCode()
+    if index(g:coc_non_code_filetypes, &filetype) >= 0
+        call coc#config('suggest.enable', v:false)
+        " 断开当前 buffer 的 coc 附加
+        silent! call coc#rpc#notify('detached', [bufnr('%')])
+    endif
+endfunction
+augroup CocNonCodeDisable
+    autocmd!
+    autocmd FileType * call s:DisableCocForNonCode()
+augroup END
 """""""""""""""""""""""""""""""COC.NVIM"""""""""""""""""""""""""""""""""""
 " 智能搜索函数：支持普通模式和可视模式
 function! GrepCurrentFileOrWord()
@@ -800,7 +949,6 @@ nnoremap <leader>d :call DeleteLinesWithKeyword()<CR>
 
 " Alt+鼠标滚轮实现左右滚动
 if has('mouse')
-    set mouse=a
     nmap <M-ScrollWheelUp> 5zh
     nmap <M-ScrollWheelDown> 5zl
     imap <M-ScrollWheelUp> <Esc>5zh
