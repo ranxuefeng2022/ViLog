@@ -241,6 +241,28 @@ function cancelOperation() {
   isCancelled = true;
 }
 
+/**
+ * 🚀 从 SharedArrayBuffer 解码指定行范围的字符串
+ * 布局: [uint32 lineCount][uint32 offsets[N+1]][utf8 bytes...]
+ */
+function decodeLinesFromSAB(sab, headerSize, startLine, endLine) {
+  const decoder = new TextDecoder('utf-8');
+  const offsetsView = new Uint32Array(sab, 4); // 偏移表从第4字节开始
+  const dataView = new Uint8Array(sab, headerSize);
+
+  const lines = new Array(endLine - startLine);
+  for (let i = startLine; i < endLine; i++) {
+    const byteStart = offsetsView[i];
+    const byteEnd = offsetsView[i + 1];
+    if (byteStart === byteEnd) {
+      lines[i - startLine] = '';
+    } else {
+      lines[i - startLine] = decoder.decode(dataView.subarray(byteStart, byteEnd));
+    }
+  }
+  return lines;
+}
+
 // 监听消息
 self.onmessage = function(e) {
   const { type, data } = e.data;
@@ -248,6 +270,25 @@ self.onmessage = function(e) {
   switch (type) {
     case 'process':
       processChunk(data);
+      break;
+    case 'process-sab':
+      // 🚀 SharedArrayBuffer 路径：从共享内存解码行数据后走正常过滤流程
+      try {
+        const { sab, headerSize, startLine, endLine, keywords, sessionId, chunkIndex, totalChunks } = data;
+        console.log(`[Worker] 收到 process-sab: chunk=${chunkIndex}, lines=${endLine - startLine}, sab=${sab ? sab.byteLength : 'null'}, headerSize=${headerSize}`);
+        const lines = decodeLinesFromSAB(sab, headerSize, startLine, endLine);
+        console.log(`[Worker] SAB 解码完成: ${lines.length} 行, 首行=${lines[0] ? lines[0].substring(0, 50) : 'empty'}`);
+        processChunk({
+          lines: lines,
+          keywords: keywords,
+          sessionId: sessionId,
+          chunkIndex: chunkIndex,
+          totalChunks: totalChunks,
+          startIndex: startLine
+        });
+      } catch (err) {
+        console.error(`[Worker] process-sab 失败:`, err.message, err.stack);
+      }
       break;
     case 'cancel':
       cancelOperation();

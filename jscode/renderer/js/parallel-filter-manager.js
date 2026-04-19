@@ -15,6 +15,10 @@ class ParallelFilterManager {
     this.cachedDataSignature = null; // '行数:首行hash' 作为数据指纹
     this.workersHaveCache = false;
 
+    // 🚀 智能缓存阈值：行数超过此值时，过滤完成后自动清空 Worker 缓存释放内存
+    // 约 100 万行 ≈ 200MB 原始数据，Worker 缓存会额外占用 ~200MB
+    this.cacheReleaseThreshold = 1000000;
+
     // 结果收集
     this.results = [];
     this.completedChunks = 0;
@@ -36,9 +40,7 @@ class ParallelFilterManager {
    * Worker数 > 核心数会导致上下文切换，反而变慢
    */
   calculateOptimalWorkers() {
-    const cores = navigator.hardwareConcurrency || 8;
-    // 留1个核心给主线程渲染
-    return Math.max(4, cores - 1);
+    return navigator.hardwareConcurrency || 8;
   }
 
   /**
@@ -172,12 +174,14 @@ class ParallelFilterManager {
   /**
    * 处理块完成
    * 🚀 实现增量归并：每个 Worker 完成后立即显示结果
+   * 🚀 优化：直接存储 Int32Array，避免 Array.from 转换
    */
   handleComplete(workerIndex, chunkIndex, results, stats) {
     console.log(`[ParallelFilter] Worker ${workerIndex} 完成块 ${chunkIndex}: ${stats.matchedCount} 个匹配`);
 
-    // results 是 Int32Array，转换为普通数组
-    const resultArray = Array.from(results);
+    // 🚀 优化：直接存储 Int32Array，避免 Array.from 转换开销
+    // results 已经是 Int32Array（通过 Transferable 从 Worker 接收）
+    const resultArray = results instanceof Int32Array ? results : new Int32Array(results);
 
     // 保存原始结果（每个块内部已按行号有序）
     this.results[chunkIndex] = resultArray;
@@ -202,7 +206,7 @@ class ParallelFilterManager {
 
     // 通知单个块完成（传递该块的原始结果，不做归并，减少开销）
     if (this.onChunkComplete) {
-      this.onChunkComplete(resultArray, {
+      this.onChunkComplete(Array.from(resultArray), {
         processed: this.completedChunks,
         total: this.totalChunks,
         percentage: (this.completedChunks / this.totalChunks * 100).toFixed(1)
@@ -221,10 +225,24 @@ class ParallelFilterManager {
 
       this.isProcessing = false;
 
+      // 🚀 智能缓存策略：大数据集过滤完成后自动清空 Worker 缓存释放内存
+      // 小数据集保留缓存以便快速重复过滤，大数据集清空以节省内存
+      if (this.totalLines > this.cacheReleaseThreshold && this.workersHaveCache) {
+        const savedMB = (this.totalLines * 200 / 1000000).toFixed(0);
+        console.log(`[ParallelFilter] 🧹 智能缓存: ${this.totalLines} 行超过阈值 ${this.cacheReleaseThreshold}，清空 Worker 缓存释放 ~${savedMB}MB`);
+        for (const worker of this.workers) {
+          worker.postMessage({ type: 'clearCache' });
+        }
+        this.workersHaveCache = false;
+        this.cachedDataSignature = null;
+      }
+
       if (this.onComplete) {
-        this.onComplete(mergedResults, {
+        // 🚀 最终结果转为普通数组供上层使用
+        const finalArray = mergedResults instanceof Int32Array ? Array.from(mergedResults) : mergedResults;
+        this.onComplete(finalArray, {
           totalLines: this.totalLines,
-          matchedCount: mergedResults.length,
+          matchedCount: finalArray.length,
           totalTime: totalTime.toFixed(2),
           mergeTime: mergeTime.toFixed(2),
           workers: this.workerCount
@@ -235,16 +253,18 @@ class ParallelFilterManager {
 
   /**
    * 最终一次性归并：所有 Worker 完成后调用一次
-   * 利用每个块内部已按行号有序的特性，进行高效 K-way 归并
+   * 🚀 优化：全程使用 Int32Array，避免中间转换
    */
   finalMerge() {
     const chunks = [];
     let totalLength = 0;
 
     for (let i = 0; i < this.results.length; i++) {
-      if (this.results[i] && Array.isArray(this.results[i]) && this.results[i].length > 0) {
-        chunks.push(this.results[i]);
-        totalLength += this.results[i].length;
+      const r = this.results[i];
+      if (r && r.length > 0) {
+        // 确保是 Int32Array
+        chunks.push(r instanceof Int32Array ? r : new Int32Array(r));
+        totalLength += r.length;
       }
     }
 
@@ -263,10 +283,10 @@ class ParallelFilterManager {
     const k = sortedChunks.length;
     if (k === 0) return [];
     if (k === 1) return sortedChunks[0];
-    if (k === 2) return this._mergeTwoSortedArrays(sortedChunks[0], sortedChunks[1]);
+    if (k === 2) return this._mergeTwoSortedInt32Arrays(sortedChunks[0], sortedChunks[1]);
 
-    // 🚀 最小堆 K-way merge
-    const result = new Array(totalLength);
+    // 🚀 优化：使用 Int32Array 作为结果缓冲区，避免对象数组
+    const result = new Int32Array(totalLength);
 
     // 堆元素：{ value, chunkIdx, pos }
     // 用扁平数组表示堆，避免对象分配
@@ -364,6 +384,34 @@ class ParallelFilterManager {
   /**
    * 合并两个已排序数组（k=2 时的快速路径）
    */
+  /**
+   * 🚀 合并两个有序 Int32Array，返回 Int32Array
+   */
+  _mergeTwoSortedInt32Arrays(arr1, arr2) {
+    const len1 = arr1.length;
+    const len2 = arr2.length;
+    const result = new Int32Array(len1 + len2);
+    let i = 0, j = 0, k = 0;
+
+    while (i < len1 && j < len2) {
+      if (arr1[i] <= arr2[j]) {
+        result[k++] = arr1[i++];
+      } else {
+        result[k++] = arr2[j++];
+      }
+    }
+
+    while (i < len1) {
+      result[k++] = arr1[i++];
+    }
+
+    while (j < len2) {
+      result[k++] = arr2[j++];
+    }
+
+    return result;
+  }
+
   _mergeTwoSortedArrays(arr1, arr2) {
     const result = new Array(arr1.length + arr2.length);
     let i = 0, j = 0, k = 0;
@@ -504,8 +552,9 @@ class ParallelFilterManager {
   /**
    * 开始并行过滤
    * 🚀 数据缓存优化：同一文件重复过滤时只发关键词，不重传数据
+   * 🚀 SharedArrayBuffer 优化：数据变化时通过 SAB 共享，零拷贝分发
    */
-  start(lines, keywords) {
+  start(lines, keywords, sabInfo) {
     if (this.isProcessing) {
       console.warn('[ParallelFilter] 已有任务在处理中，取消旧任务');
       this.cancel();
@@ -528,47 +577,76 @@ class ParallelFilterManager {
     this.totalProcessed = 0;
     this.totalMatched = 0;
     this.totalLines = lines.length;
-    this.totalChunks = this.workers.length;
-
-    const chunkSize = Math.ceil(lines.length / this.workers.length);
+    // 计算实际需要的 Worker 数量（避免空块导致陈旧缓存问题）
+    const maxEffectiveWorkers = Math.min(this.workers.length, lines.length);
+    const chunkSize = Math.ceil(lines.length / maxEffectiveWorkers);
 
     // 🚀 计算数据指纹，判断数据是否变化
     const dataSignature = lines.length + ':' + (lines[0] ? lines[0].length : 0);
     const dataChanged = dataSignature !== this.cachedDataSignature || !this.workersHaveCache;
     this.cachedDataSignature = dataSignature;
 
+    // 🚀 SharedArrayBuffer 可用性检测
+    const useSAB = dataChanged && sabInfo && typeof SharedArrayBuffer !== 'undefined';
+
+    this.totalChunks = maxEffectiveWorkers;
+
     console.log(`[ParallelFilter] 开始并行过滤 (会话 ${this.sessionId})`);
-    console.log(`[ParallelFilter] 总行数: ${lines.length}, 分成 ${this.totalChunks} 块, 数据${dataChanged ? '已变化(重传)' : '未变化(缓存)'}`);
+    console.log(`[ParallelFilter] 总行数: ${lines.length}, 分成 ${this.totalChunks} 块, 数据${dataChanged ? '已变化(重传)' : '未变化(缓存)'}, SAB=${useSAB}`);
 
     // 分发任务到各个 Worker
     const transferStart = performance.now();
 
     for (let i = 0; i < this.workers.length; i++) {
+      // 超出有效块范围的 Worker 发送 clearCache 防止陈旧数据
+      if (i >= maxEffectiveWorkers) {
+        this.workers[i].postMessage({ type: 'clearCache' });
+        continue;
+      }
+
       const startIndex = i * chunkSize;
       const endIndex = Math.min(startIndex + chunkSize, lines.length);
 
-      const msg = {
-        type: 'process',
-        data: {
-          keywords: keywords,
-          sessionId: this.sessionId,
-          chunkIndex: i,
-          totalChunks: this.totalChunks,
-          startIndex: startIndex
+      if (useSAB) {
+        // 🚀 SAB 路径：零拷贝共享，只发元数据
+        this.workers[i].postMessage({
+          type: 'process-sab',
+          data: {
+            sab: sabInfo.sab,
+            headerSize: sabInfo.headerSize,
+            startLine: startIndex,
+            endLine: endIndex,
+            keywords: keywords,
+            sessionId: this.sessionId,
+            chunkIndex: i,
+            totalChunks: this.totalChunks
+          }
+        });
+      } else {
+        // 传统路径：结构化克隆
+        const msg = {
+          type: 'process',
+          data: {
+            keywords: keywords,
+            sessionId: this.sessionId,
+            chunkIndex: i,
+            totalChunks: this.totalChunks,
+            startIndex: startIndex
+          }
+        };
+
+        // 🚀 只在数据变化时才传输行数据，否则 Worker 使用缓存
+        if (dataChanged) {
+          msg.data.lines = lines.slice(startIndex, endIndex);
         }
-      };
 
-      // 🚀 只在数据变化时才传输行数据，否则 Worker 使用缓存
-      if (dataChanged) {
-        msg.data.lines = lines.slice(startIndex, endIndex);
+        this.workers[i].postMessage(msg);
       }
-
-      this.workers[i].postMessage(msg);
     }
 
     this.workersHaveCache = true;
     const transferTime = performance.now() - transferStart;
-    console.log(`[ParallelFilter] 数据分发耗时: ${transferTime.toFixed(2)}ms (${dataChanged ? '传输数据' : '仅关键词'})`);
+    console.log(`[ParallelFilter] 数据分发耗时: ${transferTime.toFixed(2)}ms (${useSAB ? 'SAB零拷贝' : dataChanged ? '传输数据' : '仅关键词'})`);
 
     return true;
   }
@@ -590,6 +668,9 @@ class ParallelFilterManager {
     this.isProcessing = false;
     this.sessionId = Date.now() + 1; // 使旧会话失效
 
+    // 🚀 取消后标记缓存失效，确保下次 start() 重新发送数据（通过 SAB 零拷贝）
+    this.workersHaveCache = false;
+
     // 🚀 内存泄漏修复：清空结果数组，释放内存
     this.results = [];
     this.completedChunks = 0;
@@ -599,7 +680,32 @@ class ParallelFilterManager {
   }
 
   /**
-   * 终止所有 Worker
+   * 🚀 重置会话状态，但不销毁 Worker 池
+   * 用于过滤面板清空时，保留 Worker 以供下次快速复用
+   */
+  resetSession() {
+    console.log(`[ParallelFilter] 重置会话（保留 ${this.workers.length} 个 Worker）`);
+
+    // 通知 Worker 清除缓存
+    for (const worker of this.workers) {
+      worker.postMessage({ type: 'clearCache' });
+    }
+
+    this.results = [];
+    this.completedChunks = 0;
+    this.totalChunks = 0;
+    this.isProcessing = false;
+    this.totalProcessed = 0;
+    this.totalMatched = 0;
+    this.totalLines = 0;
+    this.workersHaveCache = false;
+    this.cachedDataSignature = null;
+
+    console.log('[ParallelFilter] 会话已重置，Worker 池保持就绪');
+  }
+
+  /**
+   * 终止所有 Worker（仅在页面卸载或内存压力大时调用）
    */
   terminateAll() {
     console.log(`[ParallelFilter] 终止 ${this.workers.length} 个 Worker`);

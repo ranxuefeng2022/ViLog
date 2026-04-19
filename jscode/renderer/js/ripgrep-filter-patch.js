@@ -51,8 +51,8 @@ async function applyFilterWithRipgrep() {
     console.log(`[Ripgrep Filter] 搜索 ${files.length} 个文件`);
 
     // 构建rg参数
-    // 将 | 分隔的关键词转换为 rg 的正则 OR 语法
-    const rgPattern = filterText.split(/[,|]/).map(k => k.trim()).filter(k => k).join('|');
+    // 将 | 分隔的关键词转换为 rg 的正则 OR 语法（逗号作为普通字符）
+    const rgPattern = filterText.split('|').map(k => k.trim()).filter(k => k).map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
 
     const args = [
       rgPattern,                 // 搜索模式（作为第一个参数，不使用 -e）
@@ -139,7 +139,7 @@ async function applyFilterWithRipgrep() {
       currentFilter = {
         filteredLines: sortedLines,
         filteredToOriginalIndex: sortedIndices,
-        filterKeywords: filterText.split(/[,|]/).map(k => k.trim()).filter(k => k),
+        filterKeywords: filterText.split('|').map(k => k.trim()).filter(k => k),
         totalLines: sortedLines.length
       };
     }

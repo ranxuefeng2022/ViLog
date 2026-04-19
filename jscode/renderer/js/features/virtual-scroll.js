@@ -119,6 +119,7 @@ window.App.VirtualScroll = {
     element.className = 'log-line';
     element.style.cssText = 'position:absolute;width:max-content;min-width:100%;display:none;left:0;';
     element.style.contentVisibility = 'auto'; // 关键：CSS优化，跳过视口外渲染
+    element.style.willChange = 'transform'; // 提示浏览器创建GPU合成层
     return element;
   },
 
@@ -143,7 +144,8 @@ window.App.VirtualScroll = {
     // 设置基本信息
     element.style.display = 'block';
     element.dataset.index = String(index);
-    element.style.top = Math.floor(index * this.config.lineHeight) + 'px';
+    // 🚀 使用 transform 替代 top，启用 GPU 合成层
+    element.style.transform = `translateY(${Math.floor(index * this.config.lineHeight)}px)`;
 
     // 加入活跃集合
     this.activeElements.set(index, element);

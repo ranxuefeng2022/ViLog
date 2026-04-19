@@ -137,7 +137,45 @@ async function applyFilter() {
 }
 
 /**
- * 解析过滤关键词（支持逗号和管道符分隔，支持转义）
+ * 将字符串数组编码为 SharedArrayBuffer，供 Worker 零拷贝共享
+ * 布局: [uint32 lineCount][uint32 offsets[N+1]][utf8 bytes...]
+ */
+function encodeLinesToSharedBuffer(lines) {
+  const encoder = new TextEncoder();
+  const lineCount = lines.length;
+  const offsetsByteLen = (lineCount + 1) * 4;
+  const headerSize = 4 + offsetsByteLen;
+
+  // 编码并缓存字节，同时构建偏移表
+  const encodedLines = new Array(lineCount);
+  const offsets = new Uint32Array(lineCount + 1);
+  let totalBytes = 0;
+  for (let i = 0; i < lineCount; i++) {
+    offsets[i] = totalBytes;
+    const bytes = encoder.encode(lines[i]);
+    encodedLines[i] = bytes;
+    totalBytes += bytes.length;
+  }
+  offsets[lineCount] = totalBytes;
+
+  // 创建 SharedArrayBuffer
+  const sab = new SharedArrayBuffer(headerSize + totalBytes);
+  new DataView(sab).setUint32(0, lineCount, true);
+  new Uint32Array(sab, 4, lineCount + 1).set(offsets);
+
+  // 写入 UTF-8 行数据
+  const dataView = new Uint8Array(sab, headerSize);
+  let pos = 0;
+  for (let i = 0; i < lineCount; i++) {
+    dataView.set(encodedLines[i], pos);
+    pos += encodedLines[i].length;
+  }
+
+  return { sab, headerSize, lineCount };
+}
+
+/**
+ * 解析过滤关键词（只支持管道符 | 分隔，逗号作为普通字符，支持转义）
  */
 function parseFilterKeywords(filterText) {
   const keywords = [];
@@ -152,7 +190,7 @@ function parseFilterKeywords(filterText) {
       escaping = false;
     } else if (char === '\\') {
       escaping = true;
-    } else if (char === ',' || char === '|') {
+    } else if (char === '|') {
       if (currentKeyword.trim()) {
         keywords.push(currentKeyword.trim());
       }
@@ -512,9 +550,13 @@ async function applyFilterWithRipgrepAsync(filterText, headers) {
       const matchCount = lineNums.length;
       if (matchCount === 0) continue;
 
-      // 插入文件头
-      const fileHeaderLine = `=== 文件: 📁 ${header.fileName} (${matchCount} 个匹配) ===`;
-      filteredLines.push(fileHeaderLine);
+      // 插入文件头（使用 originalLines 中的原始文件头，避免重复）
+      if (originalLines && header.startIndex < originalLines.length) {
+        filteredLines.push(originalLines[header.startIndex]);
+      } else {
+        const filePathAttr = header.filePath ? ` data-path="${header.filePath}"` : '';
+        filteredLines.push(`=== 文件: ${header.fileName} (${header.lineCount} 行)${filePathAttr} ===`);
+      }
       filteredToOriginalIndex.push(-1);
 
       // 添加该文件的所有匹配行
@@ -554,7 +596,7 @@ async function applyFilterWithRipgrepAsync(filterText, headers) {
     // 使用 rg 返回的总匹配数，避免过滤模式下所有 originalIndex=-1 导致计数为 0
     const actualMatchCount = totalMatchCount;
 
-    if (filteredCountEl) filteredCountEl.textContent = "";
+    if (filteredCountEl) filteredCountEl.textContent = `${actualMatchCount} 个匹配`;
 
     const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
     const elapsedMs = (parseFloat(elapsed) * 1000).toFixed(0);
@@ -673,25 +715,26 @@ function applyFilterWithParallelWorkers(keywords) {
   filteredCount.textContent = "";  // 隐藏行数和进度
   document.getElementById('status').textContent = '正在准备多线程过滤...';
 
-  // 🚀 自动隐藏文件树面板，为过滤面板腾出空间
-  const fileTreeContainer = document.getElementById('fileTreeContainer');
-  const fileTreeCollapseBtn = document.getElementById('fileTreeCollapseBtn');
-  if (fileTreeContainer && fileTreeContainer.classList.contains('visible')) {
-    fileTreeContainer.classList.remove('visible');
-    if (fileTreeCollapseBtn) {
-      fileTreeCollapseBtn.innerHTML = '▶';
-    }
-    // 🚀 记录文件树被过滤面板隐藏
-    if (typeof fileTreeWasHiddenByFilter !== 'undefined') {
-      fileTreeWasHiddenByFilter = true;
-    }
-    console.log('[Filter] 文件树面板已自动隐藏');
-    // 触发布局更新
-    if (typeof updateLayout === 'function') {
-      updateLayout();
-    }
-    if (typeof updateButtonPosition === 'function') {
-      updateButtonPosition();
+  // 🚀 自动最大化：用 DOM 状态判断，尊重用户手动还原的偏好
+  if (filteredPanel && !filteredPanel.classList.contains('maximized') && window.__filterPanelUserPreference !== 'normal') {
+    if (typeof saveFilteredPanelState === 'function') saveFilteredPanelState();
+    filteredPanel.classList.add("maximized");
+    filteredPanel.style.removeProperty('height');
+    filteredPanel.style.removeProperty('width');
+    const maximizeBtn = document.getElementById('filteredPanelMaximize');
+    if (maximizeBtn) maximizeBtn.textContent = '❐';
+    console.log('[ParallelFilter] 自动最大化过滤面板');
+  }
+
+  // 🔧 文件树和过滤面板共存：不再隐藏文件树
+  // 同时设置 CSS 变量（最大化 !important 用）和 inline left（非最大化用）
+  {
+    const fileTreeContainer = document.getElementById('fileTreeContainer');
+    if (fileTreeContainer && fileTreeContainer.classList.contains('visible') && filteredPanel) {
+      const treeWidth = fileTreeContainer.getBoundingClientRect().width || 360;
+      const offset = treeWidth + 'px';
+      filteredPanel.style.setProperty('--filter-panel-left-offset', offset);
+      filteredPanel.style.left = offset;
     }
   }
 
@@ -709,10 +752,6 @@ function applyFilterWithParallelWorkers(keywords) {
   // 🔧 关键：失效 HTML 缓存，防止虚拟滚动渲染旧内容
   if (typeof filteredLineCacheVersion !== 'undefined') filteredLineCacheVersion++;
   if (typeof filteredLineHtmlCache !== 'undefined') filteredLineHtmlCache.clear();
-
-  // 🚀 新增：累积所有已完成块的结果
-  let cumulativeResults = [];  // 累积的所有匹配索引
-  let completedChunks = 0;     // 已完成的块数量
 
   // 延迟启动，确保 UI 更新
   setTimeout(() => {
@@ -750,12 +789,6 @@ function applyFilterWithParallelWorkers(keywords) {
       console.log(`[ParallelFilter] 块 ${chunkIndex} 完成，新增 ${results.length} 条结果`);
 
       const chunkStartTime = performance.now();
-
-      // 累积结果索引（用 push 避免创建新数组）
-      for (let i = 0; i < results.length; i++) {
-        cumulativeResults.push(results[i]);
-      }
-      completedChunks++;
 
       // 🚀 只处理新增的部分，获取新行的内容（但不更新DOM）
       const newFilteredLines = [];
@@ -875,6 +908,10 @@ function applyFilterWithParallelWorkers(keywords) {
               hi = mid - 1;
             }
           }
+          // 验证 origIndex 确实在这个文件的范围内
+          if (best >= 0 && origIndex >= sortedHeaders[best].startIndex + sortedHeaders[best].lineCount + 1) {
+            return -1; // 超出文件范围
+          }
           return best;
         }
 
@@ -892,10 +929,9 @@ function applyFilterWithParallelWorkers(keywords) {
         for (const origIndex of uniqueResults) {
           const hIdx = findHeaderIndex(origIndex);
           if (hIdx >= 0 && hIdx !== lastHeaderIdx) {
-            // 新文件开始，插入文件头
+            // 新文件开始，插入原始文件头（从 originalLines 取，避免重复）
             const header = sortedHeaders[hIdx];
-            const matchCount = headerMatchCounts.get(hIdx) || 0;
-            finalLines.push(`=== 文件: 📁 ${header.fileName} (${matchCount} 个匹配) ===`);
+            finalLines.push(originalLines[header.startIndex]);
             finalIndices.push(-1);
             lastHeaderIdx = hIdx;
           }
@@ -997,8 +1033,10 @@ function applyFilterWithParallelWorkers(keywords) {
       requestAnimationFrame(renderBatch);
     }
 
-    // 启动多线程过滤
-    const success = manager.start(originalLines, keywords);
+    // 启动多线程过滤（使用结构化克隆传输数据）
+    // 注意：SharedArrayBuffer 在 Electron file:// Worker 中不可用，
+    // 因为 COOP/COEP 头只对 HTTP 响应生效，不适用于 file:// 协议
+    const success = manager.start(originalLines, keywords, null);
 
     if (!success) {
       console.error('[ParallelFilter] 启动失败，回退到单线程');
@@ -1014,10 +1052,15 @@ function applyFilterWithParallelWorkers(keywords) {
 
     // 延迟更新 DOM，确保所有数据已准备好
     setTimeout(() => {
-      // 更新主日志框
-      renderLogLines();
-      outer.scrollTop = 0;
-      updateVisibleLines();
+      // 更新主日志框（仅内存模式不渲染）
+      console.log(`[ParallelFilter] 🔍 onRenderComplete 检查 fileLoadMode: window.fileLoadMode="${window.fileLoadMode}", typeof="${typeof window.fileLoadMode}"`);
+      if (window.fileLoadMode === 'memory') {
+        if (typeof window.showMemoryModeStats === 'function') window.showMemoryModeStats();
+      } else {
+        renderLogLines();
+        outer.scrollTop = 0;
+        updateVisibleLines();
+      }
 
       // 重置搜索和二级过滤
       resetSearch();
@@ -1051,12 +1094,29 @@ function applyFilterWithParallelWorkers(keywords) {
           console.log(`[ParallelFilter] 📍 目标行不在结果中，使用原始行号查找最接近的行...`);
 
           const indices = currentFilter.filteredToOriginalIndex;
-          // 使用二分查找找到插入位置
+          // 使用二分查找找到插入位置（跳过文件头 -1 条目）
           let left = 0;
           let right = indices.length - 1;
           while (left <= right) {
             const mid = Math.floor((left + right) / 2);
-            if (indices[mid] < rememberedOriginalIndex) {
+            const midVal = indices[mid];
+            // 跳过文件头行（-1），将其视为极小值
+            if (midVal < 0) {
+              // -1 是文件头，尝试向右找有效值
+              let effectiveMid = midVal;
+              let scanMid = mid;
+              while (scanMid <= right && indices[scanMid] < 0) scanMid++;
+              if (scanMid > right) {
+                right = mid - 1;
+                continue;
+              }
+              effectiveMid = indices[scanMid];
+              if (effectiveMid < rememberedOriginalIndex) {
+                left = scanMid + 1;
+              } else {
+                right = mid - 1;
+              }
+            } else if (midVal < rememberedOriginalIndex) {
               left = mid + 1;
             } else {
               right = mid - 1;
@@ -1142,12 +1202,16 @@ function applyFilterWithParallelWorkers(keywords) {
         statusEl.textContent = `✓ ${modeText}: ${stats.matchedCount}个匹配 (${timeInSeconds}秒)`;
       }
 
-      // 完成提示 - 在过滤面板显示时间
+      // 完成提示 - 在过滤面板显示时间和匹配数
       const filteredTimeElement = document.getElementById('filteredTime');
       if (filteredTimeElement) {
         filteredTimeElement.textContent = `(耗时 ${totalTime}ms)`;
         filteredTimeElement.style.display = 'inline';
       }
+
+      // 更新过滤面板头部匹配数
+      const filteredCountEl2 = document.getElementById('filteredCount');
+      if (filteredCountEl2) filteredCountEl2.textContent = `${stats.matchedCount} 个匹配`;
 
       showMessage(`${modeText}过滤完成: 找到 ${stats.matchedCount} 个匹配项 (耗时${timeInSeconds}秒)`);
 
@@ -1172,25 +1236,14 @@ function applyFilterWithSingleWorker(keywords) {
   let rememberedOriginalIndex = getCurrentVisibleOriginalIndex();
   console.log(`[Filter SingleWorker] 📍 记忆位置: originalIndex=${rememberedOriginalIndex}`);
 
-  // 🚀 自动隐藏文件树面板，为过滤面板腾出空间
-  const fileTreeContainer = document.getElementById('fileTreeContainer');
-  const fileTreeCollapseBtn = document.getElementById('fileTreeCollapseBtn');
-  if (fileTreeContainer && fileTreeContainer.classList.contains('visible')) {
-    fileTreeContainer.classList.remove('visible');
-    if (fileTreeCollapseBtn) {
-      fileTreeCollapseBtn.innerHTML = '▶';
-    }
-    // 🚀 记录文件树被过滤面板隐藏
-    if (typeof fileTreeWasHiddenByFilter !== 'undefined') {
-      fileTreeWasHiddenByFilter = true;
-    }
-    console.log('[Filter] 文件树面板已自动隐藏');
-    // 触发布局更新
-    if (typeof updateLayout === 'function') {
-      updateLayout();
-    }
-    if (typeof updateButtonPosition === 'function') {
-      updateButtonPosition();
+  // 🔧 文件树和过滤面板共存：不再隐藏文件树
+  {
+    const fileTreeContainer = document.getElementById('fileTreeContainer');
+    if (fileTreeContainer && fileTreeContainer.classList.contains('visible') && filteredPanel) {
+      const treeWidth = fileTreeContainer.getBoundingClientRect().width || 360;
+      const offset = treeWidth + 'px';
+      filteredPanel.style.setProperty('--filter-panel-left-offset', offset);
+      filteredPanel.style.left = offset;
     }
   }
 
@@ -1596,9 +1649,15 @@ function applyWorkerResults(filteredLines, filteredToOriginalIndex, stats, remem
   // if (progressBar) progressBar.style.display = 'none';
 
   resetSearch();
-  renderLogLines();
-  outer.scrollTop = 0;
-  updateVisibleLines();
+  // 仅内存模式不渲染主日志框
+  console.log(`[FilterWorker] 🔍 直接路径检查 fileLoadMode: window.fileLoadMode="${window.fileLoadMode}", typeof="${typeof window.fileLoadMode}"`);
+  if (window.fileLoadMode === 'memory') {
+    if (typeof window.showMemoryModeStats === 'function') window.showMemoryModeStats();
+  } else {
+    renderLogLines();
+    outer.scrollTop = 0;
+    updateVisibleLines();
+  }
   updateFilteredPanel();
 
   // 🚀 智能跳转：查找之前点击的行是否还在新结果中
@@ -1612,12 +1671,25 @@ function applyWorkerResults(filteredLines, filteredToOriginalIndex, stats, remem
     if (targetFilteredIndex < 0) {
       console.log(`[Filter Worker] 📍 目标行不在结果中，使用原始行号查找最接近的行...`);
 
-      // 使用二分查找找到插入位置
+      // 使用二分查找找到插入位置（跳过文件头 -1 条目）
       let left = 0;
       let right = uniqueIndices.length - 1;
       while (left <= right) {
         const mid = Math.floor((left + right) / 2);
-        if (uniqueIndices[mid] < rememberedOriginalIndex) {
+        const midVal = uniqueIndices[mid];
+        if (midVal < 0) {
+          let scanMid = mid;
+          while (scanMid <= right && uniqueIndices[scanMid] < 0) scanMid++;
+          if (scanMid > right) {
+            right = mid - 1;
+            continue;
+          }
+          if (uniqueIndices[scanMid] < rememberedOriginalIndex) {
+            left = scanMid + 1;
+          } else {
+            right = mid - 1;
+          }
+        } else if (midVal < rememberedOriginalIndex) {
           left = mid + 1;
         } else {
           right = mid - 1;
@@ -1710,13 +1782,16 @@ function applyWorkerResults(filteredLines, filteredToOriginalIndex, stats, remem
   filteredPanelFilterBox.value = "";
   updateRegexStatus();
 
-  // 🚀 移除自动最大化：第一次过滤时不自动最大化面板
-  // if (isFirstFilter) {
-  //   isFirstFilter = false;
-  //   if (!isFilterPanelMaximized) {
-  //     toggleFilterPanelMaximize();
-  //   }
-  // }
+  // 🚀 自动最大化：用 DOM 状态判断（尊重用户手动还原的偏好）
+  if (filteredPanel && !filteredPanel.classList.contains('maximized') && window.__filterPanelUserPreference !== 'normal') {
+    if (typeof saveFilteredPanelState === 'function') saveFilteredPanelState();
+    filteredPanel.classList.add("maximized");
+    filteredPanel.style.removeProperty('height');
+    filteredPanel.style.removeProperty('width');
+    const maximizeBtn = document.getElementById('filteredPanelMaximize');
+    if (maximizeBtn) maximizeBtn.textContent = '❐';
+    console.log('[FilterWorker] 自动最大化过滤面板');
+  }
 
   showMessage(`过滤完成: 找到 ${filteredLines.length} 个匹配项`);
 }

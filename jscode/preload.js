@@ -75,6 +75,8 @@ try {
     getLogFilePath: () => ipcRenderer.invoke('get-log-file-path'),
     // 🔧 从压缩包中提取单个文件内容
     extractFileFromArchive: (archivePath, filePath) => ipcRenderer.invoke('extract-file-from-archive', archivePath, filePath),
+    // 🚀 流式批量提取 tar.gz 文件（单次解压，内存收集）
+    streamExtractFromArchive: (archivePath, filePaths) => ipcRenderer.invoke('stream-extract-from-archive', archivePath, filePaths),
     // 🚀 解压压缩包到指定目录
     extractArchive: (archivePath, targetPath) => ipcRenderer.invoke('extract-archive', archivePath, targetPath),
     // 🚀 临时目录管理 - 用于文件树选中时的自动解压
@@ -120,14 +122,14 @@ try {
     // 监听主进程发送的消息
     on: (channel, callback) => {
       // 白名单机制，只允许特定的频道
-      const validChannels = ['import-file-from-taskbar', 'uart-log-data', 'directory-changed'];
+      const validChannels = ['import-file-from-taskbar', 'uart-log-data', 'directory-changed', 'archive-file-extracted'];
       if (validChannels.includes(channel)) {
         ipcRenderer.on(channel, (event, ...args) => callback(...args));
       }
     },
     // 移除监听器
     removeListener: (channel, callback) => {
-      const validChannels = ['import-file-from-taskbar', 'uart-log-data', 'directory-changed'];
+      const validChannels = ['import-file-from-taskbar', 'uart-log-data', 'directory-changed', 'archive-file-extracted'];
       if (validChannels.includes(channel)) {
         ipcRenderer.removeListener(channel, callback);
       }

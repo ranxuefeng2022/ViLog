@@ -116,7 +116,7 @@
     </div>
 
     <!-- 文件树容器 -->
-    <div id="fileTreeContainer" class="visible" tabindex="0">
+    <div id="fileTreeContainer" tabindex="0">
       <div id="fileTreeResizer"></div>
       <!-- 服务器连接区域 - 优化：IP和目录在同一行 -->
       <div id="serverConnectArea">
@@ -158,7 +158,7 @@
         <input type="text" id="fileTreeSearch" placeholder="搜索文件 (支持 | 分隔多个关键词，如 kernel|pl_lk)" />
         <!-- 🚀 新增：加载模式切换按钮 -->
         <button id="toggleLoadModeBtn" type="button" class="toggle-load-mode-btn" title="切换模式：加载模式（加载到主日志） / 过滤模式（直接rg过滤）">
-          <span class="mode-icon">⬇️</span>
+          <span class="mode-icon"><svg viewBox="0 0 16 16" width="14" height="14"><path d="M8 2v8M4 7l4 4 4-4M2 13h12" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
         </button>
       </div>
       <!-- 🚀 远程目录区域 -->

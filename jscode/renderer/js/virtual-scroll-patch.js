@@ -417,6 +417,12 @@ function getFilterHighlightClass(keywordIndex) {
  */
 function renderLogLines() {
   try {
+    // 仅内存模式：不渲染主日志框，显示统计信息
+    if (window.fileLoadMode === 'memory') {
+      if (typeof window.showMemoryModeStats === 'function') window.showMemoryModeStats();
+      return;
+    }
+
     // 检查必要条件
     if (!inner) {
       console.error('[renderLogLines] inner element not found!');
@@ -479,6 +485,8 @@ function renderLogLines() {
  */
 function updateVisibleLines() {
   if (originalLines.length === 0) return;
+  // 仅内存模式：不渲染主日志框
+  if (window.fileLoadMode === 'memory') return;
 
   const scrollTop = outer.scrollTop;
   const clientHeight = outer.clientHeight;
@@ -528,6 +536,14 @@ function updateVisibleLines() {
 
   const fragment = document.createDocumentFragment();
 
+  // 🔧 修复字体变形：压缩模式下的锚点计算
+  let compressionAnchor = 0;
+  let compressionFirstLine = 0;
+  if (virtualScrollScale > 1) {
+    compressionFirstLine = firstVisibleLine;
+    compressionAnchor = lineToScrollTop(compressionFirstLine);
+  }
+
   for (let i = visibleStart; i <= visibleEnd; i++) {
     const lineContent = originalLines[i];
     if (!lineContent) continue; // 🔧 安全检查：跳过空行
@@ -541,7 +557,7 @@ function updateVisibleLines() {
       line = document.createElement("div");
       line.className = isFileHeader ? "file-header" : "log-line";
       line.dataset.index = String(i);
-      line.style.cssText = `position:absolute;width:max-content;min-width:100%;`;
+      line.style.cssText = `position:absolute;width:max-content;min-width:100%;left:0;`;
     }
 
     // 选中行
@@ -565,9 +581,17 @@ function updateVisibleLines() {
       line.classList.remove("permanent-highlight");
     }
 
-    // 🚀 修复黑屏：缩放模式下使用映射后的 Y 坐标
-    const translateY = lineToScrollTop(i);
-    line.style.top = translateY + "px";
+    // 🚀 修复黑屏+字体变形：压缩模式下按正常行高排列可见行
+    // 🚀 使用 transform 替代 top，启用 GPU 合成层
+    if (virtualScrollScale > 1) {
+      const newY = compressionAnchor + (i - compressionFirstLine) * lineHeight;
+      line.style.transform = `translateY(${newY}px)`;
+      line.style.height = lineHeight + "px";
+      line.style.lineHeight = lineHeight + "px";
+    } else {
+      const translateY = lineToScrollTop(i);
+      line.style.transform = `translateY(${translateY}px)`;
+    }
     line.dataset.lineNumber = i + 1;
 
     // 🚀 性能优化：检查是否需要高亮（主日志框不检查过滤关键词）

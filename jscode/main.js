@@ -140,11 +140,19 @@ function find7z() {
   for (const testPath of possiblePaths) {
     try {
       if (testPath !== '7z' && testPath !== '7za' && !fs.existsSync(testPath)) continue;
-      execSync(`"${testPath}"`, { windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] });
+      // 使用 --help 参数测试，避免无参数执行时返回非零退出码导致误判
+      execSync(`"${testPath}" --help`, { windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] });
       _cached7zPath = testPath;
       console.log(`[find7z] 找到 7z: ${testPath}`);
       return testPath;
     } catch (e) {
+      // --help 也可能返回非零退出码，尝试用文件存在性作为回退检测
+      // 对于本地路径（非系统 PATH 中的命令），如果文件存在就认为是有效的
+      if (testPath !== '7z' && testPath !== '7za' && fs.existsSync(testPath)) {
+        _cached7zPath = testPath;
+        console.log(`[find7z] 通过文件存在性确认 7z: ${testPath}`);
+        return testPath;
+      }
       continue;
     }
   }
@@ -828,9 +836,9 @@ let fileWatchers = new Map(); // 文件监控器映射
 let appIsQuiting = false; // 应用是否正在退出
 let windows = []; // 存储所有窗口
 let windowIdCounter = 0; // 窗口ID计数器
+let pendingFiles = []; // 待处理的文件（窗口最小化时拖放的文件）
 let engineProcess = null; // Windows 服务端进程
 const ENGINE_PORT = 8082; // 服务端端口
-let pendingFiles = []; // 待处理的文件（窗口最小化时拖放的文件）
 let cachedPythonCommand = null; // 缓存的Python命令，避免重复检测
 global.uartProcessMap = new Map(); // 窗口ID到UART进程的映射
 
@@ -3091,7 +3099,8 @@ ipcMain.handle('get-data-drives', async (event, options = {}) => {
       try {
         const { execSync } = require('child_process');
         // 使用 PowerShell Get-PSDrive 获取所有驱动器（兼容 Windows 11）
-        const psCommand = 'Get-PSDrive -PSProvider FileSystem | Where-Object {$_.Name -match "^[A-Z]$"} | Select-Object -ExpandProperty Name';
+        // 用单引号包裹正则，避免与外层双引号冲突
+        const psCommand = "Get-PSDrive -PSProvider FileSystem | Where-Object {$_.Name -match '^[A-Z]$'} | Select-Object -ExpandProperty Name";
         const output = execSync(`powershell -NoProfile -Command "${psCommand}"`, { encoding: 'utf8', windowsHide: true });
         console.log('[get-data-drives] PowerShell 输出:', output);
 
@@ -3643,6 +3652,200 @@ ipcMain.handle('extract-file-from-archive', async (event, archivePath, filePath)
         console.log(`[extract-file-from-archive] 7z 不可用，使用原生 ZIP 提取`);
         return extractZipEntryNative(archivePath, filePath);
       }
+      // tar.gz 文件：回退到流式提取
+      const lower = archivePath.toLowerCase();
+      if (lower.endsWith('.tar.gz') || lower.endsWith('.tgz')) {
+        console.log(`[extract-file-from-archive] 7z 不可用，使用流式 tar.gz 提取`);
+        const streamResult = await new Promise((resolve) => {
+          const zlib = require('zlib');
+          const targetPath = filePath.replace(/^\/+/, '').replace(/\\/g, '/');
+          const targetLower = targetPath.toLowerCase();
+
+          if (!fs.existsSync(archivePath)) {
+            resolve({ success: false, error: '压缩包不存在' });
+            return;
+          }
+
+          const rawStream = fs.createReadStream(archivePath, { highWaterMark: 1024 * 1024 });
+          const decompressStream = zlib.createGunzip();
+          rawStream.pipe(decompressStream);
+
+          let state = 'header';
+          let headerBuf = Buffer.alloc(512);
+          let headerPos = 0;
+          let dataBuf = null;
+          let dataPos = 0;
+          let dataSize = 0;
+          let currentFileName = '';
+          let pendingLongName = null;
+          let resolved = false;
+
+          function doResolve(val) {
+            if (!resolved) {
+              resolved = true;
+              resolve(val);
+            }
+          }
+
+          decompressStream.on('data', (chunk) => {
+            let offset = 0;
+            while (offset < chunk.length) {
+              if (state === 'header') {
+                const needed = 512 - headerPos;
+                const available = chunk.length - offset;
+                const copyLen = Math.min(needed, available);
+                chunk.copy(headerBuf, headerPos, offset, offset + copyLen);
+                headerPos += copyLen;
+                offset += copyLen;
+
+                if (headerPos === 512) {
+                  if (headerBuf.readUInt8(0) === 0) {
+                    state = 'done';
+                    rawStream.destroy();
+                    return;
+                  }
+
+                  const typeflag = String.fromCharCode(headerBuf[156]);
+
+                  const sizeStr = headerBuf.toString('utf-8', 124, 136).replace(/\0+$/, '').trim();
+                  let fileSize = 0;
+                  if (sizeStr) {
+                    if (headerBuf[124] >= 0x80) {
+                      for (let i = 125; i < 136; i++) fileSize = fileSize * 256 + headerBuf[i];
+                    } else {
+                      fileSize = parseInt(sizeStr, 8) || 0;
+                    }
+                  }
+
+                  // GNU 长文件名扩展
+                  if (typeflag === 'L') {
+                    if (fileSize > 0 && fileSize < 65536) {
+                      dataSize = fileSize;
+                      dataBuf = Buffer.alloc(fileSize);
+                      dataPos = 0;
+                      state = 'metadata';
+                    } else {
+                      dataSize = fileSize;
+                      dataBuf = null;
+                      state = 'padding';
+                    }
+                    headerPos = 0;
+                    continue;
+                  }
+
+                  const name = headerBuf.toString('utf-8', 0, 100).replace(/\0+$/, '');
+                  let fullName;
+                  const ustarMagic = headerBuf.toString('ascii', 257, 263);
+                  if (ustarMagic.startsWith('ustar') || ustarMagic.startsWith('ustar ')) {
+                    const prefixStr = headerBuf.toString('utf-8', 345, 500).replace(/\0+$/, '');
+                    fullName = prefixStr ? prefixStr + '/' + name : name;
+                  } else {
+                    fullName = name;
+                  }
+
+                  // 使用 GNU 长文件名
+                  if (pendingLongName !== null) {
+                    fullName = pendingLongName;
+                    pendingLongName = null;
+                  }
+
+                  fullName = fullName.replace(/^\.\/+/, '').replace(/\\/g, '/');
+                  if (fullName.endsWith('/')) fullName = fullName.slice(0, -1);
+                  currentFileName = fullName;
+
+                  const isRegularFile = typeflag === '0' || typeflag === '\0' || typeflag === '';
+                  const isPaxHeader = typeflag === 'x' || typeflag === 'g';
+
+                  if (!isRegularFile || fileSize === 0 || isPaxHeader) {
+                    dataSize = fileSize;
+                    dataBuf = null;
+                    state = 'padding';
+                    headerPos = 0;
+                    continue;
+                  }
+
+                  const normalizedCurrent = currentFileName.replace(/^\/+/, '');
+                  const isTarget = normalizedCurrent === targetPath ||
+                    normalizedCurrent.toLowerCase() === targetLower;
+
+                  if (isTarget && fileSize > 0) {
+                    dataSize = fileSize;
+                    dataBuf = Buffer.alloc(fileSize);
+                    dataPos = 0;
+                    state = 'data';
+                  } else {
+                    dataSize = fileSize;
+                    dataBuf = null;
+                    state = 'padding';
+                  }
+                  headerPos = 0;
+                }
+              } else if (state === 'metadata') {
+                const needed = dataSize - dataPos;
+                const available = chunk.length - offset;
+                const copyLen = Math.min(needed, available);
+                chunk.copy(dataBuf, dataPos, offset, offset + copyLen);
+                dataPos += copyLen;
+                offset += copyLen;
+
+                if (dataPos === dataSize) {
+                  pendingLongName = dataBuf.toString('utf-8').replace(/\0+$/, '');
+                  dataBuf = null;
+                  const padding = (512 - (dataSize % 512)) % 512;
+                  if (padding === 0) {
+                    state = 'header';
+                    headerPos = 0;
+                  } else {
+                    dataSize = padding;
+                    state = 'padding';
+                  }
+                }
+              } else if (state === 'data') {
+                const needed = dataSize - dataPos;
+                const available = chunk.length - offset;
+                const copyLen = Math.min(needed, available);
+                chunk.copy(dataBuf, dataPos, offset, offset + copyLen);
+                dataPos += copyLen;
+                offset += copyLen;
+
+                if (dataPos === dataSize) {
+                  const { content } = extractTextFromBuffer(dataBuf);
+                  doResolve({ success: true, content });
+                  rawStream.destroy();
+                  return;
+                }
+              } else if (state === 'padding') {
+                const skip = Math.min(dataSize, chunk.length - offset);
+                offset += skip;
+                dataSize -= skip;
+                if (dataSize === 0) {
+                  state = 'header';
+                  headerPos = 0;
+                }
+              } else if (state === 'done') {
+                return;
+              }
+            }
+          });
+
+          decompressStream.on('end', () => {
+            doResolve({ success: false, error: `文件未在压缩包中找到: ${filePath}` });
+          });
+
+          decompressStream.on('close', () => {
+            doResolve({ success: false, error: `文件未在压缩包中找到: ${filePath}` });
+          });
+
+          decompressStream.on('error', (err) => {
+            doResolve({ success: false, error: err.message });
+          });
+
+          rawStream.on('error', (err) => {
+            doResolve({ success: false, error: err.message });
+          });
+        });
+        return streamResult;
+      }
       return { success: false, error: '不支持的压缩格式或 7z 未安装' };
     }
 
@@ -3653,8 +3856,8 @@ ipcMain.handle('extract-file-from-archive', async (event, archivePath, filePath)
     fs.mkdirSync(tempExtractDir, { recursive: true });
 
     // 使用 7z 提取单个文件到临时目录
-    // -so 选项：输出到 stdout（需要使用 -o 指定输出目录）
-    const command = `"${sevenZipPath}" e -y -o"${tempExtractDir}" "${archivePath}" "${filePath}" -spf`;
+    // 使用 x 命令（保留目录结构）而非 e 命令，避免 .7z 格式下 e+spf 组合导致解压异常
+    const command = `"${sevenZipPath}" x -y -o"${tempExtractDir}" "${archivePath}" "${filePath}"`;
     console.log(`[extract-file-from-archive] 执行命令: ${command}`);
 
     let stderrOutput = '';
@@ -3689,28 +3892,48 @@ ipcMain.handle('extract-file-from-archive', async (event, archivePath, filePath)
     }
 
     // 读取提取的文件
-    // 文件路径可能需要调整（去掉路径前缀）
-    let extractedFilePath = path.join(tempExtractDir, path.basename(filePath));
-    // 尝试保留子目录结构
-    if (filePath.includes('/') || filePath.includes('\\')) {
-      const subPath = filePath.replace(/\\/g, '/').split('/').pop();
-      const candidate = path.join(tempExtractDir, subPath);
-      if (fs.existsSync(candidate)) extractedFilePath = candidate;
+    // 使用 x 命令时，7z 保留目录结构，文件路径即为 filePath 在 tempExtractDir 下的映射
+    let extractedFilePath = path.join(tempExtractDir, filePath.replace(/\\/g, '/'));
+
+    // 如果按原路径找到的是目录（7z 可能只解压了父目录），或者不存在，尝试其他方式定位
+    if (fs.existsSync(extractedFilePath) && fs.statSync(extractedFilePath).isDirectory()) {
+      console.log(`[extract-file-from-archive] 路径指向目录，尝试递归查找实际文件`);
+      extractedFilePath = null;
     }
-    if (!fs.existsSync(extractedFilePath)) {
-      extractedFilePath = path.join(tempExtractDir, path.basename(filePath));
+    if (!extractedFilePath || !fs.existsSync(extractedFilePath)) {
+      // 尝试只取文件名
+      const baseName = path.basename(filePath);
+      const candidate = path.join(tempExtractDir, baseName);
+      if (fs.existsSync(candidate) && !fs.statSync(candidate).isDirectory()) {
+        extractedFilePath = candidate;
+      }
     }
 
-    if (!fs.existsSync(extractedFilePath)) {
-      // 列出临时目录中的所有文件，看看提取了什么
-      const files = fs.readdirSync(tempExtractDir);
-      console.log(`[extract-file-from-archive] 临时目录内容:`, files);
-      if (files.length > 0) {
-        extractedFilePath = path.join(tempExtractDir, files[0]);
-      } else {
-        fs.rmSync(tempExtractDir, { recursive: true, force: true });
-        return { success: false, error: `提取失败，文件未找到: ${filePath}` };
+    // 递归搜索临时目录中的所有文件，找到非目录的第一个文件
+    if (!extractedFilePath || !fs.existsSync(extractedFilePath) || fs.statSync(extractedFilePath).isDirectory()) {
+      console.log(`[extract-file-from-archive] 按路径未找到文件，递归搜索临时目录`);
+      function findFirstFile(dir) {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry.name);
+          if (entry.isFile()) return fullPath;
+          if (entry.isDirectory()) {
+            const found = findFirstFile(fullPath);
+            if (found) return found;
+          }
+        }
+        return null;
       }
+      const found = findFirstFile(tempExtractDir);
+      if (found) {
+        extractedFilePath = found;
+        console.log(`[extract-file-from-archive] 递归找到文件: ${found}`);
+      }
+    }
+
+    if (!extractedFilePath || !fs.existsSync(extractedFilePath) || fs.statSync(extractedFilePath).isDirectory()) {
+      fs.rmSync(tempExtractDir, { recursive: true, force: true });
+      return { success: false, error: `提取失败，文件未找到: ${filePath}` };
     }
 
     // 路径遍历防护：确保文件在临时目录内
@@ -3744,6 +3967,548 @@ ipcMain.handle('extract-file-from-archive', async (event, archivePath, filePath)
     };
   } catch (error) {
     console.error('[extract-file-from-archive] 错误:', error);
+    return { success: false, error: error.message };
+  }
+});
+
+// 🚀 流式批量提取 tar.gz / tar.bz2 文件（单次解压，内存中收集目标文件）
+ipcMain.handle('stream-extract-from-archive', async (event, archivePath, filePaths) => {
+  const zlib = require('zlib');
+
+  try {
+    if (!fs.existsSync(archivePath)) {
+      return { success: false, error: '压缩包不存在' };
+    }
+
+    const lower = archivePath.toLowerCase();
+    const isTarGz = lower.endsWith('.tar.gz') || lower.endsWith('.tgz');
+    const isTarBz2 = lower.endsWith('.tar.bz2') || lower.endsWith('.tbz2');
+
+    // 对于非 tar.gz/tar.bz2 格式（如 .zip, .7z, .rar）
+    if (!isTarGz && !isTarBz2) {
+      const ext = path.extname(archivePath).toLowerCase();
+      const fileName = archivePath.toLowerCase();
+
+      // 🚀 ZIP 文件：始终使用原生 ZIP 解析，逐文件推送
+      if (ext === '.zip' || fileName.endsWith('.zip')) {
+        const zlib = require('zlib');
+        const MAX_EXTRACT_SIZE = 50 * 1024 * 1024;
+        const fd = fs.openSync(archivePath, 'r');
+        try {
+          const fileSize = fs.statSync(archivePath).size;
+          const eocd = parseZipCentralDir(fd, fileSize);
+          if (!eocd) {
+            return { success: false, error: '不是有效的 ZIP 文件' };
+          }
+
+          const { cdEntryCount, cdSize, cdOffset } = eocd;
+          const cdBuffer = Buffer.alloc(cdSize);
+          fs.readSync(fd, cdBuffer, 0, cdSize, cdOffset);
+
+          // 按文件树顺序建立有序目标列表
+          const targetMap = new Map();
+          for (const fp of filePaths) {
+            targetMap.set(fp.replace(/^\/+/, '').replace(/\\/g, '/').toLowerCase(), fp);
+          }
+
+          let pos = 0;
+          let extractedCount = 0;
+          const foundKeys = new Set();
+
+          for (let i = 0; i < cdEntryCount && pos < cdBuffer.length; i++) {
+            if (cdBuffer.readUInt32LE(pos) !== 0x02014b50) break;
+
+            const compressionMethod = cdBuffer.readUInt16LE(pos + 10);
+            let compressedSize = cdBuffer.readUInt32LE(pos + 20);
+            let uncompressedSize = cdBuffer.readUInt32LE(pos + 24);
+            const fnLen = cdBuffer.readUInt16LE(pos + 28);
+            const extraLen = cdBuffer.readUInt16LE(pos + 30);
+            const commentLen = cdBuffer.readUInt16LE(pos + 32);
+            let localHeaderOff = cdBuffer.readUInt32LE(pos + 42);
+
+            if (compressedSize === 0xFFFFFFFF || uncompressedSize === 0xFFFFFFFF || localHeaderOff === 0xFFFFFFFF) {
+              const r = resolveZip64ExtraField(cdBuffer, pos, fnLen, extraLen, compressedSize, uncompressedSize, localHeaderOff);
+              compressedSize = r.compressedSize;
+              uncompressedSize = r.uncompressedSize;
+              localHeaderOff = r.localHeaderOffset;
+            }
+
+            const entryName = cdBuffer.toString('utf8', pos + 46, pos + 46 + fnLen).replace(/^\/+/, '').replace(/\\/g, '/');
+            const matchedKey = targetMap.get(entryName.toLowerCase());
+
+            if (matchedKey !== undefined && !foundKeys.has(matchedKey)) {
+              foundKeys.add(matchedKey);
+              let fileResult;
+              if (uncompressedSize <= MAX_EXTRACT_SIZE) {
+                try {
+                  const lfhBuf = Buffer.alloc(30);
+                  fs.readSync(fd, lfhBuf, 0, 30, localHeaderOff);
+                  const dataOff = localHeaderOff + 30 + lfhBuf.readUInt16LE(26) + lfhBuf.readUInt16LE(28);
+                  const compData = Buffer.alloc(compressedSize);
+                  fs.readSync(fd, compData, 0, compressedSize, dataOff);
+
+                  let resultBuf;
+                  if (compressionMethod === 0) resultBuf = compData;
+                  else if (compressionMethod === 8) resultBuf = zlib.inflateRawSync(compData);
+                  else { pos += 46 + fnLen + extraLen + commentLen; continue; }
+
+                  const { content } = extractTextFromBuffer(resultBuf);
+                  fileResult = { success: true, content };
+                  extractedCount++;
+                } catch (err) {
+                  fileResult = { success: false, error: err.message };
+                }
+              } else {
+                fileResult = { success: false, error: '文件过大' };
+              }
+              // 逐文件推送给渲染进程
+              event.sender.send('archive-file-extracted', { filePath: matchedKey, result: fileResult, index: filePaths.indexOf(matchedKey) });
+            }
+            pos += 46 + fnLen + extraLen + commentLen;
+          }
+
+          // 对未找到的文件推送失败
+          for (let idx = 0; idx < filePaths.length; idx++) {
+            if (!foundKeys.has(filePaths[idx])) {
+              event.sender.send('archive-file-extracted', { filePath: filePaths[idx], result: { success: false, error: `文件未找到: ${filePaths[idx]}` }, index: idx });
+            }
+          }
+        } finally {
+          fs.closeSync(fd);
+        }
+        return { success: true, fileCount: filePaths.length };
+      }
+
+      // 🚀 非 ZIP 格式（.7z, .rar 等）：一次性 7z 提取所有文件，逐文件推送
+      const { execSync } = require('child_process');
+      const sevenZipPath = find7z();
+      const has7z = !!sevenZipPath;
+
+      if (!has7z) {
+        for (let idx = 0; idx < filePaths.length; idx++) {
+          event.sender.send('archive-file-extracted', { filePath: filePaths[idx], result: { success: false, error: '不支持的压缩格式或 7z 未安装' }, index: idx });
+        }
+        return { success: true, fileCount: filePaths.length };
+      }
+
+      const tempDir = os.tmpdir();
+      const tempId = Date.now().toString(36) + Math.random().toString(36).substring(2);
+      const tempExtractDir = path.join(tempDir, `logview_extract_${tempId}`);
+      fs.mkdirSync(tempExtractDir, { recursive: true });
+
+      try {
+        // 一次性提取所有文件到同一个临时目录
+        const fileArgs = filePaths.map(fp => `"${fp}"`).join(' ');
+        const command = `"${sevenZipPath}" x -y -o"${tempExtractDir}" "${archivePath}" ${fileArgs}`;
+        console.log(`[stream-extract] 批量提取命令: ${command}`);
+        execSync(command, { encoding: 'utf-8', windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 100 * 1024 * 1024 });
+
+        // 按文件树顺序逐个读取并推送
+        for (let idx = 0; idx < filePaths.length; idx++) {
+          const fp = filePaths[idx];
+          let extractedFilePath = path.join(tempExtractDir, fp.replace(/\\/g, '/'));
+
+          if (!fs.existsSync(extractedFilePath) || fs.statSync(extractedFilePath).isDirectory()) {
+            const candidate = path.join(tempExtractDir, path.basename(fp));
+            if (fs.existsSync(candidate) && !fs.statSync(candidate).isDirectory()) {
+              extractedFilePath = candidate;
+            }
+          }
+
+          // 递归查找
+          if (!fs.existsSync(extractedFilePath) || fs.statSync(extractedFilePath).isDirectory()) {
+            function _findFirstFile(dir) {
+              const entries = fs.readdirSync(dir, { withFileTypes: true });
+              for (const entry of entries) {
+                const full = path.join(dir, entry.name);
+                if (entry.isFile()) return full;
+                if (entry.isDirectory()) { const f = _findFirstFile(full); if (f) return f; }
+              }
+              return null;
+            }
+            const found = _findFirstFile(tempExtractDir);
+            if (found) extractedFilePath = found;
+          }
+
+          let fileResult;
+          if (fs.existsSync(extractedFilePath) && !fs.statSync(extractedFilePath).isDirectory()) {
+            const buffer = fs.readFileSync(extractedFilePath);
+            const { content } = extractTextFromBuffer(buffer);
+            fileResult = { success: true, content };
+          } else {
+            fileResult = { success: false, error: `文件未找到: ${fp}` };
+          }
+          // 逐文件推送，携带文件树顺序索引
+          event.sender.send('archive-file-extracted', { filePath: fp, result: fileResult, index: idx });
+        }
+      } catch (err) {
+        // 批量提取失败，回退到逐个提取
+        console.log(`[stream-extract] 批量提取失败，回退逐个提取: ${err.message}`);
+        for (let idx = 0; idx < filePaths.length; idx++) {
+          const fp = filePaths[idx];
+          let fileResult;
+          try {
+            const tmpId2 = Date.now().toString(36) + Math.random().toString(36).substring(2);
+            const tmpDir2 = path.join(tempDir, `logview_extract_${tmpId2}`);
+            fs.mkdirSync(tmpDir2, { recursive: true });
+            try {
+              execSync(`"${sevenZipPath}" x -y -o"${tmpDir2}" "${archivePath}" "${fp}"`, { encoding: 'utf-8', windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 100 * 1024 * 1024 });
+              function _findFile(dir) {
+                const entries = fs.readdirSync(dir, { withFileTypes: true });
+                for (const entry of entries) {
+                  const full = path.join(dir, entry.name);
+                  if (entry.isFile()) return full;
+                  if (entry.isDirectory()) { const f = _findFile(full); if (f) return f; }
+                }
+                return null;
+              }
+              const found = _findFile(tmpDir2);
+              if (found) {
+                const buffer = fs.readFileSync(found);
+                const { content } = extractTextFromBuffer(buffer);
+                fileResult = { success: true, content };
+              } else {
+                fileResult = { success: false, error: `文件未找到: ${fp}` };
+              }
+            } finally {
+              fs.rmSync(tmpDir2, { recursive: true, force: true });
+            }
+          } catch (e2) {
+            fileResult = { success: false, error: e2.message };
+          }
+          event.sender.send('archive-file-extracted', { filePath: fp, result: fileResult, index: idx });
+        }
+      } finally {
+        fs.rmSync(tempExtractDir, { recursive: true, force: true });
+      }
+
+      return { success: true, fileCount: filePaths.length };
+    }
+
+    // 标准化目标文件路径集合（用于快速匹配）
+    const targetSet = new Set();
+    const targetLowerMap = new Map(); // lowercase -> original
+    for (const fp of filePaths) {
+      const normalized = fp.replace(/^\/+/, '').replace(/\\/g, '/');
+      targetSet.add(normalized);
+      targetLowerMap.set(normalized.toLowerCase(), normalized);
+    }
+
+    const results = {};
+    let remaining = filePaths.length;
+
+    await new Promise((resolve, reject) => {
+      const rawStream = fs.createReadStream(archivePath, { highWaterMark: 1024 * 1024 });
+      let decompressStream;
+
+      if (isTarGz) {
+        decompressStream = zlib.createGunzip();
+      } else {
+        // tar.bz2: 使用系统 tar 命令一次性提取所有目标文件（单次解压）
+        rawStream.destroy();
+        (async () => {
+          const os = require('os');
+          const { execSync } = require('child_process');
+          const tmpDir = os.tmpdir();
+          const tmpId = Date.now().toString(36) + Math.random().toString(36).substring(2);
+          const tmpExtractDir = path.join(tmpDir, `logview_extract_${tmpId}`);
+          fs.mkdirSync(tmpExtractDir, { recursive: true });
+          try {
+            // 构造文件列表参数，一次解压提取所有目标文件
+            const fileArgs = filePaths.map(fp => `"${fp}"`).join(' ');
+            execSync(`tar -xf "${archivePath}" -C "${tmpExtractDir}" ${fileArgs}`, {
+              encoding: 'utf-8',
+              windowsHide: true,
+              timeout: 60000
+            });
+            for (const fp of filePaths) {
+              // tar 可能保留子目录结构
+              const baseName = fp.replace(/\\/g, '/').split('/').pop();
+              const candidates = [
+                path.join(tmpExtractDir, fp.replace(/\\/g, '/')),
+                path.join(tmpExtractDir, baseName)
+              ];
+              let found = false;
+              for (const candidate of candidates) {
+                if (fs.existsSync(candidate)) {
+                  const buffer = fs.readFileSync(candidate);
+                  const { content } = extractTextFromBuffer(buffer);
+                  results[fp] = { success: true, content };
+                  found = true;
+                  break;
+                }
+              }
+              if (!found) {
+                results[fp] = { success: false, error: `文件未找到: ${fp}` };
+              }
+            }
+          } catch (err) {
+            for (const fp of filePaths) {
+              if (!results[fp]) {
+                results[fp] = { success: false, error: err.message };
+              }
+            }
+          } finally {
+            fs.rmSync(tmpExtractDir, { recursive: true, force: true });
+          }
+          resolve();
+        })();
+        return;
+      }
+
+      const tarStream = decompressStream;
+      rawStream.pipe(decompressStream);
+
+      // tar 流解析状态
+      let state = 'header'; // 'header' | 'data' | 'padding'
+      let headerBuf = Buffer.alloc(512);
+      let headerPos = 0;
+      let dataBuf = null;
+      let dataPos = 0;
+      let dataSize = 0;
+      let currentFileName = '';
+      let pendingLongName = null;  // GNU @@LongLink 长文件名
+      let pendingLongLink = null;  // GNU @@LongLink 长链接名
+      let resolved = false;
+
+      function doResolve() {
+        if (!resolved) {
+          resolved = true;
+          resolve();
+        }
+      }
+
+      tarStream.on('data', (chunk) => {
+        let offset = 0;
+        while (offset < chunk.length) {
+          if (state === 'header') {
+            const needed = 512 - headerPos;
+            const available = chunk.length - offset;
+            const copyLen = Math.min(needed, available);
+            chunk.copy(headerBuf, headerPos, offset, offset + copyLen);
+            headerPos += copyLen;
+            offset += copyLen;
+
+            if (headerPos === 512) {
+              // 检查是否为空块（tar 结束标记）
+              if (headerBuf.readUInt8(0) === 0) {
+                state = 'done';
+                rawStream.destroy();
+                return;
+              }
+
+              // 解析 typeflag（字节偏移 156）
+              const typeflag = String.fromCharCode(headerBuf[156]);
+
+              // 解析文件大小（八进制字符串）
+              const sizeStr = headerBuf.toString('utf-8', 124, 136).replace(/\0+$/, '').trim();
+              let fileSize = 0;
+              if (sizeStr) {
+                if (headerBuf[124] >= 0x80) {
+                  for (let i = 125; i < 136; i++) {
+                    fileSize = fileSize * 256 + headerBuf[i];
+                  }
+                } else {
+                  fileSize = parseInt(sizeStr, 8) || 0;
+                }
+              }
+
+              // GNU 长文件名扩展：typeflag 'L' 表示下一个数据块是长文件名
+              // typeflag 'K' 表示长链接名
+              if (typeflag === 'L' || typeflag === 'K') {
+                if (fileSize > 0 && fileSize < 65536) {
+                  dataSize = fileSize;
+                  dataBuf = Buffer.alloc(fileSize);
+                  dataPos = 0;
+                  state = 'metadata'; // 特殊状态：收集长文件名数据
+                } else {
+                  // 跳过异常的长文件名
+                  dataSize = fileSize;
+                  dataBuf = null;
+                  state = 'padding';
+                }
+                headerPos = 0;
+                continue;
+              }
+
+              // 解析 tar 头部文件名
+              const name = headerBuf.toString('utf-8', 0, 100).replace(/\0+$/, '');
+
+              // UStar 格式：前缀 + 名字
+              let fullName;
+              const ustarMagic = headerBuf.toString('ascii', 257, 263);
+              if (ustarMagic.startsWith('ustar') || ustarMagic.startsWith('ustar ')) {
+                const prefixStr = headerBuf.toString('utf-8', 345, 500).replace(/\0+$/, '');
+                fullName = prefixStr ? prefixStr + '/' + name : name;
+              } else {
+                fullName = name;
+              }
+
+              // 如果有 GNU 长文件名，优先使用
+              if (typeflag !== 'K' && pendingLongName !== null) {
+                fullName = pendingLongName;
+                pendingLongName = null;
+              }
+              if (pendingLongLink !== null) {
+                pendingLongLink = null;
+              }
+
+              // 标准化路径
+              fullName = fullName.replace(/^\.\/+/, '').replace(/\\/g, '/');
+              // 去除尾部斜杠（目录项）
+              if (fullName.endsWith('/')) {
+                fullName = fullName.slice(0, -1);
+              }
+
+              currentFileName = fullName;
+
+              // 跳过目录、符号链接等非文件类型
+              const isRegularFile = typeflag === '0' || typeflag === '\0' || typeflag === '';
+              // PAX 扩展头 (x/g) 也跳过
+              const isPaxHeader = typeflag === 'x' || typeflag === 'g';
+
+              if (!isRegularFile || fileSize === 0 || isPaxHeader) {
+                // 跳过此条目的数据
+                dataSize = fileSize;
+                dataBuf = null;
+                state = 'padding';
+                headerPos = 0;
+                continue;
+              }
+
+              // 判断是否为目标文件
+              const normalizedCurrent = currentFileName.replace(/^\/+/, '');
+              const isTarget = targetSet.has(normalizedCurrent) ||
+                targetLowerMap.has(normalizedCurrent.toLowerCase());
+
+              if (isTarget && fileSize > 0) {
+                dataSize = fileSize;
+                dataBuf = Buffer.alloc(fileSize);
+                dataPos = 0;
+                state = 'data';
+              } else {
+                // 跳过此文件的数据
+                dataSize = fileSize;
+                dataBuf = null;
+                state = 'padding';
+              }
+
+              headerPos = 0;
+            }
+          } else if (state === 'metadata') {
+            // 收集 GNU 长文件名/长链接名数据
+            const needed = dataSize - dataPos;
+            const available = chunk.length - offset;
+            const copyLen = Math.min(needed, available);
+            chunk.copy(dataBuf, dataPos, offset, offset + copyLen);
+            dataPos += copyLen;
+            offset += copyLen;
+
+            if (dataPos === dataSize) {
+              // 提取长文件名（去掉尾部 null）
+              const longName = dataBuf.toString('utf-8').replace(/\0+$/, '');
+              const typeflag = String.fromCharCode(headerBuf[156]);
+              if (typeflag === 'L') {
+                pendingLongName = longName;
+              } else if (typeflag === 'K') {
+                pendingLongLink = longName;
+              }
+              dataBuf = null;
+
+              // tar 块对齐填充
+              const padding = (512 - (dataSize % 512)) % 512;
+              if (padding === 0) {
+                state = 'header';
+                headerPos = 0;
+              } else {
+                dataSize = padding;
+                state = 'padding';
+              }
+            }
+          } else if (state === 'data') {
+            const needed = dataSize - dataPos;
+            const available = chunk.length - offset;
+            const copyLen = Math.min(needed, available);
+            chunk.copy(dataBuf, dataPos, offset, offset + copyLen);
+            dataPos += copyLen;
+            offset += copyLen;
+
+            if (dataPos === dataSize) {
+              // 文件数据读取完毕
+              const normalizedCurrent = currentFileName.replace(/^\/+/, '');
+              const matchKey = targetSet.has(normalizedCurrent)
+                ? normalizedCurrent
+                : targetLowerMap.get(normalizedCurrent.toLowerCase());
+
+              if (matchKey) {
+                const { content } = extractTextFromBuffer(dataBuf);
+                results[matchKey] = { success: true, content };
+                remaining--;
+              }
+              dataBuf = null;
+
+              // 所有目标文件已找到，提前终止
+              if (remaining <= 0) {
+                state = 'done';
+                rawStream.destroy();
+                return;
+              }
+
+              // tar 块对齐填充
+              const padding = (512 - (dataSize % 512)) % 512;
+              if (padding === 0) {
+                state = 'header';
+                headerPos = 0;
+              } else {
+                dataSize = padding;
+                state = 'padding';
+              }
+            }
+          } else if (state === 'padding') {
+            const skip = Math.min(dataSize, chunk.length - offset);
+            offset += skip;
+            dataSize -= skip;
+            if (dataSize === 0) {
+              state = 'header';
+              headerPos = 0;
+            }
+          } else if (state === 'done') {
+            return;
+          }
+        }
+      });
+
+      tarStream.on('end', () => {
+        doResolve();
+      });
+
+      tarStream.on('close', () => {
+        doResolve();
+      });
+
+      tarStream.on('error', (err) => {
+        console.error('[stream-extract-from-archive] 解压流错误:', err);
+        if (!resolved) reject(err);
+      });
+
+      rawStream.on('error', (err) => {
+        console.error('[stream-extract-from-archive] 读取文件错误:', err);
+        if (!resolved) reject(err);
+      });
+    });
+
+    // 对于未找到的文件，填充错误
+    for (const fp of filePaths) {
+      const normalized = fp.replace(/^\/+/, '').replace(/\\/g, '/');
+      if (!results[normalized] && !results[fp]) {
+        results[fp] = { success: false, error: `文件未在压缩包中找到: ${fp}` };
+      }
+    }
+
+    console.log(`[stream-extract-from-archive] 完成: 提取 ${filePaths.length} 个文件，成功 ${filePaths.length - remaining} 个`);
+    return { success: true, results };
+  } catch (error) {
+    console.error('[stream-extract-from-archive] 错误:', error);
     return { success: false, error: error.message };
   }
 });
@@ -4602,11 +5367,6 @@ ipcMain.handle('get-system-stats', async () => {
           windowsHide: true
         });
 
-        // 🔧 调试日志：打印原始输出
-        if (process.env.DEBUG_MEMORY) {
-          console.log('[Memory Debug] tasklist output:', tasklistOutput);
-        }
-
         // 解析 tasklist 输出，计算总内存
         const lines = tasklistOutput.split('\n').slice(1); // 跳过标题行
         let totalMemKB = 0;
@@ -4628,17 +5388,16 @@ ipcMain.handle('get-system-stats', async () => {
           }
         }
 
-        console.log(`[Memory] 找到 ${processCount} 个 electron.exe 进程，总内存: ${(totalMemKB / 1024).toFixed(0)} MB`);
-
         // 如果 tasklist 没有获取到任何进程内存，使用当前进程内存作为后备
         if (totalMemKB > 0) {
           electronMemMB = (totalMemKB / 1024).toFixed(0);
         } else {
-          throw new Error('tasklist 未找到 electron.exe 进程');
+          // 静默回退到当前进程内存，避免刷屏日志
+          const processMem = process.memoryUsage();
+          electronMemMB = (processMem.rss / 1024 / 1024).toFixed(0);
         }
       } catch (error) {
-        console.warn('获取Electron进程内存失败，使用进程内存:', error.message);
-        // 回退到使用当前进程内存
+        // 静默回退到使用当前进程内存
         const processMem = process.memoryUsage();
         electronMemMB = (processMem.rss / 1024 / 1024).toFixed(0);
       }
@@ -4829,7 +5588,7 @@ function createTray() {
 
 // Electron 初始化完成后创建窗口
 app.whenReady().then(() => {
-  // 🚀 只有单实例模式才初始化
+  // 只有单实例模式才初始化
   if (gotTheLock) {
     // 初始化日志系统（必须在最前面）
     initLogSystem();
