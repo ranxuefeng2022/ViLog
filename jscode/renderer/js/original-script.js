@@ -1097,8 +1097,20 @@
       let visibleFileTreeItemsSet = new Set();
 
       // 文件树虚拟滚动状态：避免一次渲染大量 DOM 导致滚动/展开卡顿
-      let fileTreeAllVisibleIndices = []; // 展开状态 + 搜索过滤后的“可见索引”（索引指向 fileTreeHierarchy）
+      let fileTreeAllVisibleIndices = []; // 展开状态 + 搜索过滤后的"可见索引"（索引指向 fileTreeHierarchy）
       let fileTreeRowHeightPx = 0; // 单行高度（offsetHeight + margin）
+
+      // 🚀 性能优化：文件图标后缀 → 图标 Map 查表（O(1) 替代 if-else 链）
+      const FILE_TREE_ICON_MAP = new Map([
+        ['.log', '📋'], ['.txt', '📝'], ['.json', '📋'],
+        ['.xml', '📋'], ['.html', '🌐'], ['.js', '📜'],
+        ['.css', '🎨'], ['.csv', '📊'], ['.md', '📝'],
+        ['.py', '🐍'], ['.java', '☕'], ['.c', '⚙️'],
+        ['.cpp', '⚙️'], ['.h', '⚙️'], ['.sh', '🖥️'],
+        ['.bat', '🖥️'], ['.cfg', '⚙️'], ['.conf', '⚙️'],
+        ['.apk', '📦'], ['.zip', '📦'], ['.tar', '📦'],
+        ['.gz', '📦'], ['.7z', '📦'], ['.db', '🗄️'],
+      ]);
       const fileTreeVirtualBuffer = 40; // 上下缓冲行数
       let fileTreeVirtualRaf = null;
       let fileTreeRebuildRaf = null; // 🚀 scheduleRebuildAndRenderFileTree 的 RAF 去重标志
@@ -1636,6 +1648,16 @@
         let lastWindowId = null; // 记录上一次激活的窗口ID
 
         document.addEventListener("keydown", (e) => {
+          // Ctrl+W: 关闭当前窗口
+          if (e.ctrlKey && e.key === "w") {
+            e.preventDefault();
+            e.stopPropagation();
+            if (typeof window.electronAPI !== "undefined" && window.electronAPI.windowControl) {
+              window.electronAPI.windowControl.close();
+            }
+            return;
+          }
+
           // Ctrl+Tab: 循环切换窗口
           if (e.ctrlKey && e.key === "Tab") {
             e.preventDefault();
@@ -2701,6 +2723,13 @@
 
         // 保存到本地存储
         saveFilterHistory();
+
+        // 同时保存到新模块（IndexedDB + localStorage，拆分 | 关键词）
+        if (window.App && window.App.FilterKeywordHistory && window.App.FilterKeywordHistory.addKeywordsFromInput) {
+          window.App.FilterKeywordHistory.addKeywordsFromInput(filterText).catch(function(e) {
+            console.warn('[FilterHistory] 保存到新模块失败:', e);
+          });
+        }
       }
 
       // ===== 搜索历史记录功能 =====
@@ -3314,6 +3343,14 @@
 
         if (isAiAssistantVisible) {
           aiAssistantPanel.classList.add("visible");
+          // 🚀 懒加载 iframe：首次打开时才设置 src，避免启动时抢占网络
+          if (!aiAssistantFrame.src || aiAssistantFrame.src === 'about:blank') {
+            const realSrc = aiAssistantFrame.dataset.src;
+            if (realSrc) {
+              aiAssistantFrame.src = realSrc;
+              delete aiAssistantFrame.dataset.src;
+            }
+          }
         } else {
           aiAssistantPanel.classList.remove("visible");
         }
@@ -5611,6 +5648,11 @@
             // f键：弹出过滤对话框
             e.preventDefault();
 
+            // 每次打开对话框前，从文件重新加载关键词（确保手动编辑JSON后也能同步）
+            if (window.App && window.App.FilterKeywordHistory && window.App.FilterKeywordHistory.loadKeywords) {
+              window.App.FilterKeywordHistory.loadKeywords();
+            }
+
             const filterDialog = document.getElementById('filterDialog');
             const filterDialogTextarea = document.getElementById('filterDialogTextarea');
             const filterBox = DOMCache.get('filterBox');
@@ -5750,8 +5792,9 @@
 
             // 显示历史记录
             function showFilterHistory() {
-              // 获取前20条历史记录
-              const historyItems = filterHistory.slice(0, 20).map((keyword, index) => ({
+              // 获取前20条历史记录（优先使用新模块的拆分关键词）
+              const historySource = (typeof window.getAppFilterHistory === 'function') ? window.getAppFilterHistory() : filterHistory;
+              const historyItems = historySource.slice(0, 20).map((keyword, index) => ({
                 keyword,
                 index
               }));
@@ -7383,11 +7426,12 @@
 
         // 请求在下一帧渲染，避免同一帧内多次更新
         filteredPanelScrollRafId = requestAnimationFrame(() => {
-          // 🚀 惰性高亮：滚动期间强制使用纯文本快速路径
-          updateFilteredPanelVisibleLines(false, true);
+          // 🚀 优化：滚动期间正常计算高亮，已有缓存直接复用（O(1)）
+          // 未缓存的行照常计算高亮并写入缓存，后续滚动即可命中
+          updateFilteredPanelVisibleLines(false, false);
           filteredPanelScrollRafId = null;
 
-          // 🚀 滚停后 150ms 对可见区域应用高亮
+          // 🚀 滚停后 150ms 对可见区域补充高亮（安全兜底）
           filteredPanelScrollDebounce = setTimeout(() => {
             _applyFilteredPanelHighlight();
             filteredPanelScrollDebounce = null;
@@ -7459,6 +7503,10 @@
           }
 
           el.innerHTML = displayText;
+
+          // 🚀 同步写入行级HTML缓存，下次滚动可直接复用（O(1)命中）
+          const cacheKey = getFilteredLineCacheKey(i, isFileHeader, originalIndex) + '|h:true';
+          addToFilteredLineCache(cacheKey, displayText);
         }
       }
 
@@ -7483,7 +7531,7 @@
       // 更新过滤面板可见行 - 虚拟滚动核心 - 🚀 恢复所有高亮功能
       // forceHighlight: 强制重新计算高亮（用于滚动停止后的更新）
       // forcePlainText: 强制使用纯文本模式（用于滚动期间的惰性高亮）
-      function updateFilteredPanelVisibleLines(forceHighlight = false, forcePlainText = false) {
+      function updateFilteredPanelVisibleLines(forceHighlight = false, forcePlainText = false, cacheOnlyMode = false) {
         if (filteredPanelAllLines.length === 0) return;
 
         // 🔧 修复：如果 clientHeight 为 0（面板尚未布局），延迟一帧再渲染
@@ -7657,8 +7705,9 @@
             // 例如：now<next=0 会被转义为 now&lt;next=0
             displayText = escapeHtml(lineContent);
 
-            // 🚀 懒加载：只对可见行和文件头计算高亮
-            if (needsHighlight) {
+            // 🚀 cacheOnlyMode（滚动中）：跳过高亮计算，直接渲染纯文本
+            // 滚停后 _applyFilteredPanelHighlight() 会补充高亮
+            if (!cacheOnlyMode && needsHighlight) {
               // 应用自定义高亮（优先级最高）
               if (hasCustomHighlights) {
                 for (let h = 0; h < customHighlights.length; h++) {
@@ -7706,8 +7755,11 @@
               displayText = `<span class="line-number">${lineNumber}</span>${displayText}`;
             }
 
-            // 存入缓存（排除动态的高亮类）- 使用LRU淘汰策略
-            addToFilteredLineCache(cacheKey, displayText);
+            // 🚀 仅非cacheOnlyMode时缓存，避免缓存未高亮的纯文本版本
+            // 滚停后 _applyFilteredPanelHighlight 会通过下次非 cacheOnlyMode 调用更新缓存
+            if (!cacheOnlyMode) {
+              addToFilteredLineCache(cacheKey, displayText);
+            }
           }
 
           // 构建HTML字符串（动态的highlighted类不参与缓存）
@@ -10111,7 +10163,7 @@
           }
           selectedOriginalIndex = -1;
           showMessage(`已加载 ${loadedCount} 个远程文件`);
-          
+
         } catch (error) {
           // 如果是会话过期导致的错误，忽略
           if (sessionId !== currentLoadingSession) return;
@@ -10247,11 +10299,15 @@
         }
 
         // 文件树搜索功能 - 🔧 修复：输入时立即更新高亮
+        // 🚀 性能优化：搜索输入防抖，快速打字时避免每次 keypress 都 rebuild
+        let fileTreeSearchDebounce = null;
         fileTreeSearch.addEventListener("input", function (e) {
           fileTreeSearchTerm = e.target.value;
 
-          // 🔧 搜索词为空时，恢复默认视图
+          // 🔧 搜索词为空时，立即恢复默认视图（不防抖）
           if (!fileTreeSearchTerm.trim()) {
+            clearTimeout(fileTreeSearchDebounce);
+            fileTreeSearchDebounce = null;
             fileTreeSearchShowOnlyMatches = false;
             temporarilyIncludedNodes.clear();
             rebuildFileTreeVisibleCache();
@@ -10259,23 +10315,29 @@
             return;
           }
 
-          // 🔧 判断是否是 WTGLMK 开头的搜索
-          const isWTGLMKSearch = fileTreeSearchTerm.trim().toUpperCase().startsWith('WTGLMK');
+          // 🚀 防抖 150ms：快速打字时只执行最后一次
+          clearTimeout(fileTreeSearchDebounce);
+          fileTreeSearchDebounce = setTimeout(() => {
+            fileTreeSearchDebounce = null;
 
-          if (isWTGLMKSearch) {
-            // WTGLMK 开头：只跳转，不过滤
-            fileTreeSearchShowOnlyMatches = false;
-            rebuildFileTreeVisibleCache();
-            renderFileTreeViewport(true);
+            // 🔧 判断是否是 WTGLMK 开头的搜索
+            const isWTGLMKSearch = fileTreeSearchTerm.trim().toUpperCase().startsWith('WTGLMK');
 
-            if (fileTreeSearchTerm && fileTreeSearchTerm.trim()) {
-              jumpToFirstMatch();
+            if (isWTGLMKSearch) {
+              // WTGLMK 开头：只跳转，不过滤
+              fileTreeSearchShowOnlyMatches = false;
+              rebuildFileTreeVisibleCache();
+              renderFileTreeViewport(true);
+
+              if (fileTreeSearchTerm && fileTreeSearchTerm.trim()) {
+                jumpToFirstMatch();
+              }
+            } else {
+              // 🔧 修复：其他搜索也更新匹配索引以显示高亮，但不过滤显示
+              rebuildFileTreeVisibleCache();
+              renderFileTreeViewport(true);
             }
-          } else {
-            // 🔧 修复：其他搜索也更新匹配索引以显示高亮，但不过滤显示
-            rebuildFileTreeVisibleCache();
-            renderFileTreeViewport(true);
-          }
+          }, 150);
         });
 
         // 🚀 按Enter键时的处理
@@ -10379,16 +10441,14 @@
           updateLoadModeButton();
 
           toggleLoadModeBtn.addEventListener('click', () => {
-            // 三态循环：load → memory → filter → load
+            // 二态循环：load → filter → load（已移除仅内存模式）
             const prevMode = fileLoadMode;
             if (fileLoadMode === 'load') {
-              fileLoadMode = 'memory';
-            } else if (fileLoadMode === 'memory') {
               fileLoadMode = 'filter';
             } else {
               fileLoadMode = 'load';
             }
-            isFileLoadMode = (fileLoadMode === 'load' || fileLoadMode === 'memory');
+            isFileLoadMode = (fileLoadMode === 'load');
             updateLoadModeButton();
 
             // 切换模式时的提示和清理
@@ -10400,14 +10460,6 @@
               if (originalLines.length > 0) {
                 resetFilter(false);
                 renderLogLines();
-              }
-            } else if (fileLoadMode === 'memory') {
-              // 切换到仅内存模式
-              showMessage('已切换到仅内存模式：文件加载到内存（上限2GB），不渲染主日志框');
-              filterModeFileList = [];
-              // 如果已有数据，显示统计提示
-              if (originalLines.length > 0) {
-                showMemoryModeStats();
               }
             } else {
               // 切换到过滤模式
@@ -10463,19 +10515,15 @@
             const modeIcon = toggleLoadModeBtn.querySelector('.mode-icon');
             toggleLoadModeBtn.classList.remove('filter-mode', 'memory-mode');
             if (fileLoadMode === 'load') {
-              toggleLoadModeBtn.title = '当前：加载模式（点击切换到仅内存模式）';
+              toggleLoadModeBtn.title = '当前：加载模式（点击切换到过滤模式）';
               modeIcon.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M8 2v8M4 7l4 4 4-4M2 13h12" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-            } else if (fileLoadMode === 'memory') {
-              toggleLoadModeBtn.classList.add('memory-mode');
-              toggleLoadModeBtn.title = '当前：仅内存模式（点击切换到过滤模式）';
-              modeIcon.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14"><ellipse cx="8" cy="4" rx="5" ry="2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M3 4v3.5c0 1.1 2.2 2 5 2s5-.9 5-2V4" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M3 7.5V11c0 1.1 2.2 2 5 2s5-.9 5-2V7.5" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>';
             } else {
               toggleLoadModeBtn.classList.add('filter-mode');
               toggleLoadModeBtn.title = '当前：过滤模式（点击切换到加载模式）';
               modeIcon.innerHTML = '<svg viewBox="0 0 16 16" width="14" height="14"><path d="M2 2h12L9.5 8.5V13l-3 1.5V8.5z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>';
             }
             // 同步兼容变量
-            isFileLoadMode = (fileLoadMode === 'load' || fileLoadMode === 'memory');
+            isFileLoadMode = (fileLoadMode === 'load');
           }
         }
 
@@ -12656,7 +12704,8 @@
         // 显示历史记录列表
         function showFilterHistory() {
           // 获取前20条历史记录
-          historyItems = filterHistory.slice(0, 20).map((keyword, index) => ({
+          const historySource = (typeof window.getAppFilterHistory === 'function') ? window.getAppFilterHistory() : filterHistory;
+          historyItems = historySource.slice(0, 20).map((keyword, index) => ({
             keyword,
             index
           }));
@@ -14231,7 +14280,6 @@
         fileTreeMatchedIndices = matchedIndices;
 
         // 4. 根据模式决定显示内容
-        console.log(`[rebuildFileTreeVisibleCache] term="${term}", fileTreeSearchShowOnlyMatches=${fileTreeSearchShowOnlyMatches}, matchedIndices.length=${matchedIndices.length}, temporarilyIncludedNodes.size=${temporarilyIncludedNodes.size}`);
 
         if (term && fileTreeSearchShowOnlyMatches) {
           // 🔧 按Enter后的过滤模式：只显示匹配的文本文件 + 临时包含的节点
@@ -14264,13 +14312,11 @@
           fileTreeAllVisibleIndices = finalIndices;
           visibleFileTreeItems = fileTreeAllVisibleIndices.slice();
           visibleFileTreeItemsSet = new Set(visibleFileTreeItems);
-          console.log(`[rebuildFileTreeVisibleCache] 过滤模式：visibleFileTreeItems.length=${visibleFileTreeItems.length}, finalIndices=`, finalIndices);
         } else {
           // 🔧 默认模式/输入时：显示所有展开的节点（不过滤），只是高亮匹配项
           fileTreeAllVisibleIndices = expandedVisibleIndices;
           visibleFileTreeItems = fileTreeAllVisibleIndices.slice();
           visibleFileTreeItemsSet = new Set(visibleFileTreeItems);
-          console.log(`[rebuildFileTreeVisibleCache] 非过滤模式：visibleFileTreeItems.length=${visibleFileTreeItems.length}`);
         }
       }
 
@@ -14291,6 +14337,7 @@
           fileTreeList.innerHTML =
             '<div class="file-tree-empty">导入文件、文件夹或压缩包后，文件将显示在这里</div>';
           fileTreeVirtualInitialized = false;
+          _fileTreeDomPoolClear();
           return;
         }
 
@@ -14304,6 +14351,7 @@
           fileTreeVirtualBottomSpacer.style.height = "0px";
           fileTreeVirtualContent.innerHTML =
             '<div class="file-tree-empty">没有找到匹配的文件</div>';
+          _fileTreeDomPoolClear();
           return;
         }
 
@@ -14322,6 +14370,14 @@
         if (!force && start === fileTreeVirtualLastStart && end === fileTreeVirtualLastEnd) {
           return;
         }
+
+        // 🚀 性能优化：差异化渲染 + DOM 池化
+        // 1. 计算新增范围和移除范围，只操作差异部分
+        // 2. 复用已存在的 DOM 元素，不重复创建
+        const prevStart = fileTreeVirtualLastStart;
+        const prevEnd = fileTreeVirtualLastEnd;
+        const isForceOrFirstRender = force || prevStart === -1;
+
         fileTreeVirtualLastStart = start;
         fileTreeVirtualLastEnd = end;
 
@@ -14329,167 +14385,252 @@
         fileTreeVirtualBottomSpacer.style.height =
           Math.max(0, (total - end) * fileTreeRowHeightPx) + "px";
 
-        const frag = document.createDocumentFragment();
-
         // 🚀 性能优化：预构建 Set，避免循环内 O(N) 查找
         const selectedIndexSet = new Set(selectedFiles.map(f => f.index));
         const matchedIndexSet = fileTreeMatchedIndices.length > 0
           ? new Set(fileTreeMatchedIndices)
           : null;
 
-        for (let i = start; i < end; i++) {
-          const index = fileTreeAllVisibleIndices[i];
-          const item = fileTreeHierarchy[index];
-          if (!item) continue;
-
-          const element = document.createElement("div");
-          element.className = `file-tree-item file-tree-${item.type}`;
-          element.classList.add(`file-tree-level-${item.level}`);
-          element.style.setProperty("--ft-level", String(item.level || 0));
-          element.dataset.index = index;
-
-          // 🚀 性能优化：使用 Set.has() O(1) 替代 Array.some() O(N)
-          if (selectedIndexSet.has(index)) {
-            element.classList.add("selected");
+        if (isForceOrFirstRender) {
+          // force 或首次渲染：全量渲染（但仍然使用 DOM 池复用）
+          _fileTreeDomPoolClear();
+          const frag = document.createDocumentFragment();
+          for (let i = start; i < end; i++) {
+            const index = fileTreeAllVisibleIndices[i];
+            const el = _fileTreeCreateElement(index, selectedIndexSet, matchedIndexSet);
+            if (el) frag.appendChild(el);
+          }
+          fileTreeVirtualContent.innerHTML = "";
+          fileTreeVirtualContent.appendChild(frag);
+        } else {
+          // 🚀 差异化渲染：只处理进入/离开视口的行
+          // 移除离开视口的行
+          for (let i = prevStart; i < prevEnd; i++) {
+            if (i >= start && i < end) continue; // 仍在视口内，保留
+            const index = fileTreeAllVisibleIndices[i];
+            if (index === undefined) continue;
+            _fileTreeDomPoolRelease(index);
           }
 
-          // 检查是否在多选集合中
-          if (archiveMultiSelectedFiles.has(index)) {
-            element.classList.add("multi-selected");
-          }
+          // 🚀 新增进入视口的行
+          // 分为头部新增（< prevStart）和尾部新增（>= prevEnd）两种情况
+          // 头部新增：按 slot 升序，最终要在 container 最前面
+          // 尾部新增：按 slot 升序，最终要在 container 最后面
+          const prependElements = [];
+          const appendElements = [];
 
-          // 🚀 性能优化：使用 Set.has() O(1) 替代 Array.includes() O(N)
-          if (matchedIndexSet && matchedIndexSet.has(index)) {
-            element.classList.add("search-matched");
-          }
+          for (let i = start; i < end; i++) {
+            if (i >= prevStart && i < prevEnd) continue;
+            const index = fileTreeAllVisibleIndices[i];
+            if (index === undefined) continue;
 
-          // 检查是否是压缩包
-          if (item.isArchive) {
-            element.classList.add("archive");
-            // 服务端压缩包：使用 expanded 字段
-            // 本地压缩包：使用 expandedArchives 集合
-            // 🚀 嵌套压缩包：直接使用 expanded 字段
-            let isExpanded;
-            if (item.isRemote) {
-              // 远程压缩包
-              isExpanded = item.expanded;
-            } else if (item.isNestedArchive) {
-              // 🚀 嵌套压缩包：直接使用 expanded 字段
-              isExpanded = item.expanded;
+            const el = _fileTreeCreateElement(index, selectedIndexSet, matchedIndexSet);
+            if (!el) continue;
+
+            _ftActiveSlots.set(Number(el.dataset.index), i);
+            if (i < prevStart) {
+              prependElements.push(el); // 头部新增
             } else {
-              // 本地压缩包（非嵌套）
-              isExpanded = expandedArchives.has(item.archiveName);
-            }
-            if (isExpanded) {
-              element.classList.add("expanded");
+              appendElements.push(el); // 尾部新增
             }
           }
 
-          // 🚀 VS Code 风格缩进参考线：为每级缩进生成竖线 span
-          const level = item.level || 0;
-          let indentGuidesHtml = '';
-          if (level > 0) {
-            for (let lv = 1; lv <= level; lv++) {
-              indentGuidesHtml += '<span class="ft-indent-guide" style="left:' + (2 + lv * 14 - 7) + 'px"></span>';
-            }
+          const container = fileTreeVirtualContent;
+
+          // 头部元素：倒序 insertBefore(firstChild)，保证最终顺序正确
+          for (let j = prependElements.length - 1; j >= 0; j--) {
+            container.insertBefore(prependElements[j], container.firstChild);
           }
 
-          if (item.type === "folder") {
-            element.classList.add(
-              item.expanded
-                ? "file-tree-folder-expanded"
-                : "file-tree-folder-collapsed"
-            );
-
-            // 懒加载模式：检查是否有子项来决定是否显示展开箭头
-            // 对于懒加载文件夹，如果还没有加载且不确定是否有子项，显示问号样式
-            const showToggle = item.lazyLoad ? (item.hasChildren || item.childrenLoaded) : true;
-            const toggleClass = item.expanded ? "expanded" : "";
-            const toggleStyle = !showToggle ? 'style="visibility:hidden"' : "";
-            const loadingMark =
-              item.loadingChildren
-                ? '<span style="margin-left:6px;opacity:.6;">加载中…</span>'
-                : "";
-
-            // 🚀 不转义HTML，直接使用原始内容
-            element.innerHTML =
-              indentGuidesHtml +
-              `<span class="file-tree-toggle ${toggleClass}" ${toggleStyle} aria-hidden="true"></span>` +
-              `<span class="icon"></span><span class="file-tree-name">${escapeHtml(item.name)}</span>` +
-              loadingMark;
-          } else if (item.type === "drive") {
-            // 🚀 本地驱动器显示
-            element.classList.add(
-              item.expanded
-                ? "file-tree-folder-expanded"
-                : "file-tree-folder-collapsed"
-            );
-
-            const toggleClass = item.expanded ? "expanded" : "";
-            const loadingMark =
-              item.loadingChildren
-                ? '<span style="margin-left:6px;opacity:.6;">加载中…</span>'
-                : "";
-
-            // 🚀 不转义HTML，直接使用原始内容
-            element.innerHTML =
-              indentGuidesHtml +
-              `<span class="file-tree-toggle ${toggleClass}" aria-hidden="true"></span>` +
-              `<span class="icon">💽</span><span class="file-tree-name">${escapeHtml(item.name)}</span>` +
-              loadingMark;
-          } else if (item.isArchive) {
-            // 压缩包文件显示
-            // 服务端压缩包：使用 expanded 字段
-            // 本地压缩包：使用 expandedArchives 集合
-            // 🚀 嵌套压缩包：直接使用 expanded 字段
-            let isExpanded;
-            if (item.isRemote) {
-              // 远程压缩包
-              isExpanded = item.expanded;
-            } else if (item.isNestedArchive) {
-              // 🚀 嵌套压缩包：直接使用 expanded 字段
-              isExpanded = item.expanded;
-            } else {
-              // 本地压缩包（非嵌套）
-              isExpanded = expandedArchives.has(item.archiveName);
-            }
-
-            const loadingMark =
-              item.loadingChildren
-                ? '<span style="margin-left:6px;opacity:.6;">加载中…</span>'
-                : "";
-            // 🚀 不转义HTML，直接使用原始内容
-            element.innerHTML =
-              indentGuidesHtml +
-              `<span class="file-tree-toggle ${isExpanded ? "expanded" : ""}" aria-hidden="true"></span>` +
-              `<span class="icon">📦</span><span class="file-tree-name">${escapeHtml(item.name)}</span>` +
-              (item.fileCount ? `<span class="file-count">(${item.fileCount} 个文件)</span>` : "") +
-              loadingMark;
-          } else {
-            // 普通文件显示
-            let icon = "📄";
-            const nameLower = item.name.toLowerCase();
-            if (nameLower.endsWith('.log')) icon = "📋";
-            else if (nameLower.endsWith('.txt')) icon = "📝";
-            else if (nameLower.endsWith('.json')) icon = "📋";
-            else if (nameLower.endsWith('.xml')) icon = "📋";
-            else if (nameLower.endsWith('.html')) icon = "🌐";
-            else if (nameLower.endsWith('.js')) icon = "📜";
-            else if (nameLower.endsWith('.css')) icon = "🎨";
-
-            // 🚀 不转义HTML，直接使用原始内容
-            element.innerHTML = indentGuidesHtml + `<span class="icon">${icon}</span><span class="file-tree-name">${escapeHtml(item.name)}</span>`;
+          // 尾部元素：直接 appendChild（已按 slot 升序）
+          for (const el of appendElements) {
+            container.appendChild(el);
           }
 
-          frag.appendChild(element);
+          // 🚀 刷新仍在视口内的行（状态可能变化：selected/matched）
+          for (let i = start; i < end; i++) {
+            if (i >= prevStart && i < prevEnd) {
+              const index = fileTreeAllVisibleIndices[i];
+              _fileTreeUpdateState(index, selectedIndexSet, matchedIndexSet);
+            }
+          }
         }
-
-        fileTreeVirtualContent.innerHTML = "";
-        fileTreeVirtualContent.appendChild(frag);
 
         const renderTime = performance.now() - renderStart;
         if (renderTime > 50) {  // Only log if it takes more than 50ms
-          console.log(`⚠️ renderFileTreeViewport 耗时: ${renderTime.toFixed(2)}ms (items: ${end - start})`);
+          console.log(`⚠️ renderFileTreeViewport 耗时: ${renderTime.toFixed(2)}ms (items: ${end - start}, force=${force})`);
+        }
+      }
+
+      // ============ 文件树 DOM 池 ============
+      // 🚀 性能优化：DOM 池化 + 差异化渲染
+      // _ftPool: 可复用的 DOM 元素池
+      // _ftActive: 当前活跃的 index → element 映射
+      // _ftOrder: 当前活跃的行号（视口内位置 i）排序列表，用于有序插入
+      const _ftPool = [];
+      const _ftActive = new Map();
+      const _ftActiveSlots = new Map(); // index → slot(i)
+
+      /** 从池中获取或创建 DOM 元素 */
+      function _ftAcquire() {
+        if (_ftPool.length > 0) return _ftPool.pop();
+        return document.createElement("div");
+      }
+
+      /** 回收到池中 */
+      function _ftRelease(el) {
+        el.textContent = "";
+        el.className = "";
+        el.removeAttribute("style");
+        el.removeAttribute("data-index");
+        if (el.parentElement) el.parentElement.removeChild(el);
+        _ftPool.push(el);
+      }
+
+      /** 清空所有活跃元素 */
+      function _fileTreeDomPoolClear() {
+        for (const [, el] of _ftActive) {
+          _ftRelease(el);
+        }
+        _ftActive.clear();
+        _ftActiveSlots.clear();
+      }
+
+      /** 释放指定 index 的元素 */
+      function _fileTreeDomPoolRelease(index) {
+        const el = _ftActive.get(index);
+        if (el) {
+          _ftRelease(el);
+          _ftActive.delete(index);
+          _ftActiveSlots.delete(index);
+        }
+      }
+
+      /** 为指定 hierarchy index 创建完整的 DOM 元素 */
+      function _fileTreeCreateElement(index, selectedIndexSet, matchedIndexSet) {
+        const item = fileTreeHierarchy[index];
+        if (!item) return null;
+
+        const element = _ftAcquire();
+        element.className = `file-tree-item file-tree-${item.type}`;
+        element.classList.add(`file-tree-level-${item.level}`);
+        element.style.setProperty("--ft-level", String(item.level || 0));
+        element.dataset.index = index;
+
+        // 选中状态
+        if (selectedIndexSet.has(index)) {
+          element.classList.add("selected");
+        }
+        // 多选
+        if (archiveMultiSelectedFiles.has(index)) {
+          element.classList.add("multi-selected");
+        }
+        // 搜索匹配
+        if (matchedIndexSet && matchedIndexSet.has(index)) {
+          element.classList.add("search-matched");
+        }
+
+        // 压缩包
+        if (item.isArchive) {
+          element.classList.add("archive");
+          let isExpanded;
+          if (item.isRemote || item.isNestedArchive) {
+            isExpanded = item.expanded;
+          } else {
+            isExpanded = expandedArchives.has(item.archiveName);
+          }
+          if (isExpanded) {
+            element.classList.add("expanded");
+          }
+        }
+
+        // 缩进参考线
+        const level = item.level || 0;
+        let indentGuidesHtml = '';
+        if (level > 0) {
+          for (let lv = 1; lv <= level; lv++) {
+            indentGuidesHtml += '<span class="ft-indent-guide" style="left:' + (2 + lv * 14 - 7) + 'px"></span>';
+          }
+        }
+
+        // 内容
+        if (item.type === "folder") {
+          element.classList.add(
+            item.expanded ? "file-tree-folder-expanded" : "file-tree-folder-collapsed"
+          );
+          const showToggle = item.lazyLoad ? (item.hasChildren || item.childrenLoaded) : true;
+          const toggleClass = item.expanded ? "expanded" : "";
+          const toggleStyle = !showToggle ? 'style="visibility:hidden"' : "";
+          const loadingMark = item.loadingChildren
+            ? '<span style="margin-left:6px;opacity:.6;">加载中…</span>' : "";
+          element.innerHTML =
+            indentGuidesHtml +
+            `<span class="file-tree-toggle ${toggleClass}" ${toggleStyle} aria-hidden="true"></span>` +
+            `<span class="icon"></span><span class="file-tree-name">${escapeHtml(item.name)}</span>` +
+            loadingMark;
+        } else if (item.type === "drive") {
+          element.classList.add(
+            item.expanded ? "file-tree-folder-expanded" : "file-tree-folder-collapsed"
+          );
+          const toggleClass = item.expanded ? "expanded" : "";
+          const loadingMark = item.loadingChildren
+            ? '<span style="margin-left:6px;opacity:.6;">加载中…</span>' : "";
+          element.innerHTML =
+            indentGuidesHtml +
+            `<span class="file-tree-toggle ${toggleClass}" aria-hidden="true"></span>` +
+            `<span class="icon">💽</span><span class="file-tree-name">${escapeHtml(item.name)}</span>` +
+            loadingMark;
+        } else if (item.isArchive) {
+          let isExpanded;
+          if (item.isRemote || item.isNestedArchive) {
+            isExpanded = item.expanded;
+          } else {
+            isExpanded = expandedArchives.has(item.archiveName);
+          }
+          const loadingMark = item.loadingChildren
+            ? '<span style="margin-left:6px;opacity:.6;">加载中…</span>' : "";
+          element.innerHTML =
+            indentGuidesHtml +
+            `<span class="file-tree-toggle ${isExpanded ? "expanded" : ""}" aria-hidden="true"></span>` +
+            `<span class="icon">📦</span><span class="file-tree-name">${escapeHtml(item.name)}</span>` +
+            (item.fileCount ? `<span class="file-count">(${item.fileCount} 个文件)</span>` : "") +
+            loadingMark;
+        } else {
+          // 普通文件
+          const nameLower = item.name.toLowerCase();
+          const dotIdx = nameLower.lastIndexOf('.');
+          const icon = dotIdx > -1 ? (FILE_TREE_ICON_MAP.get(nameLower.slice(dotIdx)) || "📄") : "📄";
+          element.innerHTML = indentGuidesHtml + `<span class="icon">${icon}</span><span class="file-tree-name">${escapeHtml(item.name)}</span>`;
+        }
+
+        _ftActive.set(index, element);
+        return element;
+      }
+
+      /** 更新已有元素的选中/匹配状态（不重建 innerHTML） */
+      function _fileTreeUpdateState(index, selectedIndexSet, matchedIndexSet) {
+        const el = _ftActive.get(index);
+        if (!el) return;
+
+        // 更新选中状态
+        if (selectedIndexSet.has(index)) {
+          if (!el.classList.contains("selected")) el.classList.add("selected");
+        } else {
+          if (el.classList.contains("selected")) el.classList.remove("selected");
+        }
+
+        // 更新多选状态
+        if (archiveMultiSelectedFiles.has(index)) {
+          if (!el.classList.contains("multi-selected")) el.classList.add("multi-selected");
+        } else {
+          if (el.classList.contains("multi-selected")) el.classList.remove("multi-selected");
+        }
+
+        // 更新搜索匹配状态
+        if (matchedIndexSet && matchedIndexSet.has(index)) {
+          if (!el.classList.contains("search-matched")) el.classList.add("search-matched");
+        } else {
+          if (el.classList.contains("search-matched")) el.classList.remove("search-matched");
         }
       }
 
@@ -16480,9 +16621,10 @@
         // 设置为折叠状态（不删除子节点）
         archive.expanded = false;
 
-        // 释放 JSZip 对象和文件列表，释放内存
+        // 释放 JSZip 对象（体积较大），但保留 _archiveFiles 文件列表
+        // 否则再次展开时因 childrenLoaded=true 跳过加载，导致子文件夹懒加载找不到数据
         delete archive._zipObject;
-        delete archive._archiveFiles;
+        // delete archive._archiveFiles;  // 🔧 不再删除，子文件夹懒加载依赖此数据
 
         // 保持 childrenLoaded = true，这样下次展开时不需要重新加载
         // archive.childrenLoaded = false;  // 不再重置
@@ -23795,19 +23937,31 @@
           keywords.push(currentKeyword); // 保留空格
         }
 
+        // ========== P1-3: 排除过滤（NOT 语义）==========
+        // 以 - 或 ! 开头的关键词为排除词，匹配到的行会被过滤掉
+        const positiveKeywords = [];
+        const negativeKeywords = [];
+        for (const kw of keywords) {
+          if (kw.startsWith('-') || kw.startsWith('!')) {
+            const neg = kw.substring(1);
+            if (neg) negativeKeywords.push(neg);
+          } else {
+            positiveKeywords.push(kw);
+          }
+        }
+
         // 🚀 自动追加 "=== 文件:" 关键词，确保文件头始终显示在过滤结果中
         // 例如：用户输入 "battery|charge"，实际过滤为 "battery|charge|=== 文件:"
-        keywords.push("=== 文件:");
+        positiveKeywords.push("=== 文件:");
 
         // ========== 性能优化：智能匹配策略 ==========
         // 根据关键词类型选择最快的匹配方法
         // 🔧 大小写敏感：保留原始大小写进行匹配
-        const compiledPatterns = keywords.map(keyword => {
+        const compilePatterns = (kws) => kws.map(keyword => {
           // 检查是否包含正则特殊字符
           const hasRegexSpecialChars = /[.*+?^${}()|[\]\\]/.test(keyword);
 
           // 优化1：纯文本关键词（最常见）- 直接使用 includes，最快
-          // 🔧 改为大小写敏感匹配
           if (!hasRegexSpecialChars && !keyword.includes(" ")) {
             return {
               type: 'simple',
@@ -23817,7 +23971,6 @@
           }
 
           // 优化2：包含空格的短语 - 使用 includes
-          // 🔧 改为大小写敏感匹配
           if (keyword.includes(" ")) {
             return {
               type: 'phrase',
@@ -23827,7 +23980,6 @@
           }
 
           // 优化3：包含特殊字符 - 使用正则表达式（最慢，但功能最强）
-          // 🔧 改为大小写敏感匹配
           try {
             const regex = new RegExp(escapeRegExp(keyword));
             return {
@@ -23845,6 +23997,9 @@
             };
           }
         });
+
+        const compiledPatterns = compilePatterns(positiveKeywords);
+        const compiledNegativePatterns = compilePatterns(negativeKeywords);
 
         // ========== 性能优化：已移除HTML反转义，直接使用原始内容 ==========
         const getCachedUnescape = (line) => {
@@ -23895,7 +24050,7 @@
 
         // 使用 setTimeout 确保 UI 更新后再开始过滤
         setTimeout(() => {
-          startIncrementalFilter(keywords, compiledPatterns, getCachedUnescape);
+          startIncrementalFilter(keywords, compiledPatterns, compiledNegativePatterns, getCachedUnescape);
         }, 0);
 
         // 提前返回，避免继续执行下面的代码
@@ -23903,7 +24058,7 @@
       }
 
       // 🚀 增量过滤函数（独立出来便于多线程扩展）
-      function startIncrementalFilter(keywords, compiledPatterns, getCachedUnescape) {
+      function startIncrementalFilter(keywords, compiledPatterns, compiledNegativePatterns, getCachedUnescape) {
         const startTime = performance.now();
 
         // 🚀 智能跳转：记录当前查看位置的原始索引
@@ -23971,16 +24126,28 @@
             // 使用缓存获取反转义后的内容
             const lineContent = getCachedUnescape(line);
 
-            // 检查是否包含任何关键词（使用预编译的模式）
-            let matches = false;
+            // P1-3: 排除过滤逻辑 — 匹配正面词 && 不匹配负面词
+            // 检查是否包含任何正面关键词（使用预编译的模式）
+            let matchesPositive = false;
             for (const pattern of compiledPatterns) {
               if (pattern.test(lineContent)) {
-                matches = true;
+                matchesPositive = true;
                 break;
               }
             }
 
-            if (matches) {
+            // 如果匹配正面词，还需检查是否被负面词排除
+            let excluded = false;
+            if (matchesPositive && compiledNegativePatterns.length > 0) {
+              for (const pattern of compiledNegativePatterns) {
+                if (pattern.test(lineContent)) {
+                  excluded = true;
+                  break;
+                }
+              }
+            }
+
+            if (matchesPositive && !excluded) {
               filteredLines.push(line);
               filteredToOriginalIndex.push(i);
             }
@@ -24783,10 +24950,10 @@
         lastVisibleStart = visibleStart;
         lastVisibleEnd = visibleEnd;
 
-        // 🔧 修复：主日志框不应该应用过滤关键词高亮（只应用搜索和自定义高亮）
+        // 🔧 修复：主日志框不应该应用过滤关键词高亮，也不应用自定义高亮（仅限过滤面板）
         // 预计算常用变量
         const hasSearchKeyword = !!searchKeyword;
-        const hasCustomHighlights = customHighlights.length > 0;
+        const hasCustomHighlights = false; // 主日志框不应用自定义高亮
         const currentMatchLine = totalMatchCount > 0 ? searchMatches[currentMatchIndex] : -1;
 
         // 🚀 性能优化：延迟执行过滤高亮清理，避免每次滚动都 querySelectorAll
@@ -24903,10 +25070,10 @@
               // 缓存未命中，执行完整的HTML解析
 
               // 🚀 性能优化：使用合并高亮函数，一次性处理所有高亮类型
-              // 🔧 不传递搜索关键词（用户不希望搜索关键词被高亮）
+              // 🔧 主日志框不传递搜索关键词和自定义高亮（仅限过滤面板）
               displayContent = applyBatchHighlight(displayContent, {
-                searchKeyword: '',  // 搜索关键词不再传递
-                customHighlights: hasCustomHighlights ? customHighlights : [],
+                searchKeyword: '',
+                customHighlights: [], // 主日志框不应用自定义高亮
                 currentMatchLine: currentMatchLine,
                 lineIndex: i
               });
@@ -25847,7 +26014,43 @@ async function applyFilterWithRipgrepAsync(filterText) {
     // - ripgrep会把输入当作正则表达式
     // - 空格会匹配空格字符
     // - 例如："battery l" 只匹配 "battery l"，不会匹配 "batt_last"
-    const rgPattern = filterText;
+
+    // P1-3: 排除过滤 — 分离正/负关键词，ripgrep 只搜索正面词
+    const rgParts = filterText.split(/(?<!\\)\|/).map(s => s.replace(/\\\|/g, '|').trim()).filter(Boolean);
+    const rgPositiveParts = [];
+    const rgNegativeParts = [];
+    for (const part of rgParts) {
+      if (part.startsWith('-') || part.startsWith('!')) {
+        const neg = part.substring(1);
+        if (neg) rgNegativeParts.push(neg);
+      } else {
+        rgPositiveParts.push(part);
+      }
+    }
+
+    // ripgrep 模式只包含正面关键词
+    let rgPattern;
+    if (rgPositiveParts.length === 0) {
+      // 只有排除词时，ripgrep 无法执行"匹配所有行再排除"的逻辑，回退到 Worker
+      console.log('[Ripgrep Filter] 只有排除关键词，回退到 Worker 过滤');
+      return false;
+    }
+    rgPattern = rgPositiveParts.join('|');
+
+    // 编译负面关键词模式（用于后过滤）
+    const compileRgPattern = (kw) => {
+      const hasRegexSpecialChars = /[.*+?^${}()|[\]\\]/.test(kw);
+      if (!hasRegexSpecialChars) {
+        return (lineContent) => lineContent.includes(kw);
+      }
+      try {
+        const regex = new RegExp(kw, 'i');
+        return (lineContent) => regex.test(lineContent);
+      } catch (e) {
+        return (lineContent) => lineContent.includes(kw);
+      }
+    };
+    const negativePatternTests = rgNegativeParts.map(compileRgPattern);
 
     // ⚡ 性能优化：添加 ripgrep 性能参数
     // 🚀 重要：动态调整匹配数量限制，防止内存溢出和渲染进程崩溃
@@ -26148,6 +26351,38 @@ async function applyFilterWithRipgrepAsync(filterText) {
 
     const sortedIndices = resultWithHeaders.map(x => x.index);
     const sortedLines = resultWithHeaders.map(x => x.line);
+
+    // P1-3: 负面关键词后过滤 — 排除包含负面关键词的行（保留文件头）
+    if (negativePatternTests.length > 0) {
+      const beforeCount = sortedLines.length;
+      const filteredResult = [];
+      for (let i = 0; i < sortedLines.length; i++) {
+        const line = sortedLines[i];
+        // 文件头行始终保留
+        if (line.startsWith("=== 文件:")) {
+          filteredResult.push({ index: sortedIndices[i], line: line });
+          continue;
+        }
+        let excluded = false;
+        for (const testFn of negativePatternTests) {
+          if (testFn(line)) {
+            excluded = true;
+            break;
+          }
+        }
+        if (!excluded) {
+          filteredResult.push({ index: sortedIndices[i], line: line });
+        }
+      }
+      // 重建 sortedIndices 和 sortedLines
+      sortedIndices.length = 0;
+      sortedLines.length = 0;
+      for (const item of filteredResult) {
+        sortedIndices.push(item.index);
+        sortedLines.push(item.line);
+      }
+      console.log(`[Ripgrep Filter] P1-3 排除过滤: ${beforeCount} → ${sortedLines.length} 行 (排除 ${beforeCount - sortedLines.length} 行)`);
+    }
 
     // 🚀 修复连续过滤内存泄漏：添加硬性限制，防止内存溢出
     // 如果结果超过 15000 条，主动截断并警告用户

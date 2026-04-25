@@ -1,17 +1,21 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
   <head>
+    <!-- 🚀 字体预连接 + 异步加载，不阻塞首屏渲染 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=JetBrains+Mono&display=swap"
       rel="stylesheet"
+      media="print" onload="this.media='all'"
     />
     <meta charset="UTF-8" />
     <title>VivoLog - 日志查看器</title>
     <link rel="icon" type="image/png" href="../icons/icon.png">
     <link rel="stylesheet" href="renderer/css/style.css">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <!-- PapaParse - 强大的CSV解析库 -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <!-- 🚀 外部库延迟加载，不阻塞 HTML 解析和首屏渲染 -->
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
   </head>
   <body>
     <div id="toolbar">
@@ -125,8 +129,8 @@
             type="text"
             id="serverAddress"
             placeholder="IP地址"
-            value="10.0.1.1:8082"
-            title="服务器地址 (如: 10.0.3.1:8082)"
+            value="172.16.191.214:8082"
+            title="服务器地址 (如: 172.16.191.214:8082)"
           />
           <button id="serverAddressDropdownBtn" type="button" title="选择常用服务器地址">▼</button>
           
@@ -142,7 +146,7 @@
 
           <!-- 下拉菜单保持不变 -->
           <div id="serverAddressDropdownMenu" role="listbox" aria-label="常用服务器地址">
-            <button class="server-address-option" type="button" data-value="10.0.1.1:8082">(10.0.1.1:8082)BPM生产环境服务器</button>
+            <button class="server-address-option" type="button" data-value="172.16.191.214:8082">(172.16.191.214:8082)BPM生产环境服务器</button>
             <button class="server-address-option" type="button" data-value="10.0.2.1:8082">(10.0.2.1:8082)BPM测试环境服务器</button>
             <button class="server-address-option" type="button" data-value="10.0.3.1:8082">(10.0.3.1:8082)充电小组个人空间</button>
 			<button class="server-address-option" type="button" data-value="10.0.3.1:8083">(10.0.3.1:8083)充电小组windows目录挂载</button>
@@ -581,7 +585,7 @@
       <div id="aiAssistantFrameContainer">
         <iframe
           id="aiAssistantFrame"
-          src="https://www.doubao.com/chat/"
+          data-src="https://www.doubao.com/chat/"
         ></iframe>
         <div id="aiAssistantStatus"></div>
       </div>
@@ -663,18 +667,24 @@
     
     <!-- 展开的过滤输入框对话框 -->
     <div id="filterDialog">
+      <div id="filterChipBar">
+        <div id="filterChipContainer" class="filter-chip-container"></div>
+        <textarea id="filterDialogTextarea" style="position: absolute; opacity: 0; pointer-events: none; height: 100%;"></textarea>
+      </div>
       <div id="filterDialogContent">
         <div id="filterDialogHeader">
-          <h3>🔍 过滤日志</h3>
           <button id="closeFilterDialog">×</button>
         </div>
-        <div style="position: relative;">
-          <!-- 历史关键词提示框 -->
-          <div id="filterHistorySuggestions" class="filter-history-suggestions" style="display: none;">
-            <div class="filter-history-header">📚 历史关键词</div>
-            <div id="filterHistoryList"></div>
+        <div class="filter-dialog-input-area">
+          <!-- 历史关键词列表 -->
+          <div id="filterHistorySuggestions" class="filter-history-suggestions hidden">
+            <div id="filterHistoryList" class="filter-history-list-scroll"></div>
           </div>
-          <textarea id="filterDialogTextarea" placeholder="输入过滤关键词，可使用 | 分隔多个关键词，使用 \| 表示字面量 |"></textarea>
+          <!-- 搜索输入 -->
+          <div class="filter-dialog-search-row">
+            <input type="text" id="filterHistorySearchInput" class="filter-history-search-input" placeholder="搜索关键词或直接输入后回车添加..." />
+            <button id="regexModeToggle" class="regex-mode-toggle" title="正则表达式模式">.*</button>
+          </div>
         </div>
         <div id="filterDialogKeywords">
           <strong>当前过滤关键词：</strong> <span id="currentFilterKeywords">无</span>
@@ -772,6 +782,7 @@
     <script src="renderer/js/utils/constants.js"></script>
     <script src="renderer/js/core/event-bus.js"></script>
     <script src="renderer/js/core/state.js"></script>
+    <script src="renderer/js/utils/idb-storage.js"></script>
     <script src="renderer/js/core/dom-elements.js"></script>
     <script src="renderer/js/utils/helpers.js"></script>
 
@@ -792,6 +803,7 @@
     <script src="renderer/js/features/secondary-filter-canvas.js"></script>
     <script src="renderer/js/features/virtual-scroll.js"></script>
     <script src="renderer/js/features/filter.js"></script>
+    <script src="renderer/js/features/filter-keyword-history.js"></script>
     <script src="renderer/js/features/search.js"></script>
 
     <!-- ============================================================ -->
@@ -817,6 +829,7 @@
     <!-- ============================================================ -->
     <script src="renderer/js/filter-worker-patch.js"></script>
     <script src="renderer/js/virtual-scroll-patch.js"></script>
+    <script src="renderer/js/filter-keyword-history-patch.js"></script>
 
     <!-- ============================================================ -->
     <!-- Layer 7: 原有后置模块（必须在 original-script 之后加载）         -->

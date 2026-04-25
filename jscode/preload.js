@@ -153,7 +153,10 @@ try {
     // 更新代码
     updateCode: (options) => ipcRenderer.invoke('update-code', options),
     // 检查更新服务器状态
-    checkUpdateServer: (options) => ipcRenderer.invoke('check-update-server', options)
+    checkUpdateServer: (options) => ipcRenderer.invoke('check-update-server', options),
+    // 关键词持久化存储（mem/filter-keywords.json）
+    readKeywordFile: () => ipcRenderer.invoke('read-keyword-file'),
+    writeKeywordFile: (data) => ipcRenderer.invoke('write-keyword-file', data)
   });
   console.log('electronAPI 已成功暴露到 window 对象');
 } catch (error) {

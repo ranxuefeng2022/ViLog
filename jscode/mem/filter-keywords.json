@@ -1,0 +1,513 @@
+{
+  "version": 2,
+  "keywords": [
+    {
+      "text": "handshake success",
+      "count": 73,
+      "lastUsed": 1777038305440
+    },
+    {
+      "text": "vpsy_usb_plug:",
+      "count": 85,
+      "lastUsed": 1777038305440
+    },
+    {
+      "text": "predict",
+      "count": 73,
+      "lastUsed": 1777038305440
+    },
+    {
+      "text": "battery_update: s",
+      "count": 98,
+      "lastUsed": 1777037200389
+    },
+    {
+      "text": "charge_check_car_wls_fchg_limit_cur",
+      "count": 1,
+      "lastUsed": 1777036823707
+    },
+    {
+      "text": "asdfasdf",
+      "count": 1,
+      "lastUsed": 1777036593464
+    },
+    {
+      "text": "fg_refresh_status",
+      "count": 5,
+      "lastUsed": 1777035869372
+    },
+    {
+      "text": "battery l",
+      "count": 11,
+      "lastUsed": 1777035869372
+    },
+    {
+      "text": "IBUS =",
+      "count": 11,
+      "lastUsed": 1777035869372
+    },
+    {
+      "text": "FOLD_INTELL",
+      "count": 31,
+      "lastUsed": 1777035869372
+    },
+    {
+      "text": "aaaccc",
+      "count": 1,
+      "lastUsed": 1777035299277
+    },
+    {
+      "text": "vpsy_usb_plug",
+      "count": 70,
+      "lastUsed": 1777030902720
+    },
+    {
+      "text": "charge_check_lixiang_l7_epp_cur",
+      "count": 25,
+      "lastUsed": 1777029752458
+    },
+    {
+      "text": "charge_icl_vote_callback",
+      "count": 12,
+      "lastUsed": 1777029456310
+    },
+    {
+      "text": "charge_lixiang_l7_epp_work_func",
+      "count": 11,
+      "lastUsed": 1777029456310
+    },
+    {
+      "text": "chargeStatus\":18",
+      "count": 3,
+      "lastUsed": 1777027096732
+    },
+    {
+      "text": "SOC_ACTION:",
+      "count": 3,
+      "lastUsed": 1777027096732
+    },
+    {
+      "text": "calcPredictTime: predict",
+      "count": 3,
+      "lastUsed": 1777027096732
+    },
+    {
+      "text": "fast_charging_soc_scale_start",
+      "count": 3,
+      "lastUsed": 1777026277117
+    },
+    {
+      "text": "votable name:USER_IBAT",
+      "count": 3,
+      "lastUsed": 1777022432545
+    },
+    {
+      "text": "votable name:DCHG_FCC",
+      "count": 5,
+      "lastUsed": 1777022432545
+    },
+    {
+      "text": "sc8550v",
+      "count": 3,
+      "lastUsed": 1777018835665
+    },
+    {
+      "text": "vfcs_cp_check_device_id",
+      "count": 5,
+      "lastUsed": 1777018835665
+    },
+    {
+      "text": "vfcs_cp_probe",
+      "count": 7,
+      "lastUsed": 1777018835665
+    },
+    {
+      "text": "vfcs_cp_i2c_probe",
+      "count": 9,
+      "lastUsed": 1777018835665
+    },
+    {
+      "text": "vfcs_sc8550v_fchg_dev_init",
+      "count": 11,
+      "lastUsed": 1777018835665
+    },
+    {
+      "text": "vfcs_fchg_dev_check_comm_excep_state",
+      "count": 13,
+      "lastUsed": 1777018835665
+    },
+    {
+      "text": "vfcs_sc8550v_check_i2c_exception",
+      "count": 19,
+      "lastUsed": 1777018835665
+    },
+    {
+      "text": "comm-exception-state",
+      "count": 21,
+      "lastUsed": 1777018835665
+    },
+    {
+      "text": "vfcs_fchg_get",
+      "count": 3,
+      "lastUsed": 1777018533589
+    },
+    {
+      "text": "exception-state",
+      "count": 7,
+      "lastUsed": 1777018478345
+    },
+    {
+      "text": "vfcs_fchg_disable_vote_callback",
+      "count": 5,
+      "lastUsed": 1777018388935
+    },
+    {
+      "text": "battery_resistor_detect",
+      "count": 7,
+      "lastUsed": 1777018388935
+    },
+    {
+      "text": "apsd done",
+      "count": 7,
+      "lastUsed": 1777013949671
+    },
+    {
+      "text": "charge_check:",
+      "count": 10,
+      "lastUsed": 1777013573994
+    },
+    {
+      "text": "charchec",
+      "count": 1,
+      "lastUsed": 1777013548771
+    },
+    {
+      "text": "check",
+      "count": 1,
+      "lastUsed": 1777013533943
+    },
+    {
+      "text": "charge",
+      "count": 7,
+      "lastUsed": 1777012671664
+    },
+    {
+      "text": "fasdfwgwergqa",
+      "count": 1,
+      "lastUsed": 1777006470581
+    },
+    {
+      "text": "qawerwet",
+      "count": 1,
+      "lastUsed": 1777006470581
+    },
+    {
+      "text": "asdsrwaer",
+      "count": 1,
+      "lastUsed": 1777006470581
+    },
+    {
+      "text": "asdfaewsrawe",
+      "count": 1,
+      "lastUsed": 1777006470581
+    },
+    {
+      "text": "aseewd",
+      "count": 1,
+      "lastUsed": 1777006470581
+    },
+    {
+      "text": "casedrt",
+      "count": 1,
+      "lastUsed": 1777006470581
+    },
+    {
+      "text": "werfe",
+      "count": 1,
+      "lastUsed": 1777006470581
+    },
+    {
+      "text": "asdrtwe",
+      "count": 1,
+      "lastUsed": 1777006470581
+    },
+    {
+      "text": "awer",
+      "count": 2,
+      "lastUsed": 1777006470581
+    },
+    {
+      "text": "asds",
+      "count": 1,
+      "lastUsed": 1777006470581
+    },
+    {
+      "text": "asdf",
+      "count": 1,
+      "lastUsed": 1777006445498
+    },
+    {
+      "text": "fff",
+      "count": 1,
+      "lastUsed": 1777006445498
+    },
+    {
+      "text": "eee",
+      "count": 1,
+      "lastUsed": 1777006445498
+    },
+    {
+      "text": "ddd",
+      "count": 1,
+      "lastUsed": 1777006445498
+    },
+    {
+      "text": "ccc",
+      "count": 1,
+      "lastUsed": 1777006445498
+    },
+    {
+      "text": "aaa",
+      "count": 2,
+      "lastUsed": 1777006445498
+    },
+    {
+      "text": "cms",
+      "count": 15,
+      "lastUsed": 1777004410751
+    },
+    {
+      "text": "vfcs_main",
+      "count": 1,
+      "lastUsed": 1777003917833
+    },
+    {
+      "text": "cms_main_work",
+      "count": 3,
+      "lastUsed": 1777003250300
+    },
+    {
+      "text": "cms_main",
+      "count": 3,
+      "lastUsed": 1777002534672
+    },
+    {
+      "text": "ps_change",
+      "count": 3,
+      "lastUsed": 1777002534672
+    },
+    {
+      "text": "votable name:USB_ICL",
+      "count": 3,
+      "lastUsed": 1777001780051
+    },
+    {
+      "text": "votable name:CHG_SUS",
+      "count": 3,
+      "lastUsed": 1777001780051
+    },
+    {
+      "text": "votable name:CHG_DIS",
+      "count": 3,
+      "lastUsed": 1777001780051
+    },
+    {
+      "text": "battery_update",
+      "count": 1,
+      "lastUsed": 1776996780284
+    }
+  ],
+  "presets": [],
+  "cooccurrence": {
+    "abcd|cms": 2,
+    "cms|vfcs": 7,
+    "battery l|votable name:CHG_DIS": 2,
+    "battery l|votable name:CHG_SUS": 2,
+    "battery l|votable name:USB_ICL": 2,
+    "votable name:CHG_DIS|votable name:CHG_SUS": 2,
+    "votable name:CHG_DIS|votable name:USB_ICL": 2,
+    "votable name:CHG_SUS|votable name:USB_ICL": 2,
+    "charge_check:|ps_change": 2,
+    "charge_check:|cms_main": 2,
+    "cms_main|ps_change": 2,
+    "battery_update: s|charge_check:": 7,
+    "battery l|charge_check:": 2,
+    "charge_check:|cms_main_work": 2,
+    "battery l|battery_update: s": 4,
+    "battery_update: s|cms_main_work": 2,
+    "battery l|cms_main_work": 2,
+    "charge|vfcs": 4,
+    "charge|cms": 4,
+    "aaa|bbb": 1,
+    "aaa|ccc": 1,
+    "aaa|ddd": 1,
+    "aaa|eee": 1,
+    "aaa|fff": 1,
+    "aaa|asdf": 1,
+    "bbb|ccc": 1,
+    "bbb|ddd": 1,
+    "bbb|eee": 1,
+    "bbb|fff": 1,
+    "asdf|bbb": 1,
+    "ccc|ddd": 1,
+    "ccc|eee": 1,
+    "ccc|fff": 1,
+    "asdf|ccc": 1,
+    "ddd|eee": 1,
+    "ddd|fff": 1,
+    "asdf|ddd": 1,
+    "eee|fff": 1,
+    "asdf|eee": 1,
+    "asdf|fff": 1,
+    "asds|awer": 2,
+    "awer|awer": 1,
+    "asdrtwe|awer": 2,
+    "awer|werfe": 2,
+    "awer|casedrt": 2,
+    "aseewd|awer": 2,
+    "asdfaewsrawe|awer": 2,
+    "asdsrwaer|awer": 2,
+    "awer|qawerwet": 2,
+    "awer|fasdfwgwergqa": 2,
+    "asdrtwe|asds": 1,
+    "asds|werfe": 1,
+    "asds|casedrt": 1,
+    "asds|aseewd": 1,
+    "asdfaewsrawe|asds": 1,
+    "asds|asdsrwaer": 1,
+    "asds|qawerwet": 1,
+    "asds|fasdfwgwergqa": 1,
+    "asdrtwe|werfe": 1,
+    "asdrtwe|casedrt": 1,
+    "asdrtwe|aseewd": 1,
+    "asdfaewsrawe|asdrtwe": 1,
+    "asdrtwe|asdsrwaer": 1,
+    "asdrtwe|qawerwet": 1,
+    "asdrtwe|fasdfwgwergqa": 1,
+    "casedrt|werfe": 1,
+    "aseewd|werfe": 1,
+    "asdfaewsrawe|werfe": 1,
+    "asdsrwaer|werfe": 1,
+    "qawerwet|werfe": 1,
+    "fasdfwgwergqa|werfe": 1,
+    "aseewd|casedrt": 1,
+    "asdfaewsrawe|casedrt": 1,
+    "asdsrwaer|casedrt": 1,
+    "casedrt|qawerwet": 1,
+    "casedrt|fasdfwgwergqa": 1,
+    "asdfaewsrawe|aseewd": 1,
+    "asdsrwaer|aseewd": 1,
+    "aseewd|qawerwet": 1,
+    "aseewd|fasdfwgwergqa": 1,
+    "asdfaewsrawe|asdsrwaer": 1,
+    "asdfaewsrawe|qawerwet": 1,
+    "asdfaewsrawe|fasdfwgwergqa": 1,
+    "asdsrwaer|qawerwet": 1,
+    "asdsrwaer|fasdfwgwergqa": 1,
+    "fasdfwgwergqa|qawerwet": 1,
+    "apsd done|vpsy_usb_plug": 7,
+    "predict|vpsy_usb_plug": 62,
+    "handshake success|vpsy_usb_plug": 62,
+    "apsd done|predict": 7,
+    "apsd done|handshake success": 7,
+    "handshake success|predict": 69,
+    "battery_update: s|vpsy_usb_plug:": 71,
+    "charge_check:|vpsy_usb_plug:": 3,
+    "handshake success|vpsy_usb_plug:": 66,
+    "battery_update: s|handshake success": 59,
+    "predict|vpsy_usb_plug:": 66,
+    "battery_update: s|predict": 59,
+    "apsd done|vpsy_usb_plug:": 4,
+    "vpsy_usb_plug|vpsy_usb_plug:": 59,
+    "apsd done|battery_update: s": 2,
+    "battery_update: s|vpsy_usb_plug": 55,
+    "battery_update: s|charge_check_lixiang_l7_epp_cur": 14,
+    "IBUS =|charge_check_lixiang_l7_epp_cur": 8,
+    "IBUS =|battery_update: s": 10,
+    "charge_check_lixiang_l7_epp_cur|charge_icl_vote_callback": 10,
+    "battery_update: s|charge_icl_vote_callback": 8,
+    "IBUS =|charge_icl_vote_callback": 6,
+    "charge_check_lixiang_l7_epp_cur|vpsy_usb_plug:": 8,
+    "IBUS =|vpsy_usb_plug:": 4,
+    "charge_icl_vote_callback|vpsy_usb_plug:": 4,
+    "battery_resistor_detect|battery_update: s": 4,
+    "battery_resistor_detect|vfcs_fchg_disable_vote_callback": 4,
+    "battery_update: s|vfcs_fchg_disable_vote_callback": 4,
+    "battery_resistor_detect|exception-state": 2,
+    "battery_update: s|exception-state": 2,
+    "exception-state|vfcs_fchg_disable_vote_callback": 2,
+    "comm-exception-state|exception-state": 4,
+    "exception-state|vfcs_sc8550v_check_i2c_exception": 2,
+    "comm-exception-state|vfcs_sc8550v_check_i2c_exception": 18,
+    "comm-exception-state|vfcs_fchg_get": 2,
+    "vfcs_fchg_get|vfcs_sc8550v_check_i2c_exception": 2,
+    "comm-exception-state|vfcs_fchg_dev_check_comm_excep_state": 12,
+    "vfcs_fchg_dev_check_comm_excep_state|vfcs_sc8550v_check_i2c_exception": 12,
+    "comm-exception-state|vfcs_sc8550v_fchg_dev_init": 10,
+    "vfcs_sc8550v_check_i2c_exception|vfcs_sc8550v_fchg_dev_init": 10,
+    "vfcs_fchg_dev_check_comm_excep_state|vfcs_sc8550v_fchg_dev_init": 10,
+    "comm-exception-state|vfcs_cp_i2c_probe": 8,
+    "vfcs_cp_i2c_probe|vfcs_sc8550v_check_i2c_exception": 8,
+    "vfcs_cp_i2c_probe|vfcs_fchg_dev_check_comm_excep_state": 8,
+    "vfcs_cp_i2c_probe|vfcs_sc8550v_fchg_dev_init": 8,
+    "comm-exception-state|vfcs_cp_probe": 6,
+    "vfcs_cp_probe|vfcs_sc8550v_check_i2c_exception": 6,
+    "vfcs_cp_probe|vfcs_fchg_dev_check_comm_excep_state": 6,
+    "vfcs_cp_probe|vfcs_sc8550v_fchg_dev_init": 6,
+    "vfcs_cp_i2c_probe|vfcs_cp_probe": 6,
+    "comm-exception-state|vfcs_cp_check_device_id": 4,
+    "vfcs_cp_check_device_id|vfcs_sc8550v_check_i2c_exception": 4,
+    "vfcs_cp_check_device_id|vfcs_fchg_dev_check_comm_excep_state": 4,
+    "vfcs_cp_check_device_id|vfcs_sc8550v_fchg_dev_init": 4,
+    "vfcs_cp_check_device_id|vfcs_cp_i2c_probe": 4,
+    "vfcs_cp_check_device_id|vfcs_cp_probe": 4,
+    "comm-exception-state|sc8550v": 2,
+    "sc8550v|vfcs_sc8550v_check_i2c_exception": 2,
+    "sc8550v|vfcs_fchg_dev_check_comm_excep_state": 2,
+    "sc8550v|vfcs_sc8550v_fchg_dev_init": 2,
+    "sc8550v|vfcs_cp_i2c_probe": 2,
+    "sc8550v|vfcs_cp_probe": 2,
+    "sc8550v|vfcs_cp_check_device_id": 2,
+    "FOLD_INTELL|battery_update: s": 28,
+    "FOLD_INTELL|vpsy_usb_plug:": 26,
+    "FOLD_INTELL|handshake success": 24,
+    "FOLD_INTELL|predict": 24,
+    "FOLD_INTELL|vpsy_usb_plug": 24,
+    "battery_update: s|votable name:DCHG_FCC": 4,
+    "votable name:DCHG_FCC|vpsy_usb_plug:": 4,
+    "handshake success|votable name:DCHG_FCC": 4,
+    "predict|votable name:DCHG_FCC": 4,
+    "votable name:DCHG_FCC|vpsy_usb_plug": 4,
+    "FOLD_INTELL|votable name:DCHG_FCC": 4,
+    "battery_update: s|votable name:USER_IBAT": 2,
+    "votable name:USER_IBAT|vpsy_usb_plug:": 2,
+    "handshake success|votable name:USER_IBAT": 2,
+    "predict|votable name:USER_IBAT": 2,
+    "votable name:USER_IBAT|vpsy_usb_plug": 2,
+    "FOLD_INTELL|votable name:USER_IBAT": 2,
+    "votable name:DCHG_FCC|votable name:USER_IBAT": 2,
+    "battery_update: s|fg_refresh_status": 4,
+    "fg_refresh_status|vpsy_usb_plug:": 4,
+    "fg_refresh_status|handshake success": 2,
+    "fg_refresh_status|predict": 2,
+    "fg_refresh_status|vpsy_usb_plug": 2,
+    "FOLD_INTELL|fg_refresh_status": 4,
+    "SOC_ACTION:|calcPredictTime: predict": 3,
+    "calcPredictTime: predict|chargeStatus\":18": 3,
+    "SOC_ACTION:|chargeStatus\":18": 3,
+    "battery_update: s|charge_lixiang_l7_epp_work_func": 5,
+    "charge_lixiang_l7_epp_work_func|vpsy_usb_plug:": 5,
+    "charge_check_lixiang_l7_epp_cur|charge_lixiang_l7_epp_work_func": 8,
+    "charge_icl_vote_callback|charge_lixiang_l7_epp_work_func": 4,
+    "charge_check_lixiang_l7_epp_cur|vpsy_usb_plug": 4,
+    "charge_lixiang_l7_epp_work_func|vpsy_usb_plug": 4,
+    "charge_icl_vote_callback|vpsy_usb_plug": 2,
+    "FOLD_INTELL|IBUS =": 2,
+    "FOLD_INTELL|battery l": 2,
+    "battery l|vpsy_usb_plug:": 2,
+    "IBUS =|battery l": 2,
+    "IBUS =|fg_refresh_status": 2,
+    "battery l|fg_refresh_status": 2
+  },
+  "timestamp": 1777039570581
+}

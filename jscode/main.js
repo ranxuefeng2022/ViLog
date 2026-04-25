@@ -945,21 +945,27 @@ function detectPythonCommand() {
   }
 
   const pythonCommands = ['python3', 'python', 'python3.exe', 'python.exe'];
-  const { execSync } = require('child_process');
 
-  for (const cmd of pythonCommands) {
-    try {
-      execSync(`${cmd} --version`, { stdio: 'ignore', timeout: 2000 });
-      cachedPythonCommand = cmd;
-      console.log(`✓ 检测到Python命令: ${cachedPythonCommand}`);
-      return cachedPythonCommand;
-    } catch (e) {
-      continue;
+  // 🚀 异步检测，不阻塞主进程
+  const { exec } = require('child_process');
+  let index = 0;
+
+  function tryNext() {
+    if (index >= pythonCommands.length) {
+      console.warn('⚠️ 未找到Python命令，UTC转换功能可能不可用');
+      return;
     }
+    const cmd = pythonCommands[index++];
+    exec(`${cmd} --version`, { timeout: 2000 }, (err) => {
+      if (!err) {
+        cachedPythonCommand = cmd;
+        console.log(`✓ 检测到Python命令: ${cachedPythonCommand}`);
+      } else {
+        tryNext();
+      }
+    });
   }
-
-  console.warn('⚠️ 未找到Python命令，UTC转换功能可能不可用');
-  return null;
+  tryNext();
 }
 
 // 启动 Windows 服务端进程
@@ -1123,18 +1129,7 @@ function createWindow(options = {}) {
 
   // 监听来自渲染进程的消息
   win.webContents.on('did-finish-load', () => {
-    console.log('页面加载完成，开始检查 electronAPI...');
-    // 延迟检查，给 preload 脚本一些时间
-    setTimeout(() => {
-      win.webContents.executeJavaScript('typeof window.electronAPI')
-        .then(result => {
-          console.log('渲染进程中的 electronAPI 类型:', result);
-        })
-        .catch(err => {
-          console.error('检查 electronAPI 时出错:', err);
-        });
-    }, 100);
-
+    console.log('页面加载完成');
     // 设置 IPC 通信
     setupIPCForWindow(win);
     // 发送窗口ID到渲染进程
@@ -1985,6 +1980,41 @@ ipcMain.handle('open-terminal', async (event, dirPath) => {
       success: false,
       error: `打开终端失败: ${error.message}`
     };
+  }
+});
+
+// ===== 关键词持久化存储（mem/filter-keywords.json） =====
+const memDir = path.join(__dirname, 'mem');
+const keywordFilePath = path.join(memDir, 'filter-keywords.json');
+
+// 确保 mem 目录存在
+if (!fs.existsSync(memDir)) {
+  try { fs.mkdirSync(memDir, { recursive: true }); } catch(e) { console.warn('创建 mem 目录失败:', e); }
+}
+
+// 读取关键词文件
+ipcMain.handle('read-keyword-file', async () => {
+  try {
+    const data = await fs.promises.readFile(keywordFilePath, 'utf-8');
+    return { success: true, data: JSON.parse(data) };
+  } catch (e) {
+    // 文件不存在或解析失败，返回空
+    return { success: true, data: null };
+  }
+});
+
+// 写入关键词文件
+ipcMain.handle('write-keyword-file', async (event, data) => {
+  try {
+    // 再次确保目录存在
+    if (!fs.existsSync(memDir)) {
+      fs.mkdirSync(memDir, { recursive: true });
+    }
+    await fs.promises.writeFile(keywordFilePath, JSON.stringify(data, null, 2), 'utf-8');
+    return { success: true };
+  } catch (e) {
+    console.error('写入关键词文件失败:', e);
+    return { success: false, error: e.message };
   }
 });
 

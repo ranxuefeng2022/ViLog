@@ -635,6 +635,7 @@
         box-shadow: none;
       }
       #filterBox {
+        display: none;
         flex: 1;
         min-width: 160px;
         max-width: 500px;
@@ -742,6 +743,7 @@
 
       /* 更新工具按钮 */
       #updateCodeBtn {
+        display: none;
         background: #0071e3;
         font-weight: 500;
       }
@@ -751,6 +753,7 @@
 
       /* 展开过滤按钮 */
       #expandFilterBtn {
+        display: none;
         background: #0071e3;
         color: white;
         padding: 0 6px;
@@ -2681,7 +2684,7 @@
         background: rgba(0, 113, 227, 0.55);
         cursor: pointer;
         z-index: 820;
-        display: flex;
+        display: none;
         align-items: center;
         justify-content: center;
         font-size: 0;
@@ -4037,20 +4040,29 @@
 
       /* 过滤历史关键词提示框样式 - 简约版 */
       .filter-history-suggestions {
-        position: absolute;
-        bottom: 100%;
-        left: 0;
-        right: 0;
+        position: relative;
         background: #f5f5f7;
         border-radius: 6px;
-        z-index: 1000;
-        max-height: 400px;
-        overflow-x: auto;
-        overflow-y: auto;
-        text-align: center;  /* 居中对齐 */
+        text-align: left;
         margin-bottom: 4px;
         animation: slideUp 0.15s ease-out;
         padding: 4px;
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+      }
+
+      .filter-history-suggestions.hidden {
+        display: none;
+      }
+
+      .filter-history-list-scroll {
+        flex: 1;
+        overflow-y: auto;
+        overflow-x: auto;
+        min-height: 0;
       }
 
       @keyframes slideUp {
@@ -4064,23 +4076,23 @@
         }
       }
 
-      /* 自定义滚动条 - 纵向滚动条 */
-      .filter-history-suggestions::-webkit-scrollbar {
+      /* 自定义滚动条 */
+      .filter-history-list-scroll::-webkit-scrollbar {
         width: 6px;
         height: 6px;
       }
 
-      .filter-history-suggestions::-webkit-scrollbar-track {
+      .filter-history-list-scroll::-webkit-scrollbar-track {
         background: rgba(0, 0, 0, 0.04);
         border-radius: 3px;
       }
 
-      .filter-history-suggestions::-webkit-scrollbar-thumb {
+      .filter-history-list-scroll::-webkit-scrollbar-thumb {
         background: rgba(0, 0, 0, 0.2);
         border-radius: 3px;
       }
 
-      .filter-history-suggestions::-webkit-scrollbar-thumb:hover {
+      .filter-history-list-scroll::-webkit-scrollbar-thumb:hover {
         background: rgba(0, 0, 0, 0.3);
       }
 
@@ -4088,15 +4100,81 @@
         display: none;
       }
 
+      .filter-history-search-input {
+        flex: 1;
+        padding: 6px 8px;
+        border: none;
+        border-radius: 0;
+        background: transparent;
+        font-size: 12px;
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        color: #1d1d1f;
+        outline: none;
+        box-sizing: border-box;
+        text-align: center;
+      }
+
+      .filter-history-search-input::placeholder {
+        color: rgba(0, 0, 0, 0.3);
+      }
+
+      .filter-history-search-input:focus {
+        background: transparent;
+        box-shadow: none;
+      }
+
+      /* 上下布局：chip 区域在上，搜索框在下 */
+      .filter-dialog-input-area {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+        background: #f5f5f7;
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        border-radius: 8px;
+        overflow: hidden;
+      }
+
+      .filter-dialog-input-area:focus-within {
+        background: #ffffff;
+        border-color: rgba(0, 113, 227, 0.3);
+      }
+
+      .filter-dialog-search-row {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 4px;
+        border-top: 1px solid rgba(0, 0, 0, 0.06);
+      }
+
+      .filter-dialog-input-area .filter-history-search-input {
+        background: transparent;
+        border-radius: 0;
+      }
+
+      .filter-dialog-input-area .filter-history-search-input:focus {
+        box-shadow: none;
+        background: transparent;
+      }
+
+      .filter-dialog-input-area #filterDialogTextarea {
+        flex: 1;
+      }
+
       .filter-history-item {
-        padding: 8px 10px;
+        padding: 6px 10px;
         border-bottom: none;
         cursor: pointer;
         transition: all 0.15s ease;
         background: #ffffff;
         border-radius: 4px;
         margin-bottom: 2px;
-        text-align: center;  /* 居中对齐 */
+        text-align: center;
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
 
       .filter-history-item:hover {
@@ -4107,22 +4185,307 @@
         background: rgba(0, 113, 227, 0.15);
       }
 
+      /* 功能5：多选状态 */
+      .filter-history-item.multi-selected {
+        background: rgba(0, 113, 227, 0.2);
+        outline: 1px solid rgba(0, 113, 227, 0.4);
+      }
+
+      .filter-history-item.multi-selected.drag-remove {
+        background: rgba(255, 59, 48, 0.15);
+        outline: 1px solid rgba(255, 59, 48, 0.4);
+      }
+
+      /* 已存在于 textarea 的关键词 — 选中态样式 */
+      .filter-history-item.in-textarea {
+        background: rgba(52, 199, 89, 0.12);
+        border: 1px solid rgba(52, 199, 89, 0.35);
+      }
+
+      /* 数字快捷键提示 */
+      .filter-history-item .keyword-shortcut {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 16px;
+        height: 16px;
+        margin-right: 6px;
+        border-radius: 3px;
+        background: rgba(0, 0, 0, 0.06);
+        color: #86868b;
+        font-size: 10px;
+        font-family: -apple-system, 'Helvetica Neue', sans-serif;
+        font-weight: 500;
+        flex-shrink: 0;
+        padding: 0 3px;
+      }
+
+      .filter-history-item:hover .keyword-shortcut {
+        background: rgba(0, 113, 227, 0.15);
+        color: #0071e3;
+      }
+
+      .filter-history-item.in-textarea .keyword-shortcut {
+        background: rgba(52, 199, 89, 0.2);
+        color: #34c759;
+      }
+
+      /* 选中状态下隐藏删除按钮 */
+      .filter-history-item.in-textarea .keyword-delete-btn {
+        display: none !important;
+      }
+
       .filter-history-item:last-child {
         border-bottom: none;
       }
 
-      .filter-history-item .keyword {
+      /* 删除按钮 */
+      .filter-history-item .keyword-delete-btn {
+        display: none;
+        position: absolute;
+        right: 4px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: rgba(255, 59, 48, 0.1);
+        color: #ff3b30;
+        font-size: 12px;
+        line-height: 18px;
+        text-align: center;
+        cursor: pointer;
+        border: none;
+        padding: 0;
+        flex-shrink: 0;
+      }
+
+      .filter-history-item:hover .keyword-delete-btn {
         display: block;
-        margin-bottom: 2px;
+      }
+
+      .filter-history-item .keyword-delete-btn:hover {
+        background: rgba(255, 59, 48, 0.25);
+      }
+
+      .filter-history-item .keyword {
+        flex: 1;
+        min-width: 0;
+        margin-bottom: 0;
         font-size: 12px;
         color: #1d1d1f;
         font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        white-space: normal;
+        word-break: break-all;
+      }
+
+      /* 功能2：匹配高亮 */
+      .match-highlight {
+        background: rgba(255, 204, 0, 0.35);
+        color: #1d1d1f;
+        border-radius: 2px;
+        padding: 0 1px;
+      }
+
+      /* ========== Chip 标签化显示 ========== */
+
+      #filterDialogHeader {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        height: 28px;
+        min-height: 28px;
+        margin-bottom: 0;
+        padding: 0 4px;
+        border-bottom: none;
+      }
+
+      #filterDialogHeader h3 {
+        display: none;
+      }
+
+      #closeFilterDialog {
+        background: transparent;
+        border: none;
+        font-size: 20px;
+        cursor: pointer;
+        color: #6e6e73;
+        width: 24px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease;
+        line-height: 1;
+        padding: 0;
+      }
+
+      #closeFilterDialog:hover {
+        color: #1d1d1f;
+        background: rgba(0, 0, 0, 0.05);
+        border-radius: 4px;
+      }
+
+      #filterChipBar {
+        display: none;
+        position: relative;
+        background: rgba(255, 255, 255, 0.18);
+        backdrop-filter: blur(24px) saturate(1.8);
+        -webkit-backdrop-filter: blur(24px) saturate(1.8);
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        border-radius: 16px;
+        padding: 0;
+        max-width: 95%;
+        animation: chipBarFloat 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        overflow: visible;
+      }
+
+      #filterChipBar.visible {
+        display: block;
+      }
+
+      @keyframes chipBarFloat {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+
+      .filter-chip-container {
+        display: flex;
+        flex-wrap: wrap-reverse;
+        gap: 6px;
+        padding: 8px 14px;
+        align-items: center;
+        align-content: center;
+        justify-content: center;
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+      }
+
+      .filter-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 5px 14px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 500;
+        line-height: 1.4;
+        max-width: 400px;
         white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        transition: all 0.15s;
+        animation: chipFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        cursor: pointer;
+      }
+
+      .filter-chip:hover {
+        filter: brightness(0.85);
+        transform: scale(0.95);
+      }
+
+      /* 气泡戳破动画 */
+      .filter-chip.chip-popping {
+        animation: chipPop 0.2s ease-out forwards;
+        pointer-events: none;
+      }
+
+      @keyframes chipPop {
+        0% { transform: scale(1); opacity: 1; }
+        30% { transform: scale(1.15); opacity: 0.9; }
+        100% { transform: scale(0); opacity: 0; }
+      }
+
+      .chip-pop-particle {
+        position: fixed;
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 10000;
+        animation: particleBurst 0.35s ease-out forwards;
+      }
+
+      @keyframes particleBurst {
+        0% {
+          transform: translate(-50%, -50%) scale(1);
+          opacity: 1;
+        }
+        100% {
+          transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0);
+          opacity: 0;
+        }
+      }
+
+      @keyframes chipFadeIn {
+        from { opacity: 0; transform: scale(0.8) translateY(4px); }
+        to { opacity: 1; transform: scale(1) translateY(0); }
+      }
+
+      .filter-chip.positive {
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        color: #fff;
+        border: none;
+        box-shadow: 0 2px 8px rgba(79, 172, 254, 0.4);
+      }
+
+      .filter-chip.negative {
+        background: linear-gradient(135deg, #f5576c 0%, #ff6a88 100%);
+        color: #fff;
+        border: none;
+        box-shadow: 0 2px 8px rgba(245, 87, 108, 0.4);
+      }
+
+      .filter-chip .chip-text {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
+      }
+
+      .chip-clear-all {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: rgba(255, 59, 48, 0.08);
+        color: #ff3b30;
+        font-size: 10px;
+        line-height: 1;
+        cursor: pointer;
+        flex-shrink: 0;
+        transition: background 0.15s;
+      }
+
+      .chip-clear-all:hover {
+        background: rgba(255, 59, 48, 0.25);
+      }
+
+      /* ========== 正则模式切换 ========== */
+
+      .regex-mode-toggle {
+        background: transparent;
+        border: 1px solid rgba(0, 0, 0, 0.12);
+        border-radius: 4px;
+        padding: 4px 7px;
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        font-size: 11px;
+        color: #86868b;
+        cursor: pointer;
+        transition: all 0.15s;
+        flex-shrink: 0;
+        line-height: 1.4;
+      }
+
+      .regex-mode-toggle.active {
+        background: rgba(0, 113, 227, 0.1);
+        border-color: rgba(0, 113, 227, 0.3);
+        color: #0071e3;
+      }
+
+      .regex-mode-toggle:hover {
+        border-color: rgba(0, 0, 0, 0.2);
       }
 
       .filter-history-item .count {
-        font-size: 10px;
-        color: #8e8e93;
       }
 
       /* 展开的过滤输入框对话框样式 - 简约版 */
@@ -4136,11 +4499,12 @@
         background: rgba(0, 0, 0, 0.5);
         backdrop-filter: blur(4px);
         -webkit-backdrop-filter: blur(4px);
-        /* 🚀 修复：提高z-index，确保在二级过滤面板之上（二级过滤面板z-index: 10002） */
         z-index: 10003;
-        align-items: flex-end;
-        justify-content: center;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-end;
         padding-bottom: 20px;
+        gap: 10px;
       }
 
       #filterDialog.visible {
@@ -4169,6 +4533,7 @@
         transform: translateY(0);
         opacity: 1;
         transition: transform 0.2s ease-out, opacity 0.2s ease-out;
+        overflow: hidden;
       }
 
       /* 当对话框显示时，内容从底部滑入 */
@@ -4187,67 +4552,29 @@
         }
       }
 
-      #filterDialogHeader {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 12px;
-        padding-bottom: 10px;
-        border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-      }
-
-      #filterDialogHeader h3 {
-        margin: 0;
-        font-size: 16px;
-        font-weight: 600;
-        color: #1d1d1f;
-      }
-
-      #closeFilterDialog {
-        background: transparent;
-        border: none;
-        font-size: 20px;
-        cursor: pointer;
-        color: #6e6e73;
-        width: 24px;
-        height: 24px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: all 0.2s ease;
-        line-height: 1;
-        padding: 0;
-      }
-
-      #closeFilterDialog:hover {
-        color: #1d1d1f;
-        background: rgba(0, 0, 0, 0.05);
-        border-radius: 4px;
-      }
-
       #filterDialogTextarea {
         width: 100%;
         min-height: 40px;
         max-height: 120px;
         padding: 10px 12px;
         border: none;
-        border-radius: 6px;
+        border-radius: 0;
         font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
         font-size: 13px;
         resize: none;
         box-sizing: border-box;
-        background: #f5f5f7;
+        background: transparent;
         transition: all 0.2s ease;
         line-height: 1.5;
         overflow-y: auto;
         flex-shrink: 0;
-        text-align: center; /* 🚀 输入文本居中显示 */
+        text-align: left;
       }
 
       #filterDialogTextarea:focus {
         outline: none;
-        background: #ffffff;
-        box-shadow: 0 0 0 1px rgba(0, 113, 227, 0.3);
+        background: transparent;
+        box-shadow: none;
       }
 
       #filterDialogTextarea::placeholder {
@@ -4266,32 +4593,6 @@
 
       #filterDialogKeywords strong {
         color: #0071e3;
-      }
-
-      /* 包含历史提示框和输入框的容器 */
-      #filterDialogContent > div[style*="position: relative"] {
-        position: relative;
-        display: flex;
-        flex-direction: column;
-        flex-grow: 1;
-        min-height: 0;
-      }
-
-      /* 🚀 显示标题栏（仅按钮区域，紧凑布局） */
-      #filterDialogHeader {
-        display: flex;
-        justify-content: flex-end; /* 按钮靠右 */
-        align-items: center;
-        height: 28px; /* 🚀 紧凑高度，刚好容纳按钮 */
-        min-height: 28px;
-        margin-bottom: 0;
-        padding: 0 4px;
-        border-bottom: none;
-      }
-
-      /* 隐藏标题文字，只保留关闭按钮 */
-      #filterDialogHeader h3 {
-        display: none;
       }
 
       /* 隐藏当前过滤关键词显示 */

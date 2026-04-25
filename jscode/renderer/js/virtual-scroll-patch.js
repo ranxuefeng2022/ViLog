@@ -526,12 +526,12 @@ function updateVisibleLines() {
   }
 
   // 🚀 渲染前更新高亮状态（如果状态变化会清除缓存）
-  // 🔧 修复：主日志框不应该使用过滤关键词高亮，只传递搜索关键词和自定义高亮
-  highlightCache.updateState(searchKeyword, customHighlights, []);
+  // 🔧 修复：主日志框不使用 customHighlights（自定义高亮仅限过滤面板）
+  highlightCache.updateState(searchKeyword, [], []);
 
   // 渲染可见行
   const hasSearchKeyword = !!searchKeyword;
-  const hasCustomHighlights = customHighlights.length > 0;
+  const hasCustomHighlights = false; // 主日志框不应用自定义高亮
   const currentMatchLine = totalMatchCount > 0 ? searchMatches[currentMatchIndex] : -1;
 
   const fragment = document.createDocumentFragment();

@@ -49,8 +49,28 @@ window.App = window.App || {};
   /**
    * 应用初始化（在所有脚本加载完成后执行）
    */
-  function initApp() {
+  async function initApp() {
     console.log('[App] Initializing modules...');
+
+    // 0. 初始化 IndexedDB（必须在 FilterKeywordHistory 之前）
+    if (window.App.IDB && window.App.IDB.init) {
+      try {
+        await window.App.IDB.init();
+        console.log('[App] IDB initialized');
+      } catch (e) {
+        console.warn('[App] IDB init failed, will use localStorage fallback:', e);
+      }
+    }
+
+    // 0.5 初始化过滤关键词历史模块（依赖 IDB，需要 await）
+    if (window.App.FilterKeywordHistory && window.App.FilterKeywordHistory.init) {
+      try {
+        await window.App.FilterKeywordHistory.init();
+        console.log('[App] FilterKeywordHistory initialized');
+      } catch (e) {
+        console.warn('[App] FilterKeywordHistory init failed:', e);
+      }
+    }
 
     // 1. 初始化 DOM 缓存
     if (window.App.DOM && window.App.DOM.init) {
