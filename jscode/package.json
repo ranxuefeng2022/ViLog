@@ -5,9 +5,14 @@
   "main": "main.js",
   "author": "LogView Team",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "postinstall": "electron-rebuild"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.0.4",
     "electron": "^33.0.0"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.9.0"
   }
 }

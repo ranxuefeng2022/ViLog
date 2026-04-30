@@ -169,28 +169,43 @@ window.App.VirtualScroll = {
   },
 
   /**
-   * 绑定滚动事件（带节流 + 快速滚动检测）
+   * 绑定滚动事件（带节流 + 基于滚动速度的缓冲区自适应）
+   *
+   * 使用滚动位移速度而非时间间隔来判断快速滚动，
+   * 兼容 60Hz/120Hz/144Hz 等各种刷新率显示器。
    */
   _bindScrollEvent: function() {
     let rafId = null;
+    let lastScrollTop = 0;
     let lastScrollTime = 0;
-    let originalBufferSize = this.config.bufferSize;
+    let lastLineSpeed = 0;
+    const originalBufferSize = this.config.bufferSize;
 
     this.scrollContainer.addEventListener('scroll', () => {
       const now = performance.now();
+      const currentScrollTop = this.scrollContainer.scrollTop;
 
-      // 检测快速滚动（滚动事件间隔 < 16ms）
-      const isFastScrolling = (now - lastScrollTime) < 16;
+      // 基于位移速度判断是否快速滚动（行/秒），而非固定时间间隔
+      const dt = now - lastScrollTime;
+      const dy = Math.abs(currentScrollTop - lastScrollTop);
+      const lineSpeed = dt > 0 ? (dy / this.config.lineHeight) / (dt / 1000) : 0;
+
+      // 指数移动平均平滑速度，减少抖动
+      lastLineSpeed = lastLineSpeed * 0.7 + lineSpeed * 0.3;
+
+      lastScrollTop = currentScrollTop;
       lastScrollTime = now;
 
       if (rafId) return;
 
       rafId = requestAnimationFrame(() => {
-        // 快速滚动时临时扩大缓冲区，减少白屏
-        if (isFastScrolling) {
-          this.config.bufferSize = Math.min(400, this.config.bufferSize * 1.5);
+        // 速度 > 200 行/秒视为快速滚动，临时扩大缓冲区
+        // 速度 > 800 行/秒视为极快滚动，最大化缓冲区
+        if (lastLineSpeed > 800) {
+          this.config.bufferSize = Math.min(500, Math.ceil(originalBufferSize * 2));
+        } else if (lastLineSpeed > 200) {
+          this.config.bufferSize = Math.min(400, Math.ceil(originalBufferSize * 1.5));
         } else {
-          // 恢复原始缓冲区大小
           this.config.bufferSize = originalBufferSize;
         }
         this._updateVisibleRange();
@@ -222,6 +237,23 @@ window.App.VirtualScroll = {
    */
   _updateVisibleRange: function() {
     if (this.state.totalLines === 0) return;
+
+    // 🚀 当 DOMPool 活跃时，跳过元素回收（避免与 DOMPool 争抢 DOM）
+    // DOMPool 通过 acquire/release 管理自己的池子，VirtualScroll 不再重复管理
+    if (window.domPool) {
+      // 仅跟踪可见范围（供 buffer 优化使用），不做 DOM 操作
+      const scrollTop = this.scrollContainer.scrollTop;
+      const clientHeight = this.scrollContainer.clientHeight;
+      const buffer = this.config.bufferSize;
+      const newStart = Math.max(0, Math.floor(scrollTop / this.config.lineHeight) - buffer);
+      const newEnd = Math.min(
+        this.state.totalLines - 1,
+        Math.ceil((scrollTop + clientHeight) / this.config.lineHeight) + buffer
+      );
+      this.state.visibleStart = newStart;
+      this.state.visibleEnd = newEnd;
+      return;
+    }
 
     const scrollTop = this.scrollContainer.scrollTop;
     const clientHeight = this.scrollContainer.clientHeight;
@@ -398,9 +430,9 @@ window.App.VirtualScroll = {
    */
   setLineHeight: function(height) {
     this.config.lineHeight = height;
-    // 更新所有活跃元素的位置
+    // 更新所有活跃元素的位置（使用 transform 而非 top，利用 GPU 合成层）
     for (const [index, element] of this.activeElements) {
-      element.style.top = Math.floor(index * height) + 'px';
+      element.style.transform = `translateY(${Math.floor(index * height)}px)`;
     }
     // 更新占位符
     this._updatePlaceholderHeight();

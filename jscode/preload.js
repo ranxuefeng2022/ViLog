@@ -29,6 +29,8 @@ try {
     openFileWithDefaultApp: (filePath) => ipcRenderer.invoke('open-file-with-default-app', filePath),
     // 🔧 打开文件路径（在资源管理器中选中文件）
     openPath: (filePath) => ipcRenderer.invoke('open-path', filePath),
+    // 🗑️ 删除文件/文件夹（移至回收站）
+    deleteFile: (filePath) => ipcRenderer.invoke('delete-file', filePath),
     // 🔧 用指定程序打开文件
     openWithApp: (appPath, filePath) => ipcRenderer.invoke('open-with-app', appPath, filePath),
     // 打开 WezTerm 终端
@@ -79,6 +81,8 @@ try {
     streamExtractFromArchive: (archivePath, filePaths) => ipcRenderer.invoke('stream-extract-from-archive', archivePath, filePaths),
     // 🚀 解压压缩包到指定目录
     extractArchive: (archivePath, targetPath) => ipcRenderer.invoke('extract-archive', archivePath, targetPath),
+    // 🚀 解压压缩包到指定目录（带进度报告）
+    extractArchiveWithProgress: (archivePath, targetPath) => ipcRenderer.invoke('extract-archive-progress', archivePath, targetPath),
     // 🚀 临时目录管理 - 用于文件树选中时的自动解压
     createTempExtractDir: () => ipcRenderer.invoke('create-temp-extract-dir'),
     clearTempExtractDir: () => ipcRenderer.invoke('clear-temp-extract-dir'),
@@ -122,14 +126,14 @@ try {
     // 监听主进程发送的消息
     on: (channel, callback) => {
       // 白名单机制，只允许特定的频道
-      const validChannels = ['import-file-from-taskbar', 'uart-log-data', 'directory-changed', 'archive-file-extracted'];
+      const validChannels = ['import-file-from-taskbar', 'uart-log-data', 'directory-changed', 'archive-file-extracted', 'keyword-changed', 'extract-progress'];
       if (validChannels.includes(channel)) {
         ipcRenderer.on(channel, (event, ...args) => callback(...args));
       }
     },
     // 移除监听器
     removeListener: (channel, callback) => {
-      const validChannels = ['import-file-from-taskbar', 'uart-log-data', 'directory-changed', 'archive-file-extracted'];
+      const validChannels = ['import-file-from-taskbar', 'uart-log-data', 'directory-changed', 'archive-file-extracted', 'keyword-changed', 'extract-progress'];
       if (validChannels.includes(channel)) {
         ipcRenderer.removeListener(channel, callback);
       }
@@ -154,9 +158,23 @@ try {
     updateCode: (options) => ipcRenderer.invoke('update-code', options),
     // 检查更新服务器状态
     checkUpdateServer: (options) => ipcRenderer.invoke('check-update-server', options),
-    // 关键词持久化存储（mem/filter-keywords.json）
-    readKeywordFile: () => ipcRenderer.invoke('read-keyword-file'),
-    writeKeywordFile: (data) => ipcRenderer.invoke('write-keyword-file', data)
+    // 关键词持久化存储（SQLite）
+    keywordLoadAll: () => ipcRenderer.invoke('keyword-load-all'),
+    keywordUpsertBatch: (kws) => ipcRenderer.invoke('keyword-upsert-batch', kws),
+    keywordDelete: (text) => ipcRenderer.invoke('keyword-delete', text),
+    keywordTrim: (keepTexts) => ipcRenderer.invoke('keyword-trim', keepTexts),
+    keywordBroadcast: (action, data) => ipcRenderer.invoke('keyword-broadcast', action, data),
+    // 马尔可夫转移
+    keywordSaveTransitions: (data) => ipcRenderer.invoke('keyword-save-transitions', data),
+    keywordGetTransitions: (fromKw) => ipcRenderer.invoke('keyword-get-transitions', fromKw),
+    // SQL 端搜索
+    keywordSearch: (options) => ipcRenderer.invoke('keyword-search', options),
+    // fzf 模糊搜索
+    keywordSearchFzf: (options) => ipcRenderer.invoke('keyword-search-fzf', options),
+    // 关键词组合历史
+    keywordSaveCombo: (combo) => ipcRenderer.invoke('keyword-save-combo', combo),
+    keywordLoadCombos: () => ipcRenderer.invoke('keyword-load-combos'),
+    keywordDeleteCombo: (comboHash) => ipcRenderer.invoke('keyword-delete-combo', comboHash)
   });
   console.log('electronAPI 已成功暴露到 window 对象');
 } catch (error) {

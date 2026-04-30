@@ -31,13 +31,16 @@ class LogIndexer {
       fullText: new Map(),
       // 关键词索引：keyword -> Uint32Array(lineNumbers)
       keywords: new Map(),
-      // 日志级别索引：level -> Uint32Array(lineNumbers)
+      // 日志级别索引：level -> Uint32Array (固定数组，内存仅为普通数组的 ~1/4)
       logLevels: new Map(),
       // 时间范围索引：timestamp -> {start, end}
       timeRanges: [],
       // 行内容缓存（用于快速访问）
       lineCache: new Map(),
     };
+
+    // 构建阶段使用的临时数组，完成后转为 Uint32Array
+    this._logLevelBuilders = new Map();
 
     // 构建状态
     this.state = {
@@ -121,6 +124,9 @@ class LogIndexer {
       this.state.isBuilding = false;
       this.state.lastBuildTime = performance.now() - startTime;
 
+      // 冻结日志级别索引为 Uint32Array（内存减少 ~75%）
+      this._finalizeLogLevels();
+
       // 触发完成回调
       if (this.callbacks.onComplete) {
         this.callbacks.onComplete({
@@ -152,6 +158,9 @@ class LogIndexer {
   async appendLines(newLines, startLine) {
     await this._processBatch(newLines, startLine);
     this.state.totalLines += newLines.length;
+
+    // 增量追加后重新冻结
+    this._finalizeLogLevels();
 
     if (this.options.enablePersistence) {
       await this._persistIndex();
@@ -209,22 +218,33 @@ class LogIndexer {
   }
 
   /**
-   * 日志级别索引
+   * 日志级别索引：构建阶段使用可变数组，完成后转为 Uint32Array
    * @private
    */
   _indexLogLevel(line, lineNumber) {
-    // 匹配常见日志级别
     const levelMatch = line.match(/\b(ERROR|WARN|WARNING|INFO|DEBUG|TRACE|FATAL|CRITICAL)\b/i);
 
     if (levelMatch) {
       const level = levelMatch[1].toUpperCase();
 
-      if (!this.indices.logLevels.has(level)) {
-        this.indices.logLevels.set(level, []);
+      if (!this._logLevelBuilders.has(level)) {
+        this._logLevelBuilders.set(level, []);
       }
 
-      this.indices.logLevels.get(level).push(lineNumber);
+      this._logLevelBuilders.get(level).push(lineNumber);
     }
+  }
+
+  /**
+   * 将日志级别构建数组转为 Uint32Array（冻结索引）
+   * 内存在转换后减少约 75%
+   * @private
+   */
+  _finalizeLogLevels() {
+    for (const [level, arr] of this._logLevelBuilders.entries()) {
+      this.indices.logLevels.set(level, new Uint32Array(arr));
+    }
+    this._logLevelBuilders.clear();
   }
 
   /**
@@ -349,7 +369,7 @@ class LogIndexer {
     const startTime = performance.now();
 
     const upperLevel = level.toUpperCase();
-    const results = this.indices.logLevels.get(upperLevel) || [];
+    const results = this.indices.logLevels.get(upperLevel) || new Uint32Array(0);
 
     const filterTime = performance.now() - startTime;
     this.stats.totalFilters++;
@@ -443,6 +463,7 @@ class LogIndexer {
     this.indices.fullText.clear();
     this.indices.keywords.clear();
     this.indices.logLevels.clear();
+    this._logLevelBuilders.clear();
     this.indices.timeRanges = [];
     this.indices.lineCache.clear();
 
@@ -484,13 +505,16 @@ class LogIndexer {
           word,
           Array.from(lines),
         ]),
-        logLevels: Array.from(this.indices.logLevels.entries()),
+        // Uint32Array 转普通数组才能 JSON 序列化
+        logLevels: Array.from(this.indices.logLevels.entries()).map(([level, arr]) => [
+          level,
+          Array.from(arr),
+        ]),
         timeRanges: this.indices.timeRanges,
         totalLines: this.state.totalLines,
         buildTime: this.state.lastBuildTime,
       };
 
-      // 存储到 localStorage（简化版，生产环境建议用 IndexedDB）
       const key = this.options.storagePrefix + 'current';
       localStorage.setItem(key, JSON.stringify(serialized));
 
@@ -518,7 +542,10 @@ class LogIndexer {
       this.indices.fullText = new Map(
         serialized.fullText.map(([word, lines]) => [word, new Set(lines)])
       );
-      this.indices.logLevels = new Map(serialized.logLevels);
+      // 日志级别索引：反序列化为 Uint32Array
+      this.indices.logLevels = new Map(
+        serialized.logLevels.map(([level, arr]) => [level, new Uint32Array(arr)])
+      );
       this.indices.timeRanges = serialized.timeRanges;
 
       this.state.totalLines = serialized.totalLines;

@@ -63,9 +63,6 @@ async function applyFilter() {
   console.log('=== applyFilter called (sync + optimized) ===');
   console.log('Filter input:', filterText);
 
-  // 发送过滤关键词到服务端
-  sendFilterKeywordsToServer(filterText);
-
   if (filterText.trim() === "") {
     resetFilter();
     return;
@@ -215,8 +212,6 @@ async function applyFilterWithWorker() {
   const filterText = filterBox.value;
 
   console.log('=== applyFilterWithWorker called ===');
-
-  sendFilterKeywordsToServer(filterText);
 
   if (filterText.trim() === "") {
     resetFilter();
@@ -2024,9 +2019,6 @@ function overrideApplyFilterWithWorker() {
       // 数据不在内存，需要 ripgrep 从磁盘读取
       console.log(`[Filter] ✓ 数据不在内存，使用 ripgrep 过滤（${rgHeaders.length} 个文件）`);
 
-      if (typeof sendFilterKeywordsToServer === 'function') {
-        sendFilterKeywordsToServer(filterText);
-      }
       if (typeof addToFilterHistory === 'function') {
         addToFilterHistory(filterText);
       }
@@ -2047,8 +2039,6 @@ function overrideApplyFilterWithWorker() {
       reason = reasons.length > 0 ? reasons.join(', ') : '未知原因';
     }
     console.log(`[Filter] 使用 Worker 过滤（${reason}）`);
-
-    sendFilterKeywordsToServer(filterText);
 
     if (filterText.trim() === "") {
       resetFilter();

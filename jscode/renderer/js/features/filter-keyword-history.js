@@ -1,171 +1,264 @@
 /**
- * 过滤关键词历史模块 v2
+ * 过滤关键词历史模块 v3
+ * 唯一数据源：SQLite 数据库（mem/keywords.db）
+ *
  * 功能：
- * 1. 将过滤关键词保存到 JSON 文件（主）+ localStorage（备份）
- * 2. 关键词数据模型：{text, count, lastUsed} — 支持频率统计
- * 3. 过滤预设：保存/加载命名关键词组合
- * 4. 共现记录：记录关键词两两使用频率，支持智能推荐
- * 5. 客户端模糊匹配 + 正则匹配
- * 6. 自动迁移 v1（纯字符串数组）到 v2 格式
+ * 1. 关键词数据模型：{text, count, lastUsed} — 支持频率统计
+ * 2. 过滤预设：保存/加载命名关键词组合
+ * 3. 共现记录：记录关键词两两使用频率，支持智能推荐
+ * 4. 客户端模糊匹配 + 正则匹配
+ *
+ * v3 变更：
+ * - 存储从 JSON 全量读写改为 SQLite 增量操作
+ * - addKeyword/addKeywordsFromInput 只 upsert 变更的行
+ * - removeKeyword 只 delete 一行
+ * - 预设/共现变更时单独保存
  */
 
 (function() {
   'use strict';
 
   // 存储配置
-  var STORAGE_KEY = 'logViewerFilterKeywords';
   var MAX_HISTORY = 10000;
 
   // ========== 状态 ==========
   var keywords = [];       // Array<{text: string, count: number, lastUsed: number}>
-  var presets = [];         // Array<{id: string, name: string, keywords: string, createdAt: number, usageCount: number}>
-  var cooccurrence = {};    // {"kw1|kw2": number} — 排序后的关键词对 → 共现次数
+  var keywordMap = {};     // {text: arrayIndex} — O(1) 查找索引
+  var _cachedKeywordTexts = null; // getKeywords() 缓存，数据变化时置 null
+  var _cachedKwObjMap = null;     // {text: kwObj} 缓存，数据变化时置 null
+  var transitionsCacheMap = {};  // {fromKw: {toKw: count}} — 多关键词马尔可夫转移缓存
+  var _transitionsLRU = [];     // LRU 顺序，最多保留 10 个关键词
+  var _transitionsLRUMax = 10;
+  var lastAddedText = null; // 上一次添加的关键词（用于会话级转移）
+  var lastAddedTime = 0;    // 上一次添加的时间戳
 
-  // ========== 数据迁移 ==========
+  // ========== 工具函数 ==========
+
+  /** 从 textarea 中提取当前已输入的关键词上下文 */
+  function getTextareaContext() {
+    var context = [];
+    var textarea = document.getElementById('filterDialogTextarea');
+    if (textarea && textarea.value) {
+      var parts = textarea.value.split(/(?<!\\)\|/);
+      for (var pi = 0; pi < parts.length; pi++) {
+        var t = parts[pi].trim().replace(/\\\|/g, '|');
+        if (t) context.push(t);
+      }
+    }
+    return context;
+  }
+
+  // ========== 综合评分 ==========
 
   /**
-   * 将旧格式数据迁移为 v2 对象数组
-   * @param {*} data - 可能是 v1 格式 {keywords: ["a","b"]} 或 v2 格式 {keywords: [{text,...}]}
-   * @returns {Array<{text, count, lastUsed}>}
+   * 三因子综合评分：频率 × 时效 × 马尔可夫转移
+   * - 频率分：log(count+1) * 200（上限 ~1380）
+   * - 时效分：e^(-Δt/86400) * 1000（1天半衰期，上限 1000）
+   * - 马尔可夫分：仅计算 textarea 上下文到候选词的转移，上限 2000
    */
-  function migrateKeywords(data) {
-    if (!data || !data.keywords) return [];
-
-    // 如果已经是 v2 格式（数组元素是对象且有 .text）
-    if (data.keywords.length > 0 && typeof data.keywords[0] === 'object' && data.keywords[0].text) {
-      return data.keywords;
+  function relevanceScore(kwObj, textareaContext, now) {
+    if (!kwObj) return 0;
+    if (!now) now = Date.now();
+    var freqScore = Math.log(kwObj.count + 1) * 200;
+    var decaySec = (now - kwObj.lastUsed) / 1000;
+    var timeScore = Math.exp(-decaySec / 86400) * 1000;
+    // 马尔可夫转移分：仅从 textarea 上下文关键词出发查找转移
+    var markovScore = 0;
+    if (textareaContext && textareaContext.length > 0) {
+      for (var ci = 0; ci < textareaContext.length; ci++) {
+        var fromKw = textareaContext[ci];
+        if (transitionsCacheMap[fromKw] && transitionsCacheMap[fromKw][kwObj.text]) {
+          var s = Math.min(transitionsCacheMap[fromKw][kwObj.text], 10) * 200;
+          if (s > markovScore) markovScore = s;
+        }
+      }
     }
+    return freqScore + timeScore + markovScore;
+  }
 
-    // v1 格式：纯字符串数组 → 转为对象数组
+  /** 按综合评分排序关键词（无搜索词时使用） */
+  function sortByRelevance(candidates) {
+    var textareaContext = getTextareaContext();
+    // 构建 textarea 已选关键词集合，用于降权
+    var textareaSet = {};
+    for (var ti = 0; ti < textareaContext.length; ti++) {
+      textareaSet[textareaContext[ti]] = true;
+    }
+    var kwObjMap = getKwObjMap();
     var now = Date.now();
-    return data.keywords.map(function(kw, i) {
-      if (typeof kw !== 'string') return null;
-      return { text: kw, count: 1, lastUsed: data.timestamp || (now - i * 1000) };
-    }).filter(Boolean);
+    var scored = [];
+    for (var c = 0; c < candidates.length; c++) {
+      var kwObj = kwObjMap[candidates[c]] || null;
+      var score = relevanceScore(kwObj, textareaContext, now);
+      // 已选入 textarea 的关键词降权
+      if (textareaSet[candidates[c]]) score -= 2000;
+      scored.push({ keyword: candidates[c], score: score });
+    }
+    scored.sort(function(a, b) { return b.score - a.score; });
+    return scored.map(function(s) { return s.keyword; });
   }
 
   // ========== 存储操作 ==========
 
   /**
-   * 加载关键词历史（文件优先，localStorage 降级）
+   * 从 SQLite 数据库加载全部关键词数据
    */
   async function loadKeywords() {
     try {
-      // 优先从文件读取
-      if (window.App && window.App.IDB) {
-        var filters = await window.App.IDB.getFilters();
-        if (filters && filters[STORAGE_KEY]) {
-          var data = filters[STORAGE_KEY];
-          keywords = migrateKeywords(data);
-          // 加载预设
-          presets = (data && Array.isArray(data.presets)) ? data.presets : [];
-          // 加载共现
-          cooccurrence = (data && data.cooccurrence && typeof data.cooccurrence === 'object') ? data.cooccurrence : {};
-          console.log('[FilterKeywordHistory] 从文件加载关键词:', keywords.length, '预设:', presets.length);
-          return keywords;
+      if (window.App && window.App.IDB && window.App.IDB.loadAll) {
+        var data = await window.App.IDB.loadAll();
+        if (data) {
+          keywords = Array.isArray(data.keywords) ? data.keywords : [];
         }
-      }
-
-      // 降级到 localStorage
-      var saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        var parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          // localStorage 备份是纯字符串数组，转为 v2
-          var now = Date.now();
-          keywords = parsed.map(function(kw, i) {
-            return { text: kw, count: 1, lastUsed: now - i * 1000 };
-          });
-        } else if (parsed && parsed.keywords) {
-          keywords = migrateKeywords(parsed);
-        }
-        console.log('[FilterKeywordHistory] 从 localStorage 加载关键词:', keywords.length);
+        rebuildKeywordMap();
+        console.log('[FilterKeywordHistory] 从 SQLite 加载关键词:', keywords.length);
         return keywords;
       }
 
       keywords = [];
+      rebuildKeywordMap();
       return keywords;
     } catch (e) {
       console.error('[FilterKeywordHistory] 加载关键词失败:', e);
       keywords = [];
+      rebuildKeywordMap();
       return keywords;
-    }
-  }
-
-  /**
-   * 保存关键词历史（文件 + localStorage 双写）
-   */
-  async function saveKeywords() {
-    try {
-      var data = {
-        version: 2,
-        keywords: keywords,
-        presets: presets,
-        cooccurrence: cooccurrence,
-        timestamp: Date.now()
-      };
-
-      // 保存到文件
-      if (window.App && window.App.IDB) {
-        await window.App.IDB.saveFilter(STORAGE_KEY, data);
-      }
-
-      // localStorage 备份：只存纯字符串数组（向后兼容）
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(keywords.map(function(k) { return k.text; })));
-    } catch (e) {
-      console.error('[FilterKeywordHistory] 保存关键词失败:', e);
     }
   }
 
   // ========== 关键词 CRUD ==========
 
   /**
-   * 通过文本查找关键词索引
+   * 全量重建 keywordMap（仅在 loadKeywords 时使用）
+   */
+  function rebuildKeywordMap() {
+    keywordMap = {};
+    for (var i = 0; i < keywords.length; i++) {
+      keywordMap[keywords[i].text] = i;
+    }
+    _cachedKeywordTexts = null;
+    _cachedKwObjMap = null;
+  }
+
+  /**
+   * 增量更新 keywordMap：将指定文本移到 index=0 位置
+   * splice(idx, 1) + unshift 后，所有原 idx 之前的元素索引 +1，之后的元素不变
+   */
+  function moveKeywordToFront(text, oldIdx) {
+    // idx 之前的元素索引全部 +1
+    for (var k in keywordMap) {
+      if (keywordMap.hasOwnProperty(k) && keywordMap[k] < oldIdx) {
+        keywordMap[k]++;
+      }
+    }
+    keywordMap[text] = 0;
+    _cachedKeywordTexts = null;
+    _cachedKwObjMap = null;
+  }
+
+  /**
+   * 增量更新 keywordMap：新增一个文本到 index=0
+   */
+  function addKeywordToMap(text) {
+    // 所有现有元素索引 +1
+    for (var k in keywordMap) {
+      if (keywordMap.hasOwnProperty(k)) {
+        keywordMap[k]++;
+      }
+    }
+    keywordMap[text] = 0;
+    _cachedKeywordTexts = null;
+    _cachedKwObjMap = null;
+  }
+
+  /**
+   * 增量更新 keywordMap：删除指定文本
+   * splice 后，被删元素之后的所有元素索引 -1
+   */
+  function removeKeywordFromMap(text, oldIdx) {
+    delete keywordMap[text];
+    for (var k in keywordMap) {
+      if (keywordMap.hasOwnProperty(k) && keywordMap[k] > oldIdx) {
+        keywordMap[k]--;
+      }
+    }
+    _cachedKeywordTexts = null;
+    _cachedKwObjMap = null;
+  }
+
+  /**
+   * 通过文本查找关键词索引 — O(1) map 查找（Bug 4）
    */
   function findKeywordIndex(text) {
-    for (var i = 0; i < keywords.length; i++) {
-      if (keywords[i].text === text) return i;
-    }
-    return -1;
+    return keywordMap.hasOwnProperty(text) ? keywordMap[text] : -1;
   }
 
   /**
    * 添加关键词到历史（已存在则 count++ 并移到最前）
+   * 只 upsert 变更的这一条到 SQLite
    */
   async function addKeyword(keyword) {
     if (!keyword || keyword.trim() === '') return;
 
     keyword = keyword.trim();
     var existingIndex = findKeywordIndex(keyword);
+    var kwObj;
 
     if (existingIndex !== -1) {
-      // 已存在：增加计数，更新时间，移到最前
       keywords[existingIndex].count++;
       keywords[existingIndex].lastUsed = Date.now();
+      kwObj = keywords[existingIndex];
       var item = keywords.splice(existingIndex, 1)[0];
       keywords.unshift(item);
+      moveKeywordToFront(keyword, existingIndex);
     } else {
-      // 新增
-      keywords.unshift({ text: keyword, count: 1, lastUsed: Date.now() });
+      kwObj = { text: keyword, count: 1, lastUsed: Date.now() };
+      keywords.unshift(kwObj);
+      addKeywordToMap(keyword);
     }
 
-    // 限制数量
+    var trimmed = false;
     if (keywords.length > MAX_HISTORY) {
       keywords = keywords.slice(0, MAX_HISTORY);
+      trimmed = true;
+      rebuildKeywordMap(); // 截断后全量重建
     }
 
-    await saveKeywords();
+    // 只写入这一条关键词到 SQLite
+    if (window.App && window.App.IDB) {
+      if (window.App.IDB.upsertBatch) {
+        await window.App.IDB.upsertBatch([kwObj]);
+      }
+      // Bug 3: 截断后清理 DB 残留
+      if (trimmed && window.App.IDB.trimKeywords) {
+        var keepTexts = keywords.map(function(k) { return k.text; });
+        await window.App.IDB.trimKeywords(keepTexts);
+      }
+      // Bug 9: 广播变更到其他窗口
+      if (window.App.IDB.broadcast) {
+        window.App.IDB.broadcast('add', { text: keyword });
+      }
+    }
+
+    // 马尔可夫：记录会话级转移（30 分钟内连续添加视为同一会话）
+    await recordSessionTransition(keyword);
+    lastAddedText = keyword;
+    lastAddedTime = Date.now();
   }
 
   /**
    * 批量添加关键词（解析 | 分隔的输入）
-   * 优化：统一保存一次而非每条都保存
+   * 只 upsert 变更的行到 SQLite
    */
   async function addKeywordsFromInput(input) {
     if (!input || input.trim() === '') return;
 
-    // 解析 | 分隔的关键词，考虑转义的 \|
     var parts = input.split(/(?<!\\)\|/).map(function(s) { return s.replace(/\\\|/g, '|').trim(); }).filter(Boolean);
+    var changedKws = [];
+
+    // 收集需要移动和新增的项，最后批量处理 map
+    var toMove = []; // {text, oldIdx}
+    var toAdd = [];  // text
 
     for (var i = 0; i < parts.length; i++) {
       var keyword = parts[i];
@@ -174,24 +267,78 @@
       if (existingIndex !== -1) {
         keywords[existingIndex].count++;
         keywords[existingIndex].lastUsed = Date.now();
-        var item = keywords.splice(existingIndex, 1)[0];
-        keywords.unshift(item);
+        changedKws.push(keywords[existingIndex]);
+        toMove.push(keyword);
       } else {
-        keywords.unshift({ text: keyword, count: 1, lastUsed: Date.now() });
+        var kwObj = { text: keyword, count: 1, lastUsed: Date.now() };
+        changedKws.push(kwObj);
+        toAdd.push(keyword);
       }
     }
 
-    // 限制数量
-    if (keywords.length > MAX_HISTORY) {
-      keywords = keywords.slice(0, MAX_HISTORY);
+    // 先从数组中移除所有要移到前面的项（从后往前 splice，不影响前面的索引）
+    var movedItems = [];
+    for (var mi = toMove.length - 1; mi >= 0; mi--) {
+      var idx = findKeywordIndex(toMove[mi]);
+      if (idx !== -1) {
+        movedItems.unshift(keywords.splice(idx, 1)[0]);
+      }
+    }
+    // 新增项：从 changedKws 中获取已创建的 kwObj
+    var newItems = [];
+    for (var ni = 0; ni < toAdd.length; ni++) {
+      for (var ci = 0; ci < changedKws.length; ci++) {
+        if (changedKws[ci].text === toAdd[ni]) {
+          newItems.push(changedKws[ci]);
+          break;
+        }
+      }
+    }
+    // 全部 unshift 到数组前端（新增在前，移动在后）
+    var allToFront = newItems.concat(movedItems);
+    for (var ai = allToFront.length - 1; ai >= 0; ai--) {
+      keywords.unshift(allToFront[ai]);
     }
 
-    // 统一保存一次
-    await saveKeywords();
+    var trimmed = false;
+    if (keywords.length > MAX_HISTORY) {
+      keywords = keywords.slice(0, MAX_HISTORY);
+      trimmed = true;
+    }
 
-    // 记录共现（仅当有多个关键词时）
-    if (parts.length >= 2) {
-      recordCooccurrence(parts);
+    // 批量操作后全量重建 map
+    rebuildKeywordMap();
+
+    // 马尔可夫：记录输入内部转移 A→B, B→C（只收集 pairs，DB 端 count+1）
+    var transPairs = [];
+    for (var ti = 1; ti < parts.length; ti++) {
+      transPairs.push({ from_kw: parts[ti - 1], to_kw: parts[ti] });
+    }
+    // 会话级转移：上一次添加的词 → 本次第一个词（30 分钟内）
+    if (lastAddedText && lastAddedText !== parts[0] && (Date.now() - lastAddedTime) < 1800000) {
+      transPairs.push({ from_kw: lastAddedText, to_kw: parts[0] });
+    }
+    lastAddedText = parts[parts.length - 1];
+    lastAddedTime = Date.now();
+
+    // 只写入变更的关键词 + 转移数据
+    if (window.App && window.App.IDB) {
+      if (changedKws.length > 0 && window.App.IDB.upsertBatch) {
+        await window.App.IDB.upsertBatch(changedKws);
+      }
+      // Bug 3: 截断后清理 DB 残留
+      if (trimmed && window.App.IDB.trimKeywords) {
+        var keepTexts = keywords.map(function(k) { return k.text; });
+        await window.App.IDB.trimKeywords(keepTexts);
+      }
+      // 马尔可夫：保存转移 pairs
+      if (transPairs.length > 0 && window.App.IDB.saveTransitions) {
+        await window.App.IDB.saveTransitions(transPairs);
+      }
+      // Bug 9: 广播变更到其他窗口
+      if (window.App.IDB.broadcast) {
+        window.App.IDB.broadcast('add', { parts: parts });
+      }
     }
   }
 
@@ -199,7 +346,9 @@
    * 获取所有关键词（返回纯字符串数组，向后兼容）
    */
   function getKeywords() {
-    return keywords.map(function(k) { return k.text; });
+    if (_cachedKeywordTexts) return _cachedKeywordTexts;
+    _cachedKeywordTexts = keywords.map(function(k) { return k.text; });
+    return _cachedKeywordTexts;
   }
 
   /**
@@ -210,89 +359,35 @@
   }
 
   /**
-   * 删除指定关键词
+   * 获取 {text: kwObj} 映射（带缓存），供 scoreAndSortResults 使用
+   */
+  function getKwObjMap() {
+    if (_cachedKwObjMap) return _cachedKwObjMap;
+    _cachedKwObjMap = {};
+    for (var i = 0; i < keywords.length; i++) {
+      _cachedKwObjMap[keywords[i].text] = keywords[i];
+    }
+    return _cachedKwObjMap;
+  }
+
+  /**
+   * 删除指定关键词 — 只 delete 一行
    */
   async function removeKeyword(keyword) {
     if (!keyword) return;
     var idx = findKeywordIndex(keyword);
     if (idx !== -1) {
       keywords.splice(idx, 1);
-      await saveKeywords();
-    }
-  }
-
-  // ========== 预设管理 ==========
-
-  function getPresets() {
-    return presets;
-  }
-
-  async function savePreset(name, keywordsText) {
-    if (!name || !keywordsText) return;
-    var id = 'p' + Date.now();
-    presets.unshift({ id: id, name: name.trim(), keywords: keywordsText, createdAt: Date.now(), usageCount: 0 });
-    await saveKeywords();
-    return id;
-  }
-
-  async function deletePreset(id) {
-    presets = presets.filter(function(p) { return p.id !== id; });
-    await saveKeywords();
-  }
-
-  function applyPreset(id) {
-    for (var i = 0; i < presets.length; i++) {
-      if (presets[i].id === id) {
-        presets[i].usageCount = (presets[i].usageCount || 0) + 1;
-        saveKeywords(); // 异步保存，不等待
-        return presets[i].keywords;
+      removeKeywordFromMap(keyword, idx);
+      if (window.App && window.App.IDB) {
+        if (window.App.IDB.deleteKw) {
+          await window.App.IDB.deleteKw(keyword);
+        }
+        if (window.App.IDB.broadcast) {
+          window.App.IDB.broadcast('delete', { text: keyword });
+        }
       }
     }
-    return null;
-  }
-
-  // ========== 共现记录 ==========
-
-  /**
-   * 记录关键词共现关系
-   * @param {Array<string>} parts - 已拆分的关键词数组
-   */
-  function recordCooccurrence(parts) {
-    for (var i = 0; i < parts.length; i++) {
-      for (var j = i + 1; j < parts.length; j++) {
-        var pair = [parts[i], parts[j]].sort().join('|');
-        cooccurrence[pair] = (cooccurrence[pair] || 0) + 1;
-      }
-    }
-    // 限制共现记录数量（防止无限增长）
-    var keys = Object.keys(cooccurrence);
-    if (keys.length > 50000) {
-      // 保留计数最高的 30000 条
-      keys.sort(function(a, b) { return cooccurrence[b] - cooccurrence[a]; });
-      var newCo = {};
-      for (var k = 0; k < 30000; k++) {
-        newCo[keys[k]] = cooccurrence[keys[k]];
-      }
-      cooccurrence = newCo;
-    }
-    saveKeywords(); // 异步保存
-  }
-
-  /**
-   * 获取与指定关键词经常一起使用的关联词
-   * @param {string} keyword - 目标关键词
-   * @returns {Array<{keyword: string, count: number}>} 按共现次数降序，最多 5 个
-   */
-  function getRelatedKeywords(keyword) {
-    var related = [];
-    for (var pair in cooccurrence) {
-      if (!cooccurrence.hasOwnProperty(pair)) continue;
-      var parts = pair.split('|');
-      if (parts[0] === keyword) related.push({ keyword: parts[1], count: cooccurrence[pair] });
-      else if (parts[1] === keyword) related.push({ keyword: parts[0], count: cooccurrence[pair] });
-    }
-    related.sort(function(a, b) { return b.count - a.count; });
-    return related.slice(0, 5);
   }
 
   // ========== 清理工具 ==========
@@ -318,16 +413,12 @@
    */
   function areSimilar(a, b) {
     if (a === b) return true;
-    // 空白变体
     if (a.trim() === b.trim() && a !== b) return true;
-    // 大小写变体
     if (a.toLowerCase() === b.toLowerCase() && a !== b) return true;
-    // 前后缀重叠（最少 4 字符）
     if (a.length >= 4 && b.length >= 4) {
       if (a.startsWith(b) || b.startsWith(a)) return true;
       if (a.endsWith(b) || b.endsWith(a)) return true;
     }
-    // Levenshtein 距离比例 < 20%（短字符串限定）
     if (a.length <= 20 && b.length <= 20 && Math.abs(a.length - b.length) <= 3) {
       var dist = levenshtein(a, b);
       var maxLen = Math.max(a.length, b.length);
@@ -368,150 +459,143 @@
    * 合并关键词：保留 keepIdx，删除 removeIdxs（count 合并到保留项）
    */
   async function mergeKeywords(keepIdx, removeIdxs) {
+    var upsertKw = null;
+    var deleteTexts = [];
+
     for (var i = 0; i < removeIdxs.length; i++) {
       keywords[keepIdx].count += keywords[removeIdxs[i]].count;
+      deleteTexts.push(keywords[removeIdxs[i]].text);
     }
-    // 按索引降序删除，避免索引偏移
+    upsertKw = keywords[keepIdx];
+
     var sorted = removeIdxs.slice().sort(function(a, b) { return b - a; });
     for (var i = 0; i < sorted.length; i++) {
       keywords.splice(sorted[i], 1);
     }
-    await saveKeywords();
+
+    // 重建 map（splice 改变了索引）
+    rebuildKeywordMap();
+
+    // 增量操作：upsert 保留项 + delete 被合并项
+    if (window.App && window.App.IDB) {
+      if (upsertKw && window.App.IDB.upsertBatch) {
+        await window.App.IDB.upsertBatch([upsertKw]);
+      }
+      for (var d = 0; d < deleteTexts.length; d++) {
+        if (window.App.IDB.deleteKw) {
+          await window.App.IDB.deleteKw(deleteTexts[d]);
+        }
+      }
+      // Bug 9: 广播合并变更
+      if (window.App.IDB.broadcast) {
+        window.App.IDB.broadcast('merge', { keep: upsertKw.text, removed: deleteTexts });
+      }
+    }
   }
 
   // ========== 搜索匹配 ==========
 
   /**
-   * 客户端模糊匹配算法（v2 — 融入频率因子）
-   * - 精确子串匹配：最高优先级（越靠前分越高）
-   * - 顺序字符匹配（允许间隔）：中等优先级（连续匹配有额外加分）
-   * - 频率因子：count * 5 加分
+   * 客户端模糊匹配算法（v4 — 空格容忍 + 多 token 子序列）
+   * 无搜索词：按内存中 keywords 数组顺序返回
+   * 有搜索词：匹配度 + 前缀加分 + 精确匹配加分 + 频率 + 时效
+   *
+   * v4 变更：
+   * - 空格分隔多 token 模式：query 按空格拆分为多个 token，
+   *   每个 token 独立做子序列匹配，所有 token 均匹配才算命中
+   * - 例如 "ch ch" 拆为 ["ch","ch"]，两个 token 都在 "charge_check" 中
+   *   找到子序列匹配，因此可以匹配
+   * - 不区分大小写
    */
   function fuzzyMatch(query, candidates) {
-    // candidates 来自 getKeywords() 时是 string[]；来自内部时也兼容
     if (candidates === undefined) candidates = getKeywords();
+
     if (!query || !query.trim()) {
-      // 无搜索词时，按首字母排序
-      var sorted = keywords.slice().sort(function(a, b) {
-        return a.text.toLowerCase().localeCompare(b.text.toLowerCase());
-      });
-      return sorted.map(function(k) { return k.text; });
+      // 无搜索词时按四因子综合评分排序（而不是原序）
+      return sortByRelevance(candidates);
     }
 
+    var kwMap = getKwObjMap();
+
+    var textareaContext = getTextareaContext();
+    var now = Date.now();
+
     var lowerQ = query.toLowerCase();
-    var scored = [];
+    // 将 query 按空格拆分为多个 token（去掉空 token）
+    var tokens = lowerQ.split(/\s+/).filter(function(t) { return t.length > 0; });
+    // 紧凑版本（去掉所有空格），用于精确/前缀/包含匹配
+    var compactQ = tokens.join('');
+
+    var result = [];
 
     for (var c = 0; c < candidates.length; c++) {
       var candidate = candidates[c];
       var lc = candidate.toLowerCase();
+      var kwObj = kwMap[candidate] || null;
+      var base = relevanceScore(kwObj, textareaContext, now);
+      var matched = false;
+      var matchScore = 0;
 
-      // 获取该关键词的频率信息
-      var kwObj = null;
-      for (var ki = 0; ki < keywords.length; ki++) {
-        if (keywords[ki].text === candidate) { kwObj = keywords[ki]; break; }
+      // 精确匹配（优先级最高）
+      if (lc === compactQ || lc === lowerQ) {
+        matchScore = 50000;
+        matched = true;
       }
-      var freqBoost = kwObj ? kwObj.count * 5 : 0;
-
-      // 精确子串匹配
-      var idx = lc.indexOf(lowerQ);
-      if (idx !== -1) {
-        scored.push({ keyword: candidate, score: 10000 - idx + freqBoost });
-        continue;
+      // 前缀匹配（用紧凑 query 或原始 query）
+      else if (lc.indexOf(compactQ) === 0 || lc.indexOf(lowerQ) === 0) {
+        var prefixLen = Math.max(compactQ.length, lowerQ.length);
+        matchScore = 30000 + (prefixLen / lc.length) * 5000;
+        matched = true;
       }
-
-      // 顺序字符匹配（模糊匹配）
-      var score = 0;
-      var qi = 0;
-      var con = 0;
-      for (var ci = 0; ci < lc.length && qi < lowerQ.length; ci++) {
-        if (lc[ci] === lowerQ[qi]) {
-          score += 10 + con;
-          con += 5;
-          qi++;
-        } else {
-          con = 0;
-        }
+      // 包含匹配
+      else if (lc.indexOf(compactQ) !== -1 || lc.indexOf(lowerQ) !== -1) {
+        var idx = lc.indexOf(compactQ) !== -1 ? lc.indexOf(compactQ) : lc.indexOf(lowerQ);
+        matchScore = 10000 - idx * 10 + (compactQ.length / lc.length) * 3000;
+        matched = true;
       }
+      // 多 token 子序列模糊匹配
+      else {
+        var allTokensMatched = true;
+        var totalTokenScore = 0;
 
-      if (qi === lowerQ.length) {
-        scored.push({ keyword: candidate, score: score + freqBoost });
-      }
-    }
-
-    scored.sort(function(a, b) { return b.score - a.score; });
-    return scored.map(function(s) { return s.keyword; });
-  }
-
-  /**
-   * 正则表达式匹配
-   */
-  function regexMatch(pattern, candidates) {
-    if (candidates === undefined) candidates = getKeywords();
-    if (!pattern) return candidates.slice();
-
-    try {
-      var regex = new RegExp(pattern, 'i');
-      return candidates.filter(function(kw) { return regex.test(kw); });
-    } catch (e) {
-      // 无效正则，降级为子串匹配
-      return candidates.filter(function(kw) { return kw.indexOf(pattern) !== -1; });
-    }
-  }
-
-  // ========== 旧数据迁移 ==========
-
-  /**
-   * 迁移旧 localStorage 数据，按 | 拆分关键词
-   */
-  async function migrateOldHistory() {
-    var FLAG = 'logViewerFilterKeywords_migrated';
-    if (localStorage.getItem(FLAG)) return;
-
-    try {
-      var raw = localStorage.getItem('logViewerFilterHistory');
-      if (!raw) {
-        localStorage.setItem(FLAG, 'true');
-        return;
-      }
-
-      var old = JSON.parse(raw);
-      if (!Array.isArray(old) || old.length === 0) {
-        localStorage.setItem(FLAG, 'true');
-        return;
-      }
-
-      console.log('[FilterKeywordHistory] 开始迁移旧数据，共', old.length, '条');
-
-      var now = Date.now();
-      for (var i = 0; i < old.length; i++) {
-        var entry = old[i];
-        if (!entry) continue;
-        var parts = entry.split(/(?<!\\)\|/).map(function(s) { return s.replace(/\\\|/g, '|').trim(); }).filter(Boolean);
-        for (var j = 0; j < parts.length; j++) {
-          var p = parts[j];
-          var existingIdx = findKeywordIndex(p);
-          if (existingIdx !== -1) {
-            keywords[existingIdx].count++;
-            // 移到最前
-            var item = keywords.splice(existingIdx, 1)[0];
-            keywords.unshift(item);
+        for (var ti = 0; ti < tokens.length; ti++) {
+          var token = tokens[ti];
+          // 对每个 token 独立做子序列匹配
+          var subScore = 0;
+          var qi = 0;
+          var con = 0;
+          for (var ci = 0; ci < lc.length && qi < token.length; ci++) {
+            if (lc[ci] === token[qi]) {
+              subScore += 10 + con;
+              con += 5;
+              qi++;
+            } else {
+              con = 0;
+            }
+          }
+          if (qi === token.length) {
+            totalTokenScore += subScore;
           } else {
-            keywords.unshift({ text: p, count: 1, lastUsed: now - i * 1000 });
+            allTokensMatched = false;
+            break;
           }
         }
+
+        if (allTokensMatched) {
+          matchScore = totalTokenScore / tokens.length; // 平均 token 分数
+          matched = true;
+        }
       }
 
-      if (keywords.length > MAX_HISTORY) {
-        keywords = keywords.slice(0, MAX_HISTORY);
+      if (matched) {
+        result.push({ keyword: candidate, score: matchScore + base });
       }
-
-      await saveKeywords();
-      localStorage.setItem(FLAG, 'true');
-      console.log('[FilterKeywordHistory] 迁移完成，关键词数:', keywords.length);
-    } catch (e) {
-      console.warn('[FilterKeywordHistory] 迁移失败:', e);
     }
+
+    result.sort(function(a, b) { return b.score - a.score; });
+    return result.map(function(s) { return s.keyword; });
   }
+
 
   // ========== UI 交互（工具栏下拉） ==========
 
@@ -590,12 +674,95 @@
     return selectedIndex;
   }
 
+  // ========== 马尔可夫转移 ==========
+
+  /** 记录会话级转移：上次添加的词 → 当前词（30 分钟内） */
+  async function recordSessionTransition(currentText) {
+    if (!lastAddedText || lastAddedText === currentText) return;
+    if ((Date.now() - lastAddedTime) > 1800000) return;
+
+    if (window.App && window.App.IDB && window.App.IDB.saveTransitions) {
+      await window.App.IDB.saveTransitions([{ from_kw: lastAddedText, to_kw: currentText }]);
+    }
+  }
+
+  /**
+   * 更新马尔可夫转移缓存（从 DB 按需加载指定关键词的转移）
+   * 支持同时缓存多个关键词，LRU 淘汰最旧的
+   */
+  async function updateTransitionsCache(fromKw) {
+    if (!fromKw) return;
+    if (transitionsCacheMap[fromKw]) {
+      // 已缓存，移到 LRU 末尾
+      var lruIdx = _transitionsLRU.indexOf(fromKw);
+      if (lruIdx !== -1) _transitionsLRU.splice(lruIdx, 1);
+      _transitionsLRU.push(fromKw);
+      return;
+    }
+    if (window.App && window.App.IDB && window.App.IDB.getTransitions) {
+      var result = await window.App.IDB.getTransitions(fromKw);
+      if (result && result.success && result.data) {
+        transitionsCacheMap[fromKw] = result.data;
+        _transitionsLRU.push(fromKw);
+        // LRU 淘汰
+        while (_transitionsLRU.length > _transitionsLRUMax) {
+          var evicted = _transitionsLRU.shift();
+          delete transitionsCacheMap[evicted];
+        }
+      }
+    }
+  }
+
+  /**
+   * SQL 端搜索关键词（异步，返回关键词对象数组）
+   */
+  async function searchFromDB(query, limit) {
+    if (window.App && window.App.IDB && window.App.IDB.searchKeywords) {
+      var result = await window.App.IDB.searchKeywords({ query: query, limit: limit || 300 });
+      if (result && result.success && result.data) {
+        return result.data; // [{text, count, lastUsed}]
+      }
+    }
+    return null;
+  }
+
+  /**
+   * fzf 模糊搜索关键词（异步，返回匹配的关键词字符串数组）
+   * @returns {Promise<{matched: string[]}|null>} 匹配结果，或 null 表示 fzf 不可用需降级
+   */
+  async function searchFromFzf(query) {
+    if (window.App && window.App.IDB && window.App.IDB.searchKeywordsFzf) {
+      // main 进程已缓存关键词文本，不再传全量数据
+      var result = await window.App.IDB.searchKeywordsFzf(query, []);
+      if (result && result.success && result.data) {
+        return { matched: result.data, fallback: false };
+      }
+      // fzf 不可用或失败，标记需要降级
+      if (result && result.fallback) {
+        return { matched: null, fallback: true };
+      }
+    }
+    return { matched: null, fallback: true };
+  }
+
   // ========== 初始化 ==========
+
+  // Bug 9: 多窗口同步回调
+  function handleRemoteKeywordChanged(action, data) {
+    console.log('[FilterKeywordHistory] 收到远程关键词变更:', action, data);
+    // 从 DB 重新加载数据（其他窗口已写入 DB）
+    loadKeywords();
+  }
 
   async function init() {
     await loadKeywords();
-    await migrateOldHistory();
-    console.log('[FilterKeywordHistory] 初始化完成，关键词:', keywords.length, '预设:', presets.length);
+
+    // Bug 9: 注册多窗口同步监听
+    if (window.App && window.App.IDB && window.App.IDB.onKeywordChanged) {
+      window.App.IDB.onKeywordChanged(handleRemoteKeywordChanged);
+    }
+
+    console.log('[FilterKeywordHistory] 初始化完成，关键词:', keywords.length);
   }
 
   // 导出到全局
@@ -607,23 +774,23 @@
     addKeywordsFromInput: addKeywordsFromInput,
     getKeywords: getKeywords,
     getKeywordObjects: getKeywordObjects,
+    getKwObjMap: getKwObjMap,
     removeKeyword: removeKeyword,
     fuzzyMatch: fuzzyMatch,
-    regexMatch: regexMatch,
     showSuggestions: showSuggestions,
     hideSuggestions: hideSuggestions,
     handleKeyDown: handleKeyDown,
-    // 预设
-    getPresets: getPresets,
-    savePreset: savePreset,
-    deletePreset: deletePreset,
-    applyPreset: applyPreset,
-    // 共现
-    getRelatedKeywords: getRelatedKeywords,
     // 清理
     findSimilarKeywords: findSimilarKeywords,
-    mergeKeywords: mergeKeywords
+    mergeKeywords: mergeKeywords,
+    // 马尔可夫转移缓存
+    updateTransitionsCache: updateTransitionsCache,
+    searchFromDB: searchFromDB,
+    searchFromFzf: searchFromFzf,
+    // 工具函数（供 patch.js 使用）
+    getTextareaContext: getTextareaContext,
+    relevanceScore: relevanceScore
   };
 
-  console.log('[FilterKeywordHistory] 模块已加载');
+  console.log('[FilterKeywordHistory] 模块已加载（SQLite 模式）');
 })();

@@ -22,10 +22,7 @@
       <!-- 窗口拖拽区域 - 只有这个区域可以拖拽移动窗口 -->
       <div class="window-drag-area"></div>
 
-      <!-- 清除按钮 -->
-      <div class="toolbar-group">
-        <button id="clearAllBtn" onclick="clearMainLogContent()">刷新</button>
-      </div>
+
 
       <!-- 在工具栏中添加 -->
       <div class="toolbar-group">
@@ -85,8 +82,6 @@
       <div class="toolbar-group" style="gap: 8px;">
         <span id="status"></span>
         <span id="fileInfo" class="file-info"></span>
-        <span id="fileCount" class="file-count"></span>
-        <span id="systemStats" class="system-stats" title="系统资源占用率（CPU=系统CPU使用率, MEM=系统内存使用率, APP=Electron进程内存占用）">CPU: --% | MEM: --% | APP: --MB</span>
       </div>
 
       <div class="progress-bar" id="progressBar" style="display: none">
@@ -195,50 +190,24 @@
 
     <!-- 文件树右键菜单 -->
     <div id="fileTreeContextMenu" role="menu" aria-hidden="true">
-      <!-- 操作组 -->
       <div class="menu-group">
-        <button id="fileTreeCtxExpandAll" type="button" class="menu-item">
-          <span class="icon">📂</span>
-          <span class="text">展开全部</span>
-        </button>
-        <button id="fileTreeCtxCollapseAll" type="button" class="menu-item">
-          <span class="icon">📁</span>
-          <span class="text">折叠全部</span>
-        </button>
-      </div>
-
-      <div class="menu-separator"></div>
-
-      <div class="menu-group">
-        <button id="fileTreeCtxExtractArchive" type="button" class="menu-item">
-          <span class="icon">📦</span>
-          <span class="text">解压到当前路径</span>
-        </button>
-      </div>
-
-      <div class="menu-separator"></div>
-
-      <div class="menu-group">
-        <button id="fileTreeCtxOpenHtml" type="button" class="menu-item">
-          <span class="icon">🌐</span>
-          <span class="text">打开HTML文件</span>
-        </button>
-      </div>
-
-      <div class="menu-separator"></div>
-
-      <div class="menu-group">
-        <button id="fileTreeCtxLoadOnlyDir" type="button" class="menu-item">
-          <span class="icon">📁</span>
-          <span class="text">文件树只加载此目录</span>
-        </button>
         <button id="fileTreeCtxCopyName" type="button" class="menu-item">
           <span class="icon">📋</span>
           <span class="text">复制名称</span>
         </button>
-        <button id="fileTreeCtxRefreshDir" type="button" class="menu-item">
+        <button id="fileTreeCtxDeleteFile" type="button" class="menu-item">
+          <span class="icon">🗑️</span>
+          <span class="text">删除文件</span>
+        </button>
+        <button id="fileTreeCtxRefresh" type="button" class="menu-item">
           <span class="icon">🔄</span>
-          <span class="text">刷新此目录</span>
+          <span class="text">刷新</span>
+        </button>
+      </div>
+      <div class="menu-group">
+        <button id="fileTreeCtxExtractArchive" type="button" class="menu-item">
+          <span class="icon">📦</span>
+          <span class="text">解压到当前目录</span>
         </button>
       </div>
     </div>
@@ -673,6 +642,7 @@
       </div>
       <div id="filterDialogContent">
         <div id="filterDialogHeader">
+          <span id="filterSearchStatus" class="filter-search-status"></span>
           <button id="closeFilterDialog">×</button>
         </div>
         <div class="filter-dialog-input-area">
@@ -682,8 +652,7 @@
           </div>
           <!-- 搜索输入 -->
           <div class="filter-dialog-search-row">
-            <input type="text" id="filterHistorySearchInput" class="filter-history-search-input" placeholder="搜索关键词或直接输入后回车添加..." />
-            <button id="regexModeToggle" class="regex-mode-toggle" title="正则表达式模式">.*</button>
+            <input type="text" id="filterHistorySearchInput" class="filter-history-search-input" placeholder="搜索关键词，回车添加到过滤列表，Shift+回车同步保存到词库" />
           </div>
         </div>
         <div id="filterDialogKeywords">

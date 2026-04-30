@@ -508,6 +508,43 @@ function updateVisibleLines() {
     return; // 可见范围没有变化，跳过渲染
   }
 
+  // 🔧 保存文本选区（回收 DOM 前保存行索引 + 行内偏移）
+  var savedSelection = null;
+  try {
+    var sel = window.getSelection();
+    if (sel && sel.rangeCount && !sel.isCollapsed) {
+      var range = sel.getRangeAt(0);
+      // 快速祖先链检查
+      var node = range.commonAncestorContainer;
+      while (node) { if (node === inner) break; node = node.parentNode; }
+      if (node) {
+        function _findLineEl(n) {
+          while (n && n !== inner) {
+            if (n.nodeType === 1 && (n.classList.contains('log-line') || n.classList.contains('file-header'))) return n;
+            n = n.parentNode;
+          }
+          return null;
+        }
+        function _textOffsetInLine(tn, off, le) {
+          var w = document.createTreeWalker(le, NodeFilter.SHOW_TEXT);
+          var t = 0;
+          while (w.nextNode()) { if (w.currentNode === tn) return t + off; t += w.currentNode.textContent.length; }
+          return off;
+        }
+        var aEl = _findLineEl(range.startContainer);
+        var fEl = _findLineEl(range.endContainer);
+        if (aEl && fEl) {
+          savedSelection = {
+            anchorLine: parseInt(aEl.dataset.index),
+            anchorOffset: _textOffsetInLine(range.startContainer, range.startOffset, aEl),
+            focusLine: parseInt(fEl.dataset.index),
+            focusOffset: _textOffsetInLine(range.endContainer, range.endOffset, fEl)
+          };
+        }
+      }
+    }
+  } catch (e) {}
+
   visibleStart = newVisibleStart;
   visibleEnd = newVisibleEnd;
   lastVisibleStart = visibleStart;
@@ -525,9 +562,13 @@ function updateVisibleLines() {
     }
   }
 
-  // 🚀 渲染前更新高亮状态（如果状态变化会清除缓存）
+  // 🚀 渲染前更新高亮状态（仅在关键词变化时才更新，避免每次滚动都清缓存）
   // 🔧 修复：主日志框不使用 customHighlights（自定义高亮仅限过滤面板）
-  highlightCache.updateState(searchKeyword, [], []);
+  var currentSearchKw = searchKeyword || '';
+  if (highlightCache._lastSearchKw !== currentSearchKw) {
+    highlightCache._lastSearchKw = currentSearchKw;
+    highlightCache.updateState(currentSearchKw, [], []);
+  }
 
   // 渲染可见行
   const hasSearchKeyword = !!searchKeyword;
@@ -626,6 +667,32 @@ function updateVisibleLines() {
   }
 
   updateScrollProgress();
+
+  // 🔧 恢复文本选区
+  if (savedSelection) {
+    try {
+      var aEl2 = inner.querySelector('.log-line[data-index="' + savedSelection.anchorLine + '"], .file-header[data-index="' + savedSelection.anchorLine + '"]');
+      var fEl2 = inner.querySelector('.log-line[data-index="' + savedSelection.focusLine + '"], .file-header[data-index="' + savedSelection.focusLine + '"]');
+      if (aEl2 && fEl2) {
+        function _setRangePt(r, isStart, le, to) {
+          var w = document.createTreeWalker(le, NodeFilter.SHOW_TEXT);
+          var t = 0;
+          while (w.nextNode()) {
+            var l = w.currentNode.textContent.length;
+            if (t + l >= to) { var p = Math.min(to - t, l); if (isStart) r.setStart(w.currentNode, p); else r.setEnd(w.currentNode, p); return true; }
+            t += l;
+          }
+          return false;
+        }
+        var r2 = document.createRange();
+        if (_setRangePt(r2, true, aEl2, savedSelection.anchorOffset) && _setRangePt(r2, false, fEl2, savedSelection.focusOffset)) {
+          var sel2 = window.getSelection();
+          sel2.removeAllRanges();
+          sel2.addRange(r2);
+        }
+      }
+    } catch (e) {}
+  }
 }
 
 /**
