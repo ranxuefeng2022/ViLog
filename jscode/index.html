@@ -12,7 +12,18 @@
     <meta charset="UTF-8" />
     <title>VivoLog - 日志查看器</title>
     <link rel="icon" type="image/png" href="../icons/icon.png">
-    <link rel="stylesheet" href="renderer/css/style.css">
+    <link rel="stylesheet" href="renderer/css/components/base-layout.css">
+    <link rel="stylesheet" href="renderer/css/components/log-content.css">
+    <link rel="stylesheet" href="renderer/css/components/file-tree.css">
+    <link rel="stylesheet" href="renderer/css/components/menus.css">
+    <link rel="stylesheet" href="renderer/css/components/panels.css">
+    <link rel="stylesheet" href="renderer/css/components/ai-panel.css">
+    <link rel="stylesheet" href="renderer/css/components/csv-table.css">
+    <link rel="stylesheet" href="renderer/css/components/progress-bar.css">
+    <link rel="stylesheet" href="renderer/css/components/goto-line.css">
+    <link rel="stylesheet" href="renderer/css/components/virtual-scroll.css">
+    <link rel="stylesheet" href="renderer/css/components/secondary-filter.css">
+    <link rel="stylesheet" href="renderer/css/components/csv-chart.css">
     <!-- 🚀 外部库延迟加载，不阻塞 HTML 解析和首屏渲染 -->
     <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script defer src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
@@ -139,16 +150,8 @@
           <div id="monthSelectMenu" role="listbox" aria-label="选择月份">
           </div>
 
-          <!-- 下拉菜单保持不变 -->
+          <!-- 下拉菜单 — populated by server-config.js from localStorage -->
           <div id="serverAddressDropdownMenu" role="listbox" aria-label="常用服务器地址">
-            <button class="server-address-option" type="button" data-value="172.16.191.214:8082">(172.16.191.214:8082)BPM生产环境服务器</button>
-            <button class="server-address-option" type="button" data-value="10.0.2.1:8082">(10.0.2.1:8082)BPM测试环境服务器</button>
-            <button class="server-address-option" type="button" data-value="10.0.3.1:8082">(10.0.3.1:8082)充电小组个人空间</button>
-			<button class="server-address-option" type="button" data-value="10.0.3.1:8083">(10.0.3.1:8083)充电小组windows目录挂载</button>
-			<button class="server-address-option" type="button" data-value="10.0.4.1:8083">(10.0.4.1:8083)用户A-编译服务器</button>
-			<button class="server-address-option" type="button" data-value="10.0.5.1:8082">(10.0.5.1:8082)用户A-vmware-本地EF盘</button>
-			<button class="server-address-option" type="button" data-value="10.0.6.1:8082">(10.0.6.1:8082)用户B-编译服务器</button>
-			<button class="server-address-option" type="button" data-value="10.0.7.1:8082">(10.0.7.1:8082)用户C-编译服务器</button>
           </div>
         </div>
         <!-- 移除原来的 pathInputGroup，已合并到上面 -->
@@ -746,6 +749,11 @@
     <input type="color" id="highlightColorPicker" style="display:none; position:fixed; z-index:10001;" />
 
     <!-- ============================================================ -->
+    <!-- Layer 0: Console guard (must load before everything else)     -->
+    <!-- ============================================================ -->
+    <script src="renderer/js/core/console-guard.js"></script>
+
+    <!-- ============================================================ -->
     <!-- Layer 1: 核心基础设施                                          -->
     <!-- ============================================================ -->
     <script src="renderer/js/utils/constants.js"></script>
@@ -754,6 +762,7 @@
     <script src="renderer/js/utils/idb-storage.js"></script>
     <script src="renderer/js/core/dom-elements.js"></script>
     <script src="renderer/js/utils/helpers.js"></script>
+    <script src="renderer/js/utils/server-config.js"></script>
 
     <!-- ============================================================ -->
     <!-- Layer 2: Worker管理器 + 外部工具集成                           -->
@@ -762,43 +771,49 @@
     <script src="renderer/js/shared-filter-manager.js"></script>
     <script src="renderer/js/utils/worker-manager.js"></script>
     <script src="renderer/js/highlight-worker-manager.js"></script>
-    <script src="workers/wasm-timestamp-converter.js"></script>
 
     <!-- ============================================================ -->
-    <!-- Layer 3: 原有功能模块（保留原始加载清单）                        -->
+    <!-- Layer 3: 功能模块                                              -->
     <!-- ============================================================ -->
-    <script src="renderer/js/features/csv-table-renderer.js"></script>
-    <script src="renderer/js/features/vlog-parser.js"></script>
-    <script src="renderer/js/features/secondary-filter-canvas.js"></script>
-    <script src="renderer/js/features/virtual-scroll.js"></script>
-    <script src="renderer/js/features/filter.js"></script>
-    <script src="renderer/js/features/filter-keyword-history.js"></script>
-    <script src="renderer/js/features/search.js"></script>
+    <script src="renderer/js/services/log-interceptor/index.js"></script>
+    <script src="renderer/js/services/csv-table-renderer/index.js"></script>
+    <script src="renderer/js/services/vlog-parser/index.js"></script>
+    <script src="renderer/js/services/secondary-filter-canvas/index.js"></script>
+    <script src="renderer/js/services/virtual-scroll/index.js"></script>
+    <script src="renderer/js/services/filter-keyword-history/index.js"></script>
 
     <!-- ============================================================ -->
-    <!-- Layer 4: 功能模块包装层（新增，提供模块化 API）                  -->
+    <!-- Layer 4: 服务模块（模块化 API）                                -->
     <!-- ============================================================ -->
-    <script src="renderer/js/features/context-menu/index.js"></script>
-    <script src="renderer/js/features/search/index.js"></script>
-    <script src="renderer/js/features/filter/index.js"></script>
-    <script src="renderer/js/features/log-renderer/index.js"></script>
-    <script src="renderer/js/features/file-tree/index.js"></script>
-    <script src="renderer/js/features/log-loader/index.js"></script>
-    <script src="renderer/js/features/ui/index.js"></script>
-    <script src="renderer/js/features/quick-links/index.js"></script>
-    <script src="renderer/js/features/remote-share/index.js"></script>
+    <script src="renderer/js/services/context-menu/index.js"></script>
+    <script src="renderer/js/services/search/index.js"></script>
+    <script src="renderer/js/services/filter/index.js"></script>
+    <script src="renderer/js/services/log-renderer/index.js"></script>
+    <script src="renderer/js/services/file-tree/index.js"></script>
+    <script src="renderer/js/services/log-loader/index.js"></script>
+    <script src="renderer/js/services/ui/index.js"></script>
+    <script src="renderer/js/services/quick-links/index.js"></script>
+    <script src="renderer/js/services/remote-share/index.js"></script>
 
     <!-- ============================================================ -->
-    <!-- Layer 5: 遗留代码（original-script.js — 全部功能的实际实现）     -->
+    <!-- Layer 5: 遗留代码（逐步迁入 services/）                         -->
     <!-- ============================================================ -->
-    <script src="renderer/js/original-script.js"></script>
+    <script src="renderer/js/services/core-init/index.js"></script>
+    <script src="renderer/js/services/bookmarks/index.js"></script>
+    <script src="renderer/js/services/search/history.js"></script>
+    <script src="renderer/js/services/secondary-filter/index.js"></script>
+    <script src="renderer/js/legacy/06-main-ui.js"></script>
+    <script src="renderer/js/services/remote-share/connect.js"></script>
+    <script src="renderer/js/legacy/08-file-tree.js"></script>
+    <script src="renderer/js/legacy/09-archive-jump.js"></script>
+    <script src="renderer/js/legacy/10-scroll-tools.js"></script>
 
     <!-- ============================================================ -->
-    <!-- Layer 6: 原有 Patch 文件（仅保留原始加载的2个）                  -->
+    <!-- Layer 6: 遗留 Patch 文件                                      -->
     <!-- ============================================================ -->
-    <script src="renderer/js/filter-worker-patch.js"></script>
-    <script src="renderer/js/virtual-scroll-patch.js"></script>
-    <script src="renderer/js/filter-keyword-history-patch.js"></script>
+    <script src="renderer/js/legacy/filter-worker-patch.js"></script>
+    <script src="renderer/js/legacy/virtual-scroll-patch.js"></script>
+    <script src="renderer/js/legacy/filter-keyword-history-patch.js"></script>
 
     <!-- ============================================================ -->
     <!-- Layer 7: 原有后置模块（必须在 original-script 之后加载）         -->

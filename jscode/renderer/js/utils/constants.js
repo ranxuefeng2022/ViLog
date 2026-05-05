@@ -3,6 +3,36 @@
  * 包含所有常量、配置和默认值
  */
 
+(function() {
+  'use strict';
+
+  // 生产模式日志控制：localStorage 设置 debugMode=true 启用详细日志
+  var isDebug = (function() {
+    try { return localStorage.getItem('debugMode') === 'true'; } catch (e) { return false; }
+  })();
+
+  if (!isDebug) {
+    var noop = function() {};
+    // 生产模式下禁用 log 和 debug，保留 warn/error 用于问题排查
+    var _orig = { log: console.log, debug: console.debug, info: console.info };
+    console.log = noop;
+    console.debug = noop;
+    // info 在原始代码中使用较少，按采样保留
+    var infoCount = 0;
+    console.info = function() {
+      infoCount++;
+      if (infoCount % 50 === 0) _orig.info.apply(console, arguments);
+    };
+    // 暴露临时开启调试的方法
+    window.enableDebugLog = function() {
+      console.log = _orig.log;
+      console.debug = _orig.debug;
+      console.info = _orig.info;
+      try { localStorage.setItem('debugMode', 'true'); } catch (e) {}
+      console.log('[Debug] 详细日志已启用');
+    };
+  }
+
 window.App = window.App || {};
 window.App.Constants = {
   // 默认高亮规则
@@ -84,4 +114,5 @@ window.App.Constants = {
   BATCH_SIZE: 5
 };
 
-console.log('✓ Constants module loaded');
+})();
+

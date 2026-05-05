@@ -1,0 +1,577 @@
+/* Menus & Dialogs — context menus, dialog overlay, goto line, shortcuts */
+
+/* 右键菜单样式 */
+.context-menu {
+  position: fixed;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  z-index: 10000;
+  display: none;
+  min-width: 160px;
+  padding: 4px 0;
+}
+
+.context-menu.visible {
+  display: block;
+}
+
+.context-menu-item {
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #1d1d1f;
+  transition: background-color 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.context-menu-item:hover {
+  background-color: rgba(0, 113, 227, 0.1);
+}
+
+.context-menu-item.active {
+  background-color: rgba(0, 113, 227, 0.15);
+  color: #0071e3;
+  font-weight: 500;
+}
+
+.context-menu-separator {
+  height: 1px;
+  background: rgba(0, 0, 0, 0.08);
+  margin: 4px 0;
+}
+
+/* CSV表格右键菜单 */
+#csvTableContextMenu {
+  display: none;
+  z-index: 10001;
+}
+
+#csvTableContextMenu.visible {
+  display: block;
+}
+
+/* 过滤结果框右键菜单 - 颜色选项网格布局 */
+.color-options-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px;
+  justify-content: center;
+}
+
+.color-option {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 6px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.color-option:hover {
+  transform: scale(1.15);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.color-option span {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+
+/* 🚀 远程连接对话框 */
+.dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+.dialog-overlay.visible {
+  opacity: 1;
+  visibility: visible;
+}
+.dialog-content {
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(20px);
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  width: 360px;
+  max-width: 90vw;
+  overflow: hidden;
+  transform: scale(0.95);
+  transition: transform 0.2s ease;
+}
+.dialog-overlay.visible .dialog-content {
+  transform: scale(1);
+}
+.dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+.dialog-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1d1d1f;
+}
+.dialog-close {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 6px;
+  font-size: 18px;
+  color: rgba(60, 60, 67, 0.6);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.dialog-close:hover {
+  background: rgba(255, 59, 48, 0.15);
+  color: #ff3b30;
+}
+.dialog-body {
+  padding: 20px;
+}
+.dialog-body .form-group {
+  margin-bottom: 16px;
+}
+.dialog-body .form-group:last-child {
+  margin-bottom: 0;
+}
+.dialog-body label {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(60, 60, 67, 0.8);
+  margin-bottom: 6px;
+}
+.dialog-body input[type="text"],
+.dialog-body input[type="number"] {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 8px;
+  font-size: 14px;
+  background: rgba(255, 255, 255, 0.9);
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.dialog-body input:focus {
+  outline: none;
+  border-color: #0071e3;
+  box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.2);
+}
+
+/* 提示信息框 */
+.info-box {
+  padding: 12px;
+  background: rgba(0, 113, 227, 0.08);
+  border: 1px solid rgba(0, 113, 227, 0.2);
+  border-radius: 8px;
+  margin-top: 16px;
+}
+.info-box p {
+  margin: 0 0 8px 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: #0071e3;
+}
+.info-box ul {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 11px;
+  color: rgba(60, 60, 67, 0.8);
+  line-height: 1.6;
+}
+.info-box li {
+  margin-bottom: 4px;
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 20px;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+  background: rgba(245, 245, 247, 0.5);
+}
+.dialog-footer .btn {
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.dialog-footer .btn-secondary {
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  background: rgba(255, 255, 255, 0.9);
+  color: rgba(60, 60, 67, 0.8);
+}
+.dialog-footer .btn-secondary:hover {
+  background: rgba(245, 245, 247, 0.9);
+}
+.dialog-footer .btn-primary {
+  border: none;
+  background: #0071e3;
+  color: white;
+}
+.dialog-footer .btn-primary:hover {
+  background: #0077ed;
+}
+.dialog-footer .btn-primary:disabled {
+  background: rgba(0, 113, 227, 0.5);
+  cursor: not-allowed;
+}
+
+/* 日志内容框：右键菜单 - 优化版本 */
+#logContextMenu {
+  position: fixed;
+  display: none;
+  width: 280px;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15), 0 2px 8px rgba(0, 0, 0, 0.1);
+  z-index: 10000;
+  overflow: hidden;
+}
+#logContextMenu.visible {
+  display: block;
+}
+
+/* 菜单项通用样式 */
+#logContextMenu .menu-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  color: #1d1d1f;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  gap: 8px;
+  min-height: 32px;
+  box-sizing: border-box;
+  border-radius: 4px;
+}
+
+#logContextMenu .menu-item:hover {
+  background: rgba(0, 113, 227, 0.08);
+  color: #0071e3;
+}
+
+#logContextMenu .menu-item:active {
+  background: rgba(0, 113, 227, 0.12);
+}
+
+#logContextMenu .menu-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  color: #8e8e93;
+}
+
+#logContextMenu .menu-item:disabled:hover {
+  background: transparent;
+  color: #8e8e93;
+  transform: none;
+}
+
+/* 图标样式 */
+#logContextMenu .menu-item .icon {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+#logContextMenu .menu-item .text {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 菜单标题 */
+#logContextMenu .menu-title {
+  padding: 6px 10px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #8e8e93;
+  background: rgba(0, 0, 0, 0.02);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 2px;
+}
+
+/* 分组标题 */
+#logContextMenu .menu-group {
+  padding: 2px 0;
+}
+
+/* 右键菜单两列布局 - 优化为显示完整文字 */
+#logContextMenu .menu-group.two-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 6px;
+}
+
+#logContextMenu .menu-group.two-columns .menu-item {
+  min-width: 0;
+  min-height: 38px;
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+/* 两列布局中的按钮文字允许换行 */
+#logContextMenu .menu-group.two-columns .menu-item .text {
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.3;
+  overflow-wrap: break-word;
+}
+
+#logContextMenu .menu-group.two-columns .menu-item .icon {
+  flex-shrink: 0;
+}
+
+
+#logContextMenu .menu-group-title {
+  padding: 4px 10px 2px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #8e8e93;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* 分隔线 */
+#logContextMenu .menu-separator {
+  height: 1px;
+  background: rgba(0, 0, 0, 0.06);
+  margin: 2px 0;
+}
+
+/* 文件信息区域 */
+#logContextMenu .menu-info {
+  padding: 6px 10px;
+  background: rgba(0, 113, 227, 0.04);
+  border-left: 3px solid #0071e3;
+  margin: 2px 6px;
+  border-radius: 4px;
+}
+
+#logContextMenu .menu-info .info-label {
+  font-size: 9px;
+  color: #8e8e93;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 1px;
+  display: block;
+}
+
+#logContextMenu .menu-info .info-value {
+  color: #0071e3;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 悬停行：显示当前行所在文件名 */
+#lineFileHoverTip {
+  position: fixed;
+  left: 0;
+  top: 0;
+  transform: translate3d(-9999px, -9999px, 0);
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 16px;
+  color: rgba(255, 255, 255, 0.95);
+  background: rgba(0, 0, 0, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  max-width: min(520px, calc(100vw - 24px));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  z-index: 1200;
+  display: none;
+}
+#lineFileHoverTip.visible {
+  display: block;
+}
+
+/* 快捷键说明按钮 - 小圆形，右下角，显眼的"快"字 */
+#shortcutsToggleBtn {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  width: 32px;
+  height: 32px;
+  background: linear-gradient(135deg, #ff6b6b 0%, #ff8e53 100%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: bold;
+  color: white;
+  box-shadow: 0 3px 10px rgba(255, 107, 107, 0.5);
+  z-index: 10001;
+  transition: all 0.2s ease;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  font-family: "Microsoft YaHei", "SimHei", sans-serif;
+}
+
+#shortcutsToggleBtn:hover {
+  background: linear-gradient(135deg, #ff5252 0%, #ff7043 100%);
+  transform: scale(1.1);
+  box-shadow: 0 4px 15px rgba(255, 107, 107, 0.7);
+}
+
+#shortcutsToggleBtn:active {
+  transform: scale(0.95);
+}
+
+/* 快捷键说明面板 */
+#shortcutsPanel {
+  position: fixed;
+  right: 16px;
+  bottom: 60px;
+  width: 200px;
+  background: rgba(255, 255, 255, 0.98);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  z-index: 10001;
+  display: none;
+  overflow: hidden;
+}
+
+#shortcutsPanel.visible {
+  display: block;
+  animation: slideUp 0.2s ease;
+}
+
+.shortcuts-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.shortcuts-header #shortcutsClose {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease;
+}
+
+.shortcuts-header #shortcutsClose:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.shortcuts-content {
+  padding: 8px 12px;
+  font-size: 11px;
+}
+
+.shortcut-category {
+  font-weight: 600;
+  color: #666;
+  margin-top: 12px;
+  margin-bottom: 4px;
+  padding-bottom: 2px;
+  border-bottom: 1px solid #eee;
+}
+
+.shortcut-category:first-child {
+  margin-top: 0;
+}
+
+.shortcut-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  color: #333;
+}
+
+.shortcut-item kbd {
+  background: rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-family: inherit;
+  font-size: 10px;
+  color: #555;
+  min-width: 50px;
+  text-align: center;
+}
+
+/* 快捷键提示样式 */
+.shortcut-hint {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  z-index: 1000;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}

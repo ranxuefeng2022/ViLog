@@ -1,0 +1,100 @@
+/* ==================== 虚拟滚动样式 ==================== */
+
+/* 虚拟滚动占位符 - 撑开滚动高度 */
+.log-placeholder {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  /* 高度由 JavaScript 动态设置 */
+  pointer-events: none;
+}
+
+/* 虚拟滚动容器 - 高度由占位符撑开 */
+#innerContainer {
+  position: relative;
+  width: max-content; /* 🔧 让内容根据实际宽度自由扩展，启用横向滚动 */
+  min-width: 100%; /* 最小占满父容器宽度 */
+  /* 高度由 .log-placeholder 撑开，不设置固定高度 */
+  min-height: 100%;
+}
+
+/* 日志行元素 - 虚拟滚动中的定位行 */
+.log-line {
+  position: absolute;
+  width: max-content; /* 🔧 让行宽根据内容自由扩展，启用横向滚动 */
+  min-width: 100%; /* 最小占满容器宽度 */
+  left: 0;
+  height: var(--log-line-height, 19px);
+  line-height: var(--log-line-height, 19px);
+  padding: 0 6px;
+  font-size: var(--log-font-size, 14px);
+  white-space: pre;
+  font-family: "JetBrains Mono", "Monaco", "Menlo", "Ubuntu Mono", monospace;
+  color: #000000;
+  background-color: transparent;
+  box-sizing: border-box;
+}
+
+/* 文件头样式 */
+.file-header {
+  position: absolute;
+  width: 100%;
+  left: 0;
+  height: var(--log-line-height, 19px);
+  line-height: var(--log-line-height, 19px);
+  padding: 2px 6px;
+  margin: 0;
+  background: rgba(144, 238, 144, 0.3);
+  border-left: 3px solid #90ee90;
+  font-weight: 500;
+  color: #2e7d32;
+  font-size: 12px;
+  border-radius: 0 5px 5px 0;
+  white-space: pre;
+  font-family: "Monaco", "Menlo", "Ubuntu Mono", monospace;
+  box-sizing: border-box;
+}
+
+/* 虚拟滚动性能监控显示 */
+#virtualScrollStats {
+  position: fixed;
+  bottom: 10px;
+  left: 10px;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-family: monospace;
+  z-index: 10000;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+#virtualScrollStats.visible {
+  opacity: 1;
+}
+
+/* 滚动性能提示 */
+.performance-tip {
+  position: fixed;
+  top: 60px;
+  right: 10px;
+  background: rgba(52, 199, 89, 0.9);
+  color: white;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  z-index: 10000;
+  animation: fadeInOut 3s ease-out forwards;
+}
+
+@keyframes fadeInOut {
+  0% { opacity: 0; transform: translateY(-10px); }
+  10% { opacity: 1; transform: translateY(0); }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+

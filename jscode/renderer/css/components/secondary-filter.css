@@ -1,0 +1,566 @@
+/* ==================== 二级过滤右侧边栏样式 ==================== */
+#secondaryFilterSidebar {
+  position: fixed;
+  left: 0; /* 占据整个宽度 */
+  right: 0; /* 占据整个宽度 */
+  bottom: 0; /* 默认紧贴底部 */
+  width: auto; /* 自动宽度 */
+  height: 45vh; /* 默认高度为下半屏略小 */
+  max-height: calc(100vh - 60px); /* 最大高度不超过窗口 */
+  background: rgba(255, 255, 255, 1); /* 不透明白色背景 */
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-radius: 12px 12px 0 0; /* 只在上方有圆角 */
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
+  z-index: 10002; /* 高于过滤面板 */
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+  /* 使用transform优化性能 */
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  will-change: transform;
+  contain: layout style;
+  box-sizing: border-box;
+  /* 🚀 移除默认cursor，避免双箭头 */
+  cursor: default;
+}
+
+#secondaryFilterSidebar.visible {
+  display: flex;
+  animation: fadeIn 0.2s ease;
+}
+
+#secondaryFilterSidebar.resizing {
+  /* 调整大小时禁用所有过渡效果，提升性能 */
+  transition: none !important;
+  animation: none !important;
+}
+
+#secondaryFilterSidebar.maximized {
+  /* 移除transition，确保Canvas立即获取正确尺寸 */
+  border-radius: 8px;
+  /* 最大化时填满整个视口 */
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100% !important;
+  height: 100vh !important;
+  max-height: none !important;
+}
+
+/* 最大化时确保内容区域无底部间距 */
+#secondaryFilterSidebar.maximized #secondaryFilterSidebarContent {
+  /* 确保内容区完全填充 */
+  flex: 1;
+  overflow: hidden;
+}
+
+@keyframes fadeIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* 二级过滤边栏头部 */
+#secondaryFilterSidebarHeader {
+  display: flex;
+  align-items: center;
+  padding: 1px 8px;
+  background: rgba(245, 245, 245, 1);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  gap: 4px;
+  flex-shrink: 0;
+  user-select: none;
+  position: relative;
+  min-height: 16px;
+  height: auto;
+  font-size: 8px;
+}
+
+/* 高度调整手柄 */
+#secondaryFilterHeightHandle {
+  position: absolute;
+  top: 1px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 50px;
+  height: 10px;
+  background: rgba(245, 245, 245, 1);
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 5px;
+  cursor: ns-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  z-index: 10;
+  transition: background 0.2s;
+  font-size: 8px;
+}
+
+#secondaryFilterHeightHandle:hover {
+  background: rgba(220, 220, 220, 1);
+}
+
+#secondaryFilterHeightHandle:active {
+  background: rgba(200, 200, 200, 1);
+}
+
+.height-handle-line {
+  width: 2px;
+  height: 4px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 1px;
+}
+
+.secondary-filter-sidebar-title {
+  font-weight: 500;
+  font-size: 12px;
+  color: #cc0000;
+  flex: 1;
+}
+
+.secondary-filter-sidebar-count {
+  font-size: 10px;
+  color: #cc0000;
+  white-space: nowrap;
+}
+
+#secondaryFilterSidebarClose {
+  width: 16px;
+  height: 16px;
+  border: none;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  color: #cc0000;
+}
+
+#secondaryFilterSidebarClose:hover {
+  background: rgba(255, 59, 48, 0.8);
+  color: white;
+}
+
+/* 二级过滤最大化按钮 */
+#secondaryFilterSidebarMaximize {
+  width: 16px;
+  height: 16px;
+  border: none;
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 10px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  color: #666;
+  margin-right: 4px;
+}
+
+#secondaryFilterSidebarMaximize:hover {
+  background: rgba(0, 0, 0, 0.1);
+  color: #333;
+}
+
+/* 最大化时隐藏按钮内的文字 */
+#secondaryFilterSidebar.maximized #secondaryFilterSidebarMaximize {
+  font-size: 0;
+}
+
+/* 最大化时显示还原图标 */
+#secondaryFilterSidebar.maximized #secondaryFilterSidebarMaximize:before {
+  content: "❐";
+  font-size: 10px;
+  color: #666;
+}
+
+#secondaryFilterSidebar.maximized #secondaryFilterSidebarMaximize:hover:before {
+  color: #333;
+}
+
+/* 🔧 修复：最大化时确保头部完全可见，不被裁剪或上移 */
+#secondaryFilterSidebar.maximized #secondaryFilterSidebarHeader {
+  position: relative;
+  top: 0;
+  left: 0;
+  transform: none;
+  margin: 0;
+  padding: 1px 8px;
+  flex-shrink: 0;
+  min-height: 16px;
+  height: auto;
+  z-index: 1;
+  overflow: visible;
+}
+
+/* 🔧 修复：最大化时高亮工具栏也不受影响 */
+#secondaryFilterSidebar.maximized .highlight-toolbar {
+  flex-shrink: 0;
+  position: relative;
+  top: 0;
+  left: 0;
+  transform: none;
+  margin: 0;
+  min-height: 24px;
+  height: auto;
+  z-index: 1;
+}
+
+/* 二级过滤边栏内容区 */
+#secondaryFilterSidebarContent {
+  flex: 1;
+  overflow: auto; /* 同时支持横向和纵向滚动 */
+  position: relative;
+  background: rgba(255, 255, 255, 1);
+  /* 🚀 确保内容区使用默认鼠标指针 */
+  cursor: default;
+  /* 🚀 禁用 scroll anchoring，避免 Canvas 渲染时跳动 */
+  overflow-anchor: none;
+}
+
+#secondaryFilterSidebarPlaceholder {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  background: transparent;
+}
+
+#secondaryFilterSidebarVirtualContent {
+  position: relative;
+  width: 100%;
+  min-width: max-content; /* 支持横向滚动 */
+  /* 🚀 确保虚拟内容区使用默认鼠标指针 */
+  cursor: default;
+}
+
+/* 二级过滤结果行样式 */
+.secondary-filter-result-line {
+  padding: 4px 8px;
+  border-bottom: none; /* 🚀 移除边框线条 */
+  cursor: pointer; /* 行本身保持pointer */
+  transition: background 0.15s;
+  font-size: 12px;
+  line-height: 1.4;
+  font-family: 'Consolas', 'Monaco', monospace;
+  white-space: nowrap;
+  color: #cc0000;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.secondary-filter-result-line:hover {
+  background: rgba(255, 200, 150, 0.25);
+}
+
+.secondary-filter-result-line.selected {
+  background: rgba(255, 150, 100, 0.35);
+  font-weight: 500;
+}
+
+.secondary-filter-result-line.file-header {
+  background: transparent; /* 🚀 文件头也不使用背景色 */
+  font-weight: 500;
+  color: #990000;
+}
+
+/* 二级过滤行号 */
+.secondary-filter-result-line .line-number {
+  color: #cc0000;
+  margin-right: 6px;
+  font-size: 11px;
+  user-select: none;
+}
+
+/* 二级过滤高亮匹配样式 */
+.secondary-filter-match-highlight {
+  background: rgba(255, 200, 100, 0.4);
+  border-radius: 2px;
+  padding: 0 2px;
+  color: #000;
+}
+
+/* 🚀 调整大小手柄样式 */
+.secondary-filter-resize-handle {
+  position: absolute;
+  background: transparent;
+  /* 🚀 缩小触发区域，避免误触 */
+  z-index: 10;
+}
+
+.secondary-filter-resize-handle.n {
+  top: 0;
+  left: 10px;
+  right: 10px;
+  height: 5px;
+  cursor: n-resize;
+}
+
+.secondary-filter-resize-handle.e {
+  top: 10px;
+  right: 0;
+  bottom: 10px;
+  width: 5px;
+  cursor: e-resize;
+}
+
+.secondary-filter-resize-handle.s {
+  bottom: 0;
+  left: 10px;
+  right: 10px;
+  height: 5px;
+  cursor: s-resize;
+}
+
+.secondary-filter-resize-handle.w {
+  top: 10px;
+  left: 0;
+  bottom: 10px;
+  width: 5px;
+  cursor: w-resize;
+}
+
+.secondary-filter-resize-handle.ne {
+  top: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  cursor: ne-resize;
+}
+
+.secondary-filter-resize-handle.nw {
+  top: 0;
+  left: 0;
+  width: 10px;
+  height: 10px;
+  cursor: nw-resize;
+}
+
+.secondary-filter-resize-handle.se {
+  bottom: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  cursor: se-resize;
+}
+
+.secondary-filter-resize-handle.sw {
+  bottom: 0;
+  left: 0;
+  width: 10px;
+  height: 10px;
+  cursor: sw-resize;
+}
+
+.secondary-filter-resize-handle:hover {
+  background: rgba(0, 113, 227, 0.3);
+}
+
+/* 关键词高亮工具栏 */
+.highlight-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  background: rgba(250, 250, 250, 1);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  flex-shrink: 0;
+  min-height: 24px;
+  height: auto;
+}
+
+.highlight-input {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 6px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  font-size: 11px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  outline: none;
+  transition: border-color 0.2s;
+  height: 18px;
+}
+
+.highlight-input:focus {
+  border-color: rgba(0, 113, 227, 0.8);
+}
+
+.highlight-color-picker {
+  width: 28px;
+  height: 18px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0;
+  background: none;
+  flex-shrink: 0;
+}
+
+.highlight-color-picker::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.highlight-color-picker::-webkit-color-swatch {
+  border: none;
+  border-radius: 3px;
+}
+
+.highlight-add-btn {
+  width: 20px;
+  height: 18px;
+  border: none;
+  background: rgba(0, 113, 227, 0.8);
+  color: white;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.highlight-add-btn:hover {
+  background: rgba(0, 113, 227, 1);
+}
+
+.highlight-keywords-list {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  max-width: 300px;
+}
+
+.highlight-keyword-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  color: white;
+  cursor: pointer;
+  transition: opacity 0.2s;
+  position: relative;
+}
+
+.highlight-keyword-tag:hover {
+  opacity: 0.8;
+}
+
+.highlight-keyword-tag .remove-highlight {
+  margin-left: 4px;
+  font-weight: bold;
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* =====================================================================
+   🔍 文件树搜索容器样式
+   ===================================================================== */
+
+.file-tree-search-container {
+  display: flex !important;
+  align-items: center !important;
+  gap: 4px;
+  position: relative;
+  padding: 0 10px !important;
+  box-sizing: border-box !important;
+  width: auto !important;
+}
+
+.file-tree-search-container #fileTreeSearch {
+  flex: 1;
+  max-width: calc(100% - 50px);
+  height: 24px;
+  line-height: 14px;
+  padding: 4px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 11px;
+  outline: none;
+  background: white;
+  box-sizing: border-box;
+}
+
+.file-tree-search-container #fileTreeSearch:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+/* 🚀 新增：加载模式切换按钮样式 */
+.toggle-load-mode-btn {
+  width: 28px;
+  height: 24px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  border: 1px solid #d1d5db;
+  border-left: none;
+  border-radius: 0 4px 4px 0;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  color: #374151;
+}
+
+.toggle-load-mode-btn:hover {
+  background: #f3f4f6;
+  border-color: #3b82f6;
+  color: #1d4ed8;
+}
+
+/* 过滤模式：琥珀色 */
+.toggle-load-mode-btn.filter-mode {
+  background: #fffbeb;
+  border-color: #f59e0b;
+  color: #b45309;
+}
+
+.toggle-load-mode-btn.filter-mode:hover {
+  background: #fef3c7;
+}
+
+/* 仅内存模式：蓝色 */
+.toggle-load-mode-btn.memory-mode {
+  background: #eff6ff;
+  border-color: #3b82f6;
+  color: #1d4ed8;
+}
+
+.toggle-load-mode-btn.memory-mode:hover {
+  background: #dbeafe;
+}
+
+.toggle-load-mode-btn .mode-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.toggle-load-mode-btn .mode-icon svg {
+  display: block;
+}
+

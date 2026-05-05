@@ -1,182 +1,177 @@
+/**
+ * Preload Script — exposes electronAPI to renderer via contextBridge
+ *
+ * IPC invoke channels are declared in INVOKE_CHANNELS and auto-wrapped.
+ * Special handlers (send-based, listener-based, parameter-transforming)
+ * are written manually below.
+ *
+ * If adding a new IPC channel:
+ *   1. Register handler in src/main/{module}.js
+ *   2. Add entry to INVOKE_CHANNELS below (or write manual handler)
+ *   3. Add channel to VALID_RECEIVE_CHANNELS if renderer needs to listen
+ */
+
 const { contextBridge, ipcRenderer } = require('electron');
 
-// 调试：确认 preload.js 已加载
-console.log('=== preload.js 已加载 ===');
-console.log('contextBridge 类型:', typeof contextBridge);
-console.log('ipcRenderer 类型:', typeof ipcRenderer);
+// Valid receive channels for on/removeListener whitelist
+const VALID_RECEIVE_CHANNELS = [
+  'import-file-from-taskbar', 'uart-log-data', 'directory-changed',
+  'archive-file-extracted', 'keyword-changed', 'extract-progress'
+];
 
-// 暴露窗口控制API到渲染进程
+// Invoke channel mapping: { apiMethod: 'ipc-channel-name' }
+// All follow: method(...args) => ipcRenderer.invoke(channel, ...args)
+const INVOKE_CHANNELS = {
+  // Window management
+  createNewWindow: 'create-new-window',
+  openUartLogWindow: 'open-uart-log-window',
+  focusWindow: 'focus-window',
+  getWindowList: 'get-window-list',
+  getWindowPreview: 'get-window-preview',
+  onlineUpdate: 'online-update',
+  // File operations
+  fileExists: 'file-exists',
+  openFileWithDefaultApp: 'open-file-with-default-app',
+  openPath: 'open-path',
+  deleteFile: 'delete-file',
+  openWithApp: 'open-with-app',
+  openTerminal: 'open-terminal',
+  openHtmlWindow: 'open-html-window',
+  downloadRemoteFile: 'download-remote-file',
+  readFile: 'read-file',
+  readFileStreaming: 'read-file-streaming',
+  readFiles: 'read-files',
+  readFolder: 'read-folder',
+  listFolder: 'list-folder',
+  searchFolder: 'search-folder',
+  showFolderSelectionDialog: 'show-folder-selection-dialog',
+  getDroppedPath: 'get-dropped-path',
+  getCwd: 'get-cwd',
+  copyFilesToTemp: 'copy-files-to-temp',
+  resolveWinRarPath: 'resolve-winrar-path',
+  addRecentDirectory: 'add-recent-directory',
+  getDataDrives: 'get-data-drives',
+  listDirectory: 'list-directory',
+  // Archives
+  listArchive: 'list-archive',
+  listZipNative: 'list-zip-native',
+  extractZipNative: 'extract-zip-native',
+  extractFileFromArchive: 'extract-file-from-archive',
+  streamExtractFromArchive: 'stream-extract-from-archive',
+  extractArchive: 'extract-archive',
+  extractArchiveWithProgress: 'extract-archive-progress',
+  createTempExtractDir: 'create-temp-extract-dir',
+  clearTempExtractDir: 'clear-temp-extract-dir',
+  extractToTempDir: 'extract-to-temp-dir',
+  deleteTempExtractDir: 'delete-temp-extract-dir',
+  getTempExtractDir: 'get-temp-extract-dir',
+  // Logging
+  getLogFilePath: 'get-log-file-path',
+  // System
+  getSystemStats: 'get-system-stats',
+  watchDirectory: 'watch-directory',
+  unwatchDirectory: 'unwatch-directory',
+  // External tools
+  callES: 'call-es',
+  callRG: 'call-rg',
+  callRGBatch: 'call-rg-batch',
+  checkToolsStatus: 'check-tools-status',
+  exportArchiveFilesForRipgrep: 'export-archive-files-for-ripgrep',
+  // Archive filter config
+  getArchiveFilterConfig: 'get-archive-filter-config',
+  saveArchiveFilterConfig: 'save-archive-filter-config',
+  resetArchiveFilterConfig: 'reset-archive-filter-config',
+  // Debug helpers
+  openExtractDir: 'open-extract-dir',
+  listExtractDirs: 'list-extract-dirs',
+  cleanupAllExtractDirs: 'cleanup-all-extract-dirs',
+  getDebugLogFiles: 'get-debug-log-files',
+  openDebugLogsDir: 'open-debug-logs-dir',
+  // Remote share
+  startLocalShare: 'start-local-share',
+  stopLocalShare: 'stop-local-share',
+  getLocalShareStatus: 'get-local-share-status',
+  connectRemote: 'connect-remote',
+  readRemoteFile: 'read-remote-file',
+  getRemoteTree: 'get-remote-tree',
+  listRemoteArchive: 'list-remote-archive',
+  // Update
+  updateCode: 'update-code',
+  checkUpdateServer: 'check-update-server',
+  // Keyword persistence (SQLite)
+  keywordLoadAll: 'keyword-load-all',
+  keywordUpsertBatch: 'keyword-upsert-batch',
+  keywordDelete: 'keyword-delete',
+  keywordTrim: 'keyword-trim',
+  keywordBroadcast: 'keyword-broadcast',
+  keywordSaveTransitions: 'keyword-save-transitions',
+  keywordGetTransitions: 'keyword-get-transitions',
+  keywordSearch: 'keyword-search',
+  keywordSearchFzf: 'keyword-search-fzf',
+  keywordSaveCombo: 'keyword-save-combo',
+  keywordLoadCombos: 'keyword-load-combos',
+  keywordDeleteCombo: 'keyword-delete-combo',
+};
+
+// ===================================================================
+// Build API — auto-generate invoke wrappers from mapping
+// ===================================================================
+
+const api = {};
+for (const [method, channel] of Object.entries(INVOKE_CHANNELS)) {
+  api[method] = (...args) => ipcRenderer.invoke(channel, ...args);
+}
+
+// ===================================================================
+// Manual handlers — non-standard patterns
+// ===================================================================
+
+// Window control — mix of send (fire-and-forget) and invoke
+api.windowControl = {
+  minimize: () => ipcRenderer.send('window-minimize'),
+  minimizeAll: () => ipcRenderer.send('window-minimize-all'),
+  maximize: () => ipcRenderer.invoke('window-maximize'),
+  close: () => ipcRenderer.send('window-close'),
+  isMaximized: () => ipcRenderer.invoke('window-is-maximized'),
+  getBounds: () => ipcRenderer.invoke('window-get-bounds'),
+  setBounds: (bounds) => ipcRenderer.invoke('window-set-bounds', bounds)
+};
+
+// saveLog — transforms 3 args into single object
+api.saveLog = (level, message, data) =>
+  ipcRenderer.invoke('save-log', { level, message, data });
+
+// File stream chunk listener
+api.receiveFileChunk = (callback) => {
+  const handler = (event, lines) => callback(lines);
+  ipcRenderer.on('file-stream-chunk', handler);
+  return handler;
+};
+
+api.removeFileChunkListener = (handler) => {
+  ipcRenderer.removeListener('file-stream-chunk', handler);
+};
+
+// Whitelisted receive channels
+api.on = (channel, callback) => {
+  if (VALID_RECEIVE_CHANNELS.includes(channel)) {
+    ipcRenderer.on(channel, (event, ...args) => callback(...args));
+  }
+};
+
+api.removeListener = (channel, callback) => {
+  if (VALID_RECEIVE_CHANNELS.includes(channel)) {
+    ipcRenderer.removeListener(channel, callback);
+  }
+};
+
+// ===================================================================
+// Expose to renderer
+// ===================================================================
+
 try {
-  contextBridge.exposeInMainWorld('electronAPI', {
-    windowControl: {
-      minimize: () => ipcRenderer.send('window-minimize'),
-      minimizeAll: () => ipcRenderer.send('window-minimize-all'),
-      maximize: () => ipcRenderer.invoke('window-maximize'),
-      close: () => ipcRenderer.send('window-close'),
-      isMaximized: () => ipcRenderer.invoke('window-is-maximized'),
-      getBounds: () => ipcRenderer.invoke('window-get-bounds'),
-      setBounds: (bounds) => ipcRenderer.invoke('window-set-bounds', bounds)
-    },
-    createNewWindow: (options) => ipcRenderer.invoke('create-new-window', options),
-    openUartLogWindow: () => ipcRenderer.invoke('open-uart-log-window'),
-    focusWindow: (windowId) => ipcRenderer.invoke('focus-window', windowId),
-    getWindowList: () => ipcRenderer.invoke('get-window-list'),
-    getWindowPreview: (windowId) => ipcRenderer.invoke('get-window-preview', windowId),
-    onlineUpdate: () => ipcRenderer.invoke('online-update'),
-    // 检查文件是否存在 - 通过 IPC 调用主进程
-    fileExists: (filePath) => ipcRenderer.invoke('file-exists', filePath),
-    // 使用系统默认程序打开文件 - 通过 IPC 调用主进程
-    openFileWithDefaultApp: (filePath) => ipcRenderer.invoke('open-file-with-default-app', filePath),
-    // 🔧 打开文件路径（在资源管理器中选中文件）
-    openPath: (filePath) => ipcRenderer.invoke('open-path', filePath),
-    // 🗑️ 删除文件/文件夹（移至回收站）
-    deleteFile: (filePath) => ipcRenderer.invoke('delete-file', filePath),
-    // 🔧 用指定程序打开文件
-    openWithApp: (appPath, filePath) => ipcRenderer.invoke('open-with-app', appPath, filePath),
-    // 打开 WezTerm 终端
-    openTerminal: (dirPath) => ipcRenderer.invoke('open-terminal', dirPath),
-    // 🚀 打开HTML文件窗口
-    openHtmlWindow: (filePath) => ipcRenderer.invoke('open-html-window', filePath),
-    // 🚀 下载远程文件到临时目录（用于打开远程HTML文件）
-    downloadRemoteFile: (remoteUrl, fileName) => ipcRenderer.invoke('download-remote-file', remoteUrl, fileName),
-    // 读取文件内容 - 支持 WinRAR 拖拽
-    readFile: (filePath) => ipcRenderer.invoke('read-file', filePath),
-    // 读取多个文件内容
-    readFiles: (filePaths) => ipcRenderer.invoke('read-files', filePaths),
-    // 读取文件夹（递归）
-    readFolder: (folderPath) => ipcRenderer.invoke('read-folder', folderPath),
-    // 列出文件夹内容（不递归，不读取文件内容，用于懒加载）
-    listFolder: (folderPath, options) => ipcRenderer.invoke('list-folder', folderPath, options),
-    // 🚀 智能搜索文件夹 - 在所有驱动器上搜索指定名称的文件夹
-    searchFolder: (folderName) => ipcRenderer.invoke('search-folder', folderName),
-    // 显示文件夹选择对话框 - 当找到多个同名文件夹时使用
-    showFolderSelectionDialog: (options) => ipcRenderer.invoke('show-folder-selection-dialog', options),
-    // 获取拖拽文件的完整路径
-    getDroppedPath: () => ipcRenderer.invoke('get-dropped-path'),
-    // 获取当前工作目录
-    getCwd: () => ipcRenderer.invoke('get-cwd'),
-    // 复制文件到临时目录（用于WinRAR等工具的拖拽）
-    copyFilesToTemp: (filePaths) => ipcRenderer.invoke('copy-files-to-temp', filePaths),
-    // 解析WinRAR相对路径（WinRAR拖拽时提供的是相对路径）
-    resolveWinRarPath: (relativePath, isDirectory) => ipcRenderer.invoke('resolve-winrar-path', relativePath, isDirectory),
-    // 记录最近访问的目录
-    addRecentDirectory: (dirPath) => ipcRenderer.invoke('add-recent-directory', dirPath),
-    // 🚀 获取可用的数据盘驱动器列表（用于文件树预暴露）
-    getDataDrives: () => ipcRenderer.invoke('get-data-drives'),
-    // 🚀 列出目录内容（用于文件树展开）
-    listDirectory: (dirPath) => ipcRenderer.invoke('list-directory', dirPath),
-    // 🚀 列出压缩包内容（用于展开本地压缩包）
-    listArchive: (archivePath) => ipcRenderer.invoke('list-archive', archivePath),
-    // 原生解析 ZIP 中央目录（无需 7z，不受文件大小限制）
-    listZipNative: (archivePath) => ipcRenderer.invoke('list-zip-native', archivePath),
-    // 原生从 ZIP 提取单个文件（无需 7z）
-    extractZipNative: (archivePath, filePath) => ipcRenderer.invoke('extract-zip-native', archivePath, filePath),
-    // 保存日志到文件
-    saveLog: (level, message, data) => ipcRenderer.invoke('save-log', { level, message, data }),
-    // 获取日志文件路径
-    getLogFilePath: () => ipcRenderer.invoke('get-log-file-path'),
-    // 🔧 从压缩包中提取单个文件内容
-    extractFileFromArchive: (archivePath, filePath) => ipcRenderer.invoke('extract-file-from-archive', archivePath, filePath),
-    // 🚀 流式批量提取 tar.gz 文件（单次解压，内存收集）
-    streamExtractFromArchive: (archivePath, filePaths) => ipcRenderer.invoke('stream-extract-from-archive', archivePath, filePaths),
-    // 🚀 解压压缩包到指定目录
-    extractArchive: (archivePath, targetPath) => ipcRenderer.invoke('extract-archive', archivePath, targetPath),
-    // 🚀 解压压缩包到指定目录（带进度报告）
-    extractArchiveWithProgress: (archivePath, targetPath) => ipcRenderer.invoke('extract-archive-progress', archivePath, targetPath),
-    // 🚀 临时目录管理 - 用于文件树选中时的自动解压
-    createTempExtractDir: () => ipcRenderer.invoke('create-temp-extract-dir'),
-    clearTempExtractDir: () => ipcRenderer.invoke('clear-temp-extract-dir'),
-    extractToTempDir: (archivePath, relativePath) => ipcRenderer.invoke('extract-to-temp-dir', archivePath, relativePath),
-    deleteTempExtractDir: () => ipcRenderer.invoke('delete-temp-extract-dir'),
-    getTempExtractDir: () => ipcRenderer.invoke('get-temp-extract-dir'),
-    // 获取系统资源信息（CPU和内存占用率）
-    getSystemStats: () => ipcRenderer.invoke('get-system-stats'),
-    // 🚀 文件系统监听 - 监听目录变化
-    watchDirectory: (dirPath) => ipcRenderer.invoke('watch-directory', dirPath),
-    // 🚀 文件系统监听 - 停止监听目录
-    unwatchDirectory: (dirPath) => ipcRenderer.invoke('unwatch-directory', dirPath),
-    // 🔧 调用 Everything es.exe 命令行工具
-    callES: (options) => ipcRenderer.invoke('call-es', options),
-    // 🚀 调用 ripgrep rg.exe 命令行工具
-    callRG: (options) => ipcRenderer.invoke('call-rg', options),
-    // 🚀 高性能 ripgrep 批量搜索：单进程，主进程解析，紧凑数据
-    callRGBatch: (options) => ipcRenderer.invoke('call-rg-batch', options),
-    // 🔧 检查所有工具的状态
-    checkToolsStatus: () => ipcRenderer.invoke('check-tools-status'),
-    // 🚀 导出压缩包中的文件到临时文件，用于 ripgrep 过滤
-    exportArchiveFilesForRipgrep: (archiveFiles) => ipcRenderer.invoke('export-archive-files-for-ripgrep', archiveFiles),
-    // 🔧 压缩包过滤配置管理
-    // 获取配置
-    getArchiveFilterConfig: () => ipcRenderer.invoke('get-archive-filter-config'),
-    // 保存配置
-    saveArchiveFilterConfig: (config) => ipcRenderer.invoke('save-archive-filter-config', config),
-    // 重置配置
-    resetArchiveFilterConfig: () => ipcRenderer.invoke('reset-archive-filter-config'),
-    // 🔧 调试辅助功能
-    // 打开解压目录
-    openExtractDir: () => ipcRenderer.invoke('open-extract-dir'),
-    // 列出所有解压目录
-    listExtractDirs: () => ipcRenderer.invoke('list-extract-dirs'),
-    // 清理所有解压目录
-    cleanupAllExtractDirs: () => ipcRenderer.invoke('cleanup-all-extract-dirs'),
-    // 获取调试日志文件列表
-    getDebugLogFiles: () => ipcRenderer.invoke('get-debug-log-files'),
-    // 打开调试日志目录
-    openDebugLogsDir: () => ipcRenderer.invoke('open-debug-logs-dir'),
-    // 监听主进程发送的消息
-    on: (channel, callback) => {
-      // 白名单机制，只允许特定的频道
-      const validChannels = ['import-file-from-taskbar', 'uart-log-data', 'directory-changed', 'archive-file-extracted', 'keyword-changed', 'extract-progress'];
-      if (validChannels.includes(channel)) {
-        ipcRenderer.on(channel, (event, ...args) => callback(...args));
-      }
-    },
-    // 移除监听器
-    removeListener: (channel, callback) => {
-      const validChannels = ['import-file-from-taskbar', 'uart-log-data', 'directory-changed', 'archive-file-extracted', 'keyword-changed', 'extract-progress'];
-      if (validChannels.includes(channel)) {
-        ipcRenderer.removeListener(channel, callback);
-      }
-    },
-    // 🚀 远程目录共享
-    // 启动本地共享服务器
-    startLocalShare: (options) => ipcRenderer.invoke('start-local-share', options),
-    // 停止本地共享服务器
-    stopLocalShare: () => ipcRenderer.invoke('stop-local-share'),
-    // 获取本地共享状态
-    getLocalShareStatus: () => ipcRenderer.invoke('get-local-share-status'),
-    // 连接到远程共享
-    connectRemote: (options) => ipcRenderer.invoke('connect-remote', options),
-    // 读取远程文件
-    readRemoteFile: (options) => ipcRenderer.invoke('read-remote-file', options),
-    // 获取远程目录树
-    getRemoteTree: (options) => ipcRenderer.invoke('get-remote-tree', options),
-    // 🚀 列出远程压缩包内容
-    listRemoteArchive: (options) => ipcRenderer.invoke('list-remote-archive', options),
-    // 🔄 代码更新
-    // 更新代码
-    updateCode: (options) => ipcRenderer.invoke('update-code', options),
-    // 检查更新服务器状态
-    checkUpdateServer: (options) => ipcRenderer.invoke('check-update-server', options),
-    // 关键词持久化存储（SQLite）
-    keywordLoadAll: () => ipcRenderer.invoke('keyword-load-all'),
-    keywordUpsertBatch: (kws) => ipcRenderer.invoke('keyword-upsert-batch', kws),
-    keywordDelete: (text) => ipcRenderer.invoke('keyword-delete', text),
-    keywordTrim: (keepTexts) => ipcRenderer.invoke('keyword-trim', keepTexts),
-    keywordBroadcast: (action, data) => ipcRenderer.invoke('keyword-broadcast', action, data),
-    // 马尔可夫转移
-    keywordSaveTransitions: (data) => ipcRenderer.invoke('keyword-save-transitions', data),
-    keywordGetTransitions: (fromKw) => ipcRenderer.invoke('keyword-get-transitions', fromKw),
-    // SQL 端搜索
-    keywordSearch: (options) => ipcRenderer.invoke('keyword-search', options),
-    // fzf 模糊搜索
-    keywordSearchFzf: (options) => ipcRenderer.invoke('keyword-search-fzf', options),
-    // 关键词组合历史
-    keywordSaveCombo: (combo) => ipcRenderer.invoke('keyword-save-combo', combo),
-    keywordLoadCombos: () => ipcRenderer.invoke('keyword-load-combos'),
-    keywordDeleteCombo: (comboHash) => ipcRenderer.invoke('keyword-delete-combo', comboHash)
-  });
-  console.log('electronAPI 已成功暴露到 window 对象');
+  contextBridge.exposeInMainWorld('electronAPI', api);
+  console.log('electronAPI exposed successfully');
 } catch (error) {
-  console.error('暴露 electronAPI 时出错:', error);
+  console.error('Failed to expose electronAPI:', error);
 }

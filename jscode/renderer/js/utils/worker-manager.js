@@ -5,16 +5,18 @@
 
 window.App = window.App || {};
 window.App.WorkerManager = {
+  // 大数据分批阈值：超过此行数后分批发给 Worker，避免 structured clone 双倍内存
+  BIG_DATA_THRESHOLD: 50000,
+  BATCH_SIZE: 50000,
+
   // Worker 实例缓存
   workers: {
-    utcParser: null,
     csvParser: null,
     statsCalculator: null
   },
 
   // Worker 路径
   paths: {
-    utcParser: './renderer/js/workers/utc-parser-worker.js',
     csvParser: './renderer/js/workers/csv-parser-worker.js',
     statsCalculator: './renderer/js/workers/stats-calculator-worker.js'
   },
@@ -37,103 +39,6 @@ window.App.WorkerManager = {
       console.error(`[WorkerManager] Failed to initialize ${type} worker:`, error);
       return null;
     }
-  },
-
-  /**
-   * UTC 时间解析 Worker
-   */
-  async parseUTCReferencePoints(lines, onProgress) {
-    const worker = this.init('utcParser');
-    if (!worker) return null;
-
-    return new Promise((resolve) => {
-      const patterns = {
-        timePatternUTC: /(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}\.\d+)\s+UTC;android time\s+(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}\.\d+)/,
-        timePattern: /android time\s+(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}\.\d+)/
-      };
-
-      worker.postMessage({
-        type: 'parse',
-        data: {
-          lines,
-          batchSize: 5000
-        }
-      });
-
-      let results = [];
-
-      worker.onmessage = (e) => {
-        const { type, data } = e.data;
-
-        if (type === 'progress') {
-          if (onProgress) onProgress(data.progress, data.processed, data.total);
-          if (data.results) {
-            results = data.results;
-          }
-        } else if (type === 'complete') {
-          worker.onmessage = null;
-          resolve({
-            success: true,
-            results,
-            stats: data
-          });
-        }
-      };
-
-      worker.onerror = (error) => {
-        console.error('[WorkerManager] UTC parser worker error:', error);
-        resolve({ success: false, error: error.message });
-      };
-    });
-  },
-
-  /**
-   * 解析日志行的 UTC 时间（使用参考点）
-   */
-  async parseLinesUTC(lines, referencePoints, onProgress) {
-    const worker = this.init('utcParser');
-    if (!worker) return null;
-
-    return new Promise((resolve) => {
-      worker.postMessage({
-        type: 'parseLines',
-        data: {
-          lines,
-          referencePoints,
-          batchSize: 10000
-        }
-      });
-
-      let results = [];
-
-      worker.onmessage = (e) => {
-        const { type, data } = e.data;
-
-        if (type === 'parseProgress') {
-          if (onProgress) onProgress(data.progress, data.processed, data.total);
-          if (data.results) {
-            results = data.results;
-          }
-        }
-      };
-
-      const checkComplete = setInterval(() => {
-        if (worker.onmessage === null) {
-          clearInterval(checkComplete);
-          resolve({ success: true, results });
-        }
-      }, 100);
-
-      // 超时处理
-      setTimeout(() => {
-        clearInterval(checkComplete);
-        if (results.length > 0) {
-          resolve({ success: true, results });
-        } else {
-          resolve({ success: false, error: 'Timeout' });
-        }
-      }, 60000);
-    });
   },
 
   /**
@@ -275,6 +180,11 @@ window.App.WorkerManager = {
     const worker = this.init('statsCalculator');
     if (!worker) return null;
 
+    // 大数据分批传输
+    if (lines.length > this.BIG_DATA_THRESHOLD) {
+      return this._batchLineLengthStats(worker, lines, onProgress);
+    }
+
     return new Promise((resolve) => {
       worker.postMessage({
         type: 'lineLengthStats',
@@ -295,6 +205,59 @@ window.App.WorkerManager = {
       worker.onerror = (error) => {
         console.error('[WorkerManager] Stats worker error:', error);
         resolve({ success: false, error: error.message });
+      };
+    });
+  },
+
+  /**
+   * 分批发送行长度统计数据到 Worker
+   * @private
+   */
+  _batchLineLengthStats(worker, lines, onProgress) {
+    return new Promise((resolve) => {
+      // 使用一个对象来包装 resolve，因为 sendNextBatch 是普通函数
+      const ctx = { resolve, worker, lines, onProgress, batchIndex: 0,
+        allResults: null, totalBatches: Math.ceil(lines.length / this.BATCH_SIZE),
+        totalLines: lines.length };
+
+      worker.postMessage({ type: 'batchInit', data: { totalLines: lines.length } });
+
+      function sendNextBatch() {
+        if (ctx.batchIndex >= ctx.totalBatches) {
+          worker.postMessage({ type: 'batchComplete' });
+          return;
+        }
+        const start = ctx.batchIndex * 50000;
+        const end = Math.min(start + 50000, ctx.lines.length);
+        worker.postMessage({
+          type: 'statsBatch',
+          data: {
+            lines: ctx.lines.slice(start, end),
+            offset: start,
+            batchIndex: ctx.batchIndex,
+            totalBatches: ctx.totalBatches
+          }
+        });
+        ctx.batchIndex++;
+      }
+
+      worker.onmessage = (e) => {
+        const { type, data } = e.data;
+
+        if (type === 'statsReady') {
+          sendNextBatch();
+        } else if (type === 'statsBatchProgress') {
+          if (ctx.onProgress) ctx.onProgress(data.progress, data.processed, data.total);
+          if (data.results) ctx.allResults = data.results;
+        } else if (type === 'statsBatchDone') {
+          worker.onmessage = null;
+          ctx.resolve({ success: true, stats: ctx.allResults || data.stats });
+        }
+      };
+
+      worker.onerror = (error) => {
+        console.error('[WorkerManager] Stats worker error:', error);
+        ctx.resolve({ success: false, error: error.message });
       };
     });
   },

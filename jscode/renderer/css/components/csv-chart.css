@@ -1,0 +1,451 @@
+/* CSV图表弹窗样式 */
+.csv-chart-dialog {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 100000;
+  backdrop-filter: blur(4px);
+}
+
+.csv-chart-dialog-content {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  width: 90vw;
+  max-width: 1200px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+/* 调整大小的手柄 */
+.resize-handle {
+  position: absolute;
+  z-index: 100; /* 提高层级，确保在所有内容之上 */
+}
+
+/* 角落手柄 */
+.resize-handle-nw,
+.resize-handle-ne,
+.resize-handle-sw,
+.resize-handle-se {
+  width: 16px;
+  height: 16px;
+}
+
+.resize-handle-nw {
+  top: 0;
+  left: 0;
+  cursor: nw-resize;
+  border-top-left-radius: 12px;
+  background: linear-gradient(135deg, transparent 50%, rgba(100, 100, 100, 0.3) 50%);
+}
+
+.resize-handle-ne {
+  top: 0;
+  right: 0;
+  cursor: ne-resize;
+  border-top-right-radius: 12px;
+  background: linear-gradient(225deg, transparent 50%, rgba(100, 100, 100, 0.3) 50%);
+}
+
+.resize-handle-sw {
+  bottom: 0;
+  left: 0;
+  cursor: sw-resize;
+  border-bottom-left-radius: 12px;
+  background: linear-gradient(45deg, transparent 50%, rgba(100, 100, 100, 0.3) 50%);
+}
+
+.resize-handle-se {
+  bottom: 0;
+  right: 0;
+  cursor: se-resize;
+  border-bottom-right-radius: 12px;
+  background: linear-gradient(315deg, transparent 50%, rgba(100, 100, 100, 0.3) 50%);
+}
+
+.resize-handle:hover {
+  background: linear-gradient(135deg, transparent 40%, rgba(100, 100, 100, 0.5) 40%);
+}
+
+.resize-handle-nw:hover {
+  background: linear-gradient(135deg, transparent 40%, rgba(100, 100, 100, 0.5) 40%);
+}
+
+.resize-handle-ne:hover {
+  background: linear-gradient(225deg, transparent 40%, rgba(100, 100, 100, 0.5) 40%);
+}
+
+.resize-handle-sw:hover {
+  background: linear-gradient(45deg, transparent 40%, rgba(100, 100, 100, 0.5) 40%);
+}
+
+.resize-handle-se:hover {
+  background: linear-gradient(315deg, transparent 40%, rgba(100, 100, 100, 0.5) 40%);
+}
+
+/* CSV图表调整大小手柄 - 四边 */
+.resize-handle-n {
+  position: absolute;
+  top: 0;
+  left: 20px;
+  right: 20px;
+  height: 12px;
+  cursor: n-resize;
+  background: transparent;
+}
+
+.resize-handle-e {
+  position: absolute;
+  top: 20px;
+  right: 0;
+  bottom: 20px;
+  width: 12px;
+  cursor: e-resize;
+  background: transparent;
+}
+
+.resize-handle-s {
+  position: absolute;
+  bottom: 0;
+  left: 20px;
+  right: 20px;
+  height: 12px;
+  cursor: s-resize;
+  background: transparent;
+}
+
+.resize-handle-w {
+  position: absolute;
+  top: 20px;
+  left: 0;
+  bottom: 20px;
+  width: 12px;
+  cursor: w-resize;
+  background: transparent;
+}
+
+.resize-handle-n:hover {
+  background: rgba(100, 100, 100, 0.15);
+}
+
+.resize-handle-e:hover {
+  background: rgba(100, 100, 100, 0.15);
+}
+
+.resize-handle-s:hover {
+  background: rgba(100, 100, 100, 0.15);
+}
+
+.resize-handle-w:hover {
+  background: rgba(100, 100, 100, 0.15);
+}
+
+.csv-chart-dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  border-bottom: 1px solid #e0e0e0;
+  background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+  color: #155724;
+  min-height: 40px;
+  cursor: move; /* 拖动光标提示 */
+  user-select: none; /* 防止拖动时选中文字 */
+}
+
+.csv-chart-dialog-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.csv-chart-dialog-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.csv-chart-config-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(21, 87, 36, 0.3);
+  border-radius: 4px;
+  cursor: pointer;
+  color: #155724;
+  transition: all 0.2s;
+  /* 按钮使用默认光标，不显示拖动光标 */
+  cursor: default;
+}
+
+.csv-chart-config-btn:hover {
+  background: rgba(255, 255, 255, 1);
+  border-color: rgba(21, 87, 36, 0.5);
+}
+
+.csv-chart-dialog-close {
+  background: rgba(0, 0, 0, 0.1);
+  border: none;
+  color: #155724;
+  font-size: 20px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.csv-chart-dialog-close:hover {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.csv-chart-dialog-body {
+  padding: 20px;
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+#csvChartCanvas {
+  width: 100%;
+  height: 60vh;
+  background: #fafafa;
+  border-radius: 8px;
+  cursor: crosshair;
+}
+
+.csv-chart-dialog-legend {
+  padding: 12px 20px;
+  border-top: 1px solid #e0e0e0;
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  flex-wrap: wrap;
+  background: #f8f9fa;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #333;
+}
+
+.legend-color {
+  width: 24px;
+  height: 4px;
+  border-radius: 2px;
+}
+
+/* CSV图表配置面板样式 */
+.csv-chart-config-panel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 100001;
+  backdrop-filter: blur(4px);
+}
+
+.csv-chart-config-content {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  width: 90vw;
+  max-width: 800px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.csv-chart-config-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  border-bottom: 1px solid #e0e0e0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.csv-chart-config-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.csv-chart-config-close {
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  font-size: 24px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.csv-chart-config-close:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.csv-chart-config-body {
+  padding: 20px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.csv-chart-config-instructions {
+  padding: 10px 15px;
+  background: #e7f3ff;
+  border-left: 4px solid #2196F3;
+  border-radius: 4px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: #1565C0;
+}
+
+.csv-chart-config-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.csv-chart-column-config {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  background: #fafafa;
+  transition: border-color 0.2s;
+}
+
+.csv-chart-column-config:hover {
+  border-color: #2196F3;
+}
+
+.csv-chart-column-checkbox {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.csv-chart-column-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.csv-chart-column-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: #333;
+}
+
+.csv-chart-column-meta {
+  font-size: 12px;
+  color: #666;
+}
+
+.csv-chart-column-settings {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.csv-chart-column-input {
+  width: 100px;
+  padding: 6px 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.csv-chart-column-input:focus {
+  outline: none;
+  border-color: #2196F3;
+}
+
+.csv-chart-column-select {
+  padding: 6px 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 13px;
+  background: white;
+  cursor: pointer;
+}
+
+.csv-chart-column-color {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: 2px solid #ddd;
+  cursor: pointer;
+}
+
+.csv-chart-config-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid #e0e0e0;
+  background: #f8f9fa;
+}
+
+.csv-chart-config-reset,
+.csv-chart-config-apply {
+  padding: 8px 20px;
+  font-size: 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.csv-chart-config-reset {
+  background: white;
+  border: 1px solid #ddd;
+  color: #666;
+}
+
+.csv-chart-config-reset:hover {
+  background: #f5f5f5;
+  border-color: #ccc;
+}
+
+.csv-chart-config-apply {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  color: white;
+  font-weight: 500;
+}
+
+.csv-chart-config-apply:hover {
+  opacity: 0.9;
+}
+

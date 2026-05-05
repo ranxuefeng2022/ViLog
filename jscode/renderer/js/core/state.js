@@ -18,6 +18,24 @@ window.App = window.App || {};
 window.App.State = (() => {
   'use strict';
 
+  // Unified legacy global variable keys — single source of truth
+  // Used by bridge.js for bidirectional sync and by syncFromGlobal() below
+  const LEGACY_GLOBAL_KEYS = [
+    'originalLines', 'currentFiles', 'fileHeaders',
+    'isFiltering', 'isFullscreen',
+    'searchKeyword', 'searchMatches', 'currentMatchIndex', 'totalMatchCount',
+    'searchResults', 'currentSearchIndex',
+    'selectedOriginalIndex', 'selectedLineIndex',
+    'lastClickedOriginalIndex', 'lastClickedFilteredIndex',
+    'currentFilter', 'secondaryFilter',
+    'bookmarkedIndexSet',
+    'filteredPanelAllLines', 'filteredPanelAllOriginalIndices',
+    'filteredPanelAllPrimaryIndices',
+    'filteredPanelVisibleStart', 'filteredPanelVisibleEnd',
+    'filteredPanelScrollPosition',
+    'customHighlights',
+  ];
+
   // 内部状态存储
   const _state = {
     // === 日志数据 ===
@@ -197,20 +215,13 @@ window.App.State = (() => {
      * 从全局变量同步回状态（旧代码可能直接修改了 window.xxx）
      */
     syncFromGlobal() {
-      const globalKeys = [
-        'originalLines', 'currentFiles', 'fileHeaders',
-        'filteredPanelAllLines', 'filteredPanelAllOriginalIndices',
-        'filteredPanelAllPrimaryIndices', 'filteredPanelVisibleStart',
-        'filteredPanelVisibleEnd', 'filteredPanelScrollPosition',
-        'selectedLineIndex', 'lastClickedOriginalIndex', 'lastClickedFilteredIndex',
-        'isFiltering', 'totalMatchCount', 'searchKeyword',
-        'searchResults', 'currentSearchIndex',
-      ];
-      for (const key of globalKeys) {
+      for (const key of LEGACY_GLOBAL_KEYS) {
         if (window[key] !== undefined) {
           _state[key] = window[key];
         }
       }
-    }
+    },
+
+    LEGACY_GLOBAL_KEYS
   };
 })();

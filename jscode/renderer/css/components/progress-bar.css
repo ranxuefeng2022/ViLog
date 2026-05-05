@@ -1,0 +1,99 @@
+/* 进度条样式（双进度条：文件个数 + 行数） */
+.file-loading-progress {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 9999;
+  background: white;
+  padding: 16px 24px;
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+  display: none;
+  min-width: 350px;
+  border: 1px solid #e0e0e0;
+}
+
+.file-loading-progress.visible {
+  display: block;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.progress-section {
+  margin-bottom: 12px;
+}
+
+.progress-section:last-child {
+  margin-bottom: 0;
+}
+
+.progress-text {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #333;
+}
+
+#progressFileLabel,
+#progressLineLabel {
+  color: #666;
+}
+
+#progressFilePercent {
+  color: #28a745;
+  font-weight: 600;
+  min-width: 50px;
+  text-align: right;
+}
+
+#progressLinePercent {
+  color: #007bff;
+  font-weight: 600;
+  min-width: 50px;
+  text-align: right;
+}
+
+.progress-bar {
+  width: 80px; /* 🔧 改成固定宽度，不再100% */
+  height: 3px; /* 🔧 减小高度 */
+  background: rgba(102, 126, 234, 0.15); /* 🔧 更淡的背景 */
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+  flex-shrink: 0; /* 🔧 防止压缩 */
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 2px; /* 🔧 匹配进度条圆角 */
+  background: linear-gradient(90deg, #28a745 0%, #34ce57 100%);
+  transition: width 0.2s ease-out; /* 🔧 更快的动画 */
+  width: 0%;
+  position: relative;
+}
+
+/* 绿色进度条 - 文件个数 */
+.progress-fill-green {
+  background: linear-gradient(90deg, #28a745 0%, #34ce57 100%);
+}
+
+/* 蓝色进度条 - 日志行数 */
+.progress-fill-blue {
+  background: linear-gradient(90deg, #007bff 0%, #0056b3 100%);
+}
+
+.progress-fill-green::after,
+.progress-fill-blue::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  animation: shimmer 2s infinite;
+}
+

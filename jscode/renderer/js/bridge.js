@@ -1,15 +1,11 @@
 /**
  * 桥接层 - 新模块与旧全局变量之间的双向同步
  *
- * 问题：original-script.js 使用 window.xxx 全局变量，
- *       新模块使用 App.State.get/set()。
- *       两者需要保持同步。
+ * 旧代码直接修改 window.xxx 全局变量，
+ * 新模块通过 App.State 操作状态。
+ * 桥接层确保两者保持同步。
  *
- * 解决：bridge.js 在 original-script.js 加载后，
- *       将全局变量同步到 App.State，
- *       并定期反向同步以捕获旧代码的直接修改。
- *
- * 当 original-script.js 完全被模块化替代后，此文件可删除。
+ * 当 original-script.js 完全模块化后，此文件可删除。
  */
 
 window.App = window.App || {};
@@ -17,41 +13,15 @@ window.App = window.App || {};
 window.App.Bridge = (() => {
   'use strict';
 
-  // 需要同步的全局变量列表
-  const GLOBAL_KEYS = [
-    'originalLines',
-    'currentFiles',
-    'fileHeaders',
-    'filterBox',
-    'outer',
-    'inner',
-    'isFiltering',
-    'isFullscreen',
-    'searchKeyword',
-    'searchMatches',
-    'currentMatchIndex',
-    'totalMatchCount',
-    'selectedOriginalIndex',
-    'lastClickedOriginalIndex',
-    'lastClickedFilteredIndex',
-    'currentFilter',
-    'secondaryFilter',
-    'bookmarkedIndexSet',
-    'filteredPanelAllLines',
-    'filteredPanelAllOriginalIndices',
-    'filteredPanelAllPrimaryIndices',
-    'filteredPanelVisibleStart',
-    'filteredPanelVisibleEnd',
-    'filteredPanelScrollPosition',
-    'customHighlights',
-  ];
+  // Use the unified key list from App.State (single source of truth)
+  const GLOBAL_KEYS = window.App.State.LEGACY_GLOBAL_KEYS;
 
   let syncTimer = null;
   let isActive = false;
+  let _dirty = false;
 
   /**
    * 将 App.State 的值同步到全局变量
-   * （新模块修改 state → 旧代码能读到）
    */
   function syncStateToGlobal() {
     if (!window.App || !window.App.State) return;
@@ -64,60 +34,76 @@ window.App.Bridge = (() => {
   }
 
   /**
-   * 将全局变量的值同步到 App.State
-   * （旧代码修改 window.xxx → 新模块能读到）
+   * 将全局变量的值同步到 App.State（仅同步已变更的值）
    */
   function syncGlobalToState() {
     if (!window.App || !window.App.State) return;
     for (const key of GLOBAL_KEYS) {
       if (window[key] !== undefined) {
-        window.App.State.set(key, window[key]);
+        const oldVal = window.App.State.get(key);
+        if (oldVal !== window[key]) {
+          window.App.State.set(key, window[key]);
+        }
       }
     }
   }
 
   return {
     /**
-     * 启动双向同步（在 original-script.js 加载完成后调用）
+     * 新模块修改状态后调用，触发立即同步到全局变量
+     */
+    notifyStateChanged() {
+      _dirty = true;
+      syncStateToGlobal();
+    },
+
+    /**
+     * 启动双向同步
      */
     start() {
       if (isActive) return;
       isActive = true;
 
-      // 立即同步一次（把旧代码已初始化的全局变量拉到 State）
       syncGlobalToState();
 
-      // 定期同步（捕获旧代码的动态修改）
+      // 低频轮询兜底（2秒），捕获旧代码直接修改的全局变量
       syncTimer = setInterval(() => {
         syncGlobalToState();
-      }, 500);
+      }, 2000);
 
-      console.log('[Bridge] 双向同步已启动');
+      // 监听 EventBus 事件，按需触发快速同步
+      if (window.App.EventBus) {
+        window.App.EventBus.on('state:changed', () => {
+          syncStateToGlobal();
+        });
+        window.App.EventBus.on('filter:applied', () => {
+          syncGlobalToState();
+          syncStateToGlobal();
+        });
+        window.App.EventBus.on('search:performed', () => {
+          syncGlobalToState();
+        });
+        window.App.EventBus.on('file:loaded', () => {
+          setTimeout(syncGlobalToState, 100);
+        });
+      }
+
+      console.log('[Bridge] 双向同步已启动（事件驱动 + 2s 低频轮询兜底）');
     },
 
-    /**
-     * 停止同步
-     */
     stop() {
       if (syncTimer) {
         clearInterval(syncTimer);
         syncTimer = null;
       }
       isActive = false;
-      console.log('[Bridge] 同步已停止');
     },
 
-    /**
-     * 手动触发一次性同步
-     */
     syncOnce() {
       syncGlobalToState();
       syncStateToGlobal();
     },
 
-    /**
-     * 检查同步状态
-     */
     isActive() {
       return isActive;
     }

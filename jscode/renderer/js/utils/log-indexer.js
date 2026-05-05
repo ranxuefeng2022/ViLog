@@ -41,6 +41,7 @@ class LogIndexer {
 
     // 构建阶段使用的临时数组，完成后转为 Uint32Array
     this._logLevelBuilders = new Map();
+    this._fullTextBuilders = new Map();
 
     // 构建状态
     this.state = {
@@ -92,6 +93,9 @@ class LogIndexer {
     this.state.totalLines = lines.length;
     this.state.indexedLines = 0;
 
+    // 保存原始数据引用，用于子串搜索的全面扫描
+    this._allLines = lines;
+
     try {
       // 分批处理，避免阻塞UI
       for (let i = 0; i < lines.length; i += this.options.batchSize) {
@@ -127,6 +131,9 @@ class LogIndexer {
       // 冻结日志级别索引为 Uint32Array（内存减少 ~75%）
       this._finalizeLogLevels();
 
+      // 冻结全文索引为 Uint32Array（内存减少 ~75%）
+      this._finalizeFullText();
+
       // 触发完成回调
       if (this.callbacks.onComplete) {
         this.callbacks.onComplete({
@@ -161,6 +168,7 @@ class LogIndexer {
 
     // 增量追加后重新冻结
     this._finalizeLogLevels();
+    this._finalizeFullText();
 
     if (this.options.enablePersistence) {
       await this._persistIndex();
@@ -208,11 +216,11 @@ class LogIndexer {
       if (word.length > 1 && !/^\d+$/.test(word)) {
         const lowerWord = word.toLowerCase();
 
-        if (!this.indices.fullText.has(lowerWord)) {
-          this.indices.fullText.set(lowerWord, new Set());
+        if (!this._fullTextBuilders.has(lowerWord)) {
+          this._fullTextBuilders.set(lowerWord, []);
         }
 
-        this.indices.fullText.get(lowerWord).add(lineNumber);
+        this._fullTextBuilders.get(lowerWord).push(lineNumber);
       }
     }
   }
@@ -245,6 +253,26 @@ class LogIndexer {
       this.indices.logLevels.set(level, new Uint32Array(arr));
     }
     this._logLevelBuilders.clear();
+  }
+
+  /**
+   * 将全文索引构建数组转为 Uint32Array（冻结索引）
+   * 内存在转换后减少约 75%（Set → Uint32Array）
+   * @private
+   */
+  _finalizeFullText() {
+    for (const [word, arr] of this._fullTextBuilders.entries()) {
+      // 排序去重后转为 Uint32Array
+      arr.sort((a, b) => a - b);
+      const deduped = [];
+      for (let i = 0; i < arr.length; i++) {
+        if (i === 0 || arr[i] !== arr[i - 1]) {
+          deduped.push(arr[i]);
+        }
+      }
+      this.indices.fullText.set(word, new Uint32Array(deduped));
+    }
+    this._fullTextBuilders.clear();
   }
 
   /**
@@ -330,13 +358,18 @@ class LogIndexer {
 
     // 精确匹配
     if (this.indices.fullText.has(word)) {
-      this.indices.fullText.get(word).forEach(line => results.add(line));
+      const arr = this.indices.fullText.get(word);
+      for (let i = 0; i < arr.length; i++) {
+        results.add(arr[i]);
+      }
     }
 
     // 前缀匹配（例如：搜 "err" 可以匹配 "error"）
-    for (const [indexedWord, lines] of this.indices.fullText.entries()) {
+    for (const [indexedWord, arr] of this.indices.fullText.entries()) {
       if (indexedWord.startsWith(word) || word.startsWith(indexedWord)) {
-        lines.forEach(line => results.add(line));
+        for (let i = 0; i < arr.length; i++) {
+          results.add(arr[i]);
+        }
       }
     }
 
@@ -348,12 +381,24 @@ class LogIndexer {
    * @private
    */
   async _searchSubstring(substring) {
-    // 如果有行缓存，优先从缓存中搜索
     const results = [];
 
+    // 从 cache 中搜索（如果命中的话）
     for (const [lineNumber, line] of this.indices.lineCache.entries()) {
       if (line.toLowerCase().includes(substring)) {
         results.push(lineNumber);
+      }
+    }
+
+    // 如果 cache 未覆盖全部，继续从全量数据中搜索
+    if (this._allLines && this._allLines.length > this.indices.lineCache.size) {
+      const cachedSet = new Set(results);
+      for (let i = 0; i < this._allLines.length; i++) {
+        if (cachedSet.has(i)) continue;
+        const line = this._allLines[i];
+        if (line && line.toLowerCase().includes(substring)) {
+          results.push(i);
+        }
       }
     }
 
@@ -464,8 +509,10 @@ class LogIndexer {
     this.indices.keywords.clear();
     this.indices.logLevels.clear();
     this._logLevelBuilders.clear();
+    this._fullTextBuilders.clear();
     this.indices.timeRanges = [];
     this.indices.lineCache.clear();
+    this._allLines = null;
 
     this.state = {
       totalLines: 0,
@@ -494,18 +541,43 @@ class LogIndexer {
   }
 
   /**
-   * 持久化索引到 IndexedDB
+   * 获取或创建 IndexedDB 存储实例
+   * 使用 IndexedDB 替代 localStorage，突破 5-10MB 限制
+   * @returns {Promise<IDBObjectStore>}
+   * @private
+   */
+  async _getIDBStore() {
+    if (this._idbStore) return this._idbStore;
+    const dbName = 'logIndexerDB';
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(dbName, 1);
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains('indexes')) {
+          db.createObjectStore('indexes');
+        }
+      };
+      request.onsuccess = () => {
+        const db = request.result;
+        this._idbStore = db.transaction('indexes', 'readwrite').objectStore('indexes');
+        resolve(this._idbStore);
+      };
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  /**
+   * 持久化索引到 IndexedDB（含 localStorage 作为 fallback）
    * @private
    */
   async _persistIndex() {
     try {
-      // 将Map转换为可序列化的对象
+      // 序列化索引数据
       const serialized = {
-        fullText: Array.from(this.indices.fullText.entries()).map(([word, lines]) => [
+        fullText: Array.from(this.indices.fullText.entries()).map(([word, arr]) => [
           word,
-          Array.from(lines),
+          Array.from(arr),
         ]),
-        // Uint32Array 转普通数组才能 JSON 序列化
         logLevels: Array.from(this.indices.logLevels.entries()).map(([level, arr]) => [
           level,
           Array.from(arr),
@@ -516,9 +588,22 @@ class LogIndexer {
       };
 
       const key = this.options.storagePrefix + 'current';
-      localStorage.setItem(key, JSON.stringify(serialized));
 
-      console.log('✓ Index persisted to storage');
+      // 尝试 IndexedDB 写入
+      try {
+        const store = await this._getIDBStore();
+        await new Promise((resolve, reject) => {
+          const req = store.put(serialized, key);
+          req.onsuccess = resolve;
+          req.onerror = reject;
+        });
+        console.log('✓ Index persisted to IndexedDB');
+      } catch (idbError) {
+        // IndexedDB 不可用时降级到 localStorage
+        console.warn('IndexedDB write failed, falling back to localStorage:', idbError);
+        localStorage.setItem(key, JSON.stringify(serialized));
+        console.log('✓ Index persisted to localStorage (fallback)');
+      }
     } catch (error) {
       console.warn('Failed to persist index:', error);
     }
@@ -528,36 +613,69 @@ class LogIndexer {
    * 从存储中加载索引
    */
   async loadIndex() {
+    const key = this.options.storagePrefix + 'current';
+
     try {
-      const key = this.options.storagePrefix + 'current';
-      const data = localStorage.getItem(key);
-
-      if (!data) {
-        return false;
+      // 优先从 IndexedDB 读取
+      const store = await this._getIDBStore();
+      const data = await new Promise((resolve, reject) => {
+        const req = store.get(key);
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = reject;
+      });
+      if (data) {
+        this._deserializeIndex(data);
+        console.log('✓ Index loaded from IndexedDB');
+        return true;
       }
-
-      const serialized = JSON.parse(data);
-
-      // 反序列化索引
-      this.indices.fullText = new Map(
-        serialized.fullText.map(([word, lines]) => [word, new Set(lines)])
-      );
-      // 日志级别索引：反序列化为 Uint32Array
-      this.indices.logLevels = new Map(
-        serialized.logLevels.map(([level, arr]) => [level, new Uint32Array(arr)])
-      );
-      this.indices.timeRanges = serialized.timeRanges;
-
-      this.state.totalLines = serialized.totalLines;
-      this.state.indexedLines = serialized.totalLines;
-      this.state.lastBuildTime = serialized.buildTime || 0;
-
-      console.log('✓ Index loaded from storage');
-      return true;
-    } catch (error) {
-      console.warn('Failed to load index:', error);
-      return false;
+    } catch (idbError) {
+      console.warn('IndexedDB read failed:', idbError);
     }
+
+    // 降级：尝试从 localStorage 读取并自动迁移
+    try {
+      const legacyData = localStorage.getItem(key);
+      if (legacyData) {
+        const serialized = JSON.parse(legacyData);
+        this._deserializeIndex(serialized);
+        // 自动迁移到 IndexedDB
+        try {
+          const store = await this._getIDBStore();
+          await new Promise((resolve, reject) => {
+            const req = store.put(serialized, key);
+            req.onsuccess = resolve;
+            req.onerror = reject;
+          });
+          localStorage.removeItem(key);
+          console.log('✓ Index migrated from localStorage to IndexedDB');
+        } catch (migrateError) {
+          // 迁移失败不影响使用，下次仍会尝试
+        }
+        console.log('✓ Index loaded from localStorage (legacy)');
+        return true;
+      }
+    } catch (error) {
+      console.warn('Failed to load index from localStorage:', error);
+    }
+
+    return false;
+  }
+
+  /**
+   * 从序列化数据反序列化索引
+   * @private
+   */
+  _deserializeIndex(serialized) {
+    this.indices.fullText = new Map(
+      serialized.fullText.map(([word, lines]) => [word, new Uint32Array(lines)])
+    );
+    this.indices.logLevels = new Map(
+      serialized.logLevels.map(([level, arr]) => [level, new Uint32Array(arr)])
+    );
+    this.indices.timeRanges = serialized.timeRanges;
+    this.state.totalLines = serialized.totalLines;
+    this.state.indexedLines = serialized.totalLines;
+    this.state.lastBuildTime = serialized.buildTime || 0;
   }
 
   /**

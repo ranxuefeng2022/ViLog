@@ -1,0 +1,250 @@
+/* CSV表格视图样式 */
+#csvTablePanel {
+  display: none;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 400px;
+  min-height: 300px;
+  width: 80vw;
+  height: 70vh;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
+}
+
+#csvTablePanel.visible {
+  display: flex;
+  flex-direction: column;
+}
+
+#csvTablePanelHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 12px;
+  background: #f5f5f5;
+  color: #333;
+  border-bottom: 1px solid #ddd;
+  border-radius: 8px 8px 0 0;
+  font-size: 13px;
+  font-weight: 500;
+  user-select: none;
+}
+
+.csv-table-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.csv-table-header-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.csv-table-header-center #csvTableSearchBox {
+  padding: 4px 10px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  font-size: 12px;
+  min-width: 150px;
+}
+
+.csv-table-header-center #csvSearchStatus {
+  font-size: 11px;
+  color: #666;
+  min-width: 60px;
+}
+
+.csv-table-header-center button {
+  padding: 4px 10px;
+  font-size: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  background: white;
+  color: #333;
+  border-radius: 4px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.csv-table-header-center button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.csv-table-header-center button:not(:disabled):hover {
+  background: #f5f5f5;
+}
+
+.csv-table-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.csv-table-header-right button {
+  line-height: 1;
+}
+
+#csvTableInfo {
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+#csvTableCloseBtn {
+  background: rgba(0, 0, 0, 0.1);
+  border: none;
+  color: #666;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+#csvTableCloseBtn:hover {
+  background: rgba(0, 0, 0, 0.2);
+  color: #333;
+}
+
+#csvTablePanelContent {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  background: #f8f9fa;
+}
+
+#csvTablePlaceholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #6c757d;
+  font-size: 14px;
+}
+
+.placeholder-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+
+.placeholder-text {
+  font-size: 14px;
+}
+
+#csvTableContainer {
+  display: none;
+  height: 100%;
+  overflow: hidden;
+  background: white;
+  position: relative;
+}
+
+#csvTableContainer.has-data {
+  display: block;
+}
+
+#csvTableContainer canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.csv-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  white-space: nowrap;
+}
+
+.csv-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.csv-table thead th {
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 600;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.3);
+  position: relative;
+  user-select: none;
+}
+
+.csv-table thead th::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.csv-table thead th:last-child::after {
+  display: none;
+}
+
+.csv-table tbody tr {
+  transition: background-color 0.15s;
+}
+
+.csv-table tbody tr:hover {
+  background-color: #f0f4ff;
+}
+
+.csv-table tbody tr:nth-child(even) {
+  background-color: #f8f9fa;
+}
+
+.csv-table tbody tr:nth-child(even):hover {
+  background-color: #f0f4ff;
+}
+
+.csv-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid #e9ecef;
+  color: #212529;
+}
+
+.csv-table tbody tr:hover td {
+  color: #000;
+}
+
+/* 表格滚动条样式 */
+#csvTableContainer::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+#csvTableContainer::-webkit-scrollbar-track {
+  background: #f1f3f4;
+  border-radius: 6px;
+}
+
+#csvTableContainer::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 6px;
+  border: 2px solid #f1f3f4;
+}
+
+#csvTableContainer::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%);
+}
+

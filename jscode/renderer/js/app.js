@@ -1,17 +1,13 @@
 /**
- * VivoLog 应用入口（重构版）
- *
- * 替代旧的 renderer/js/main.js
- * 不再使用 document.write()，改为在 index.html 中按顺序加载脚本
+ * VivoLog 应用入口
  *
  * 架构分层：
- *   Layer 0: 独立模块（日志拦截器、错误处理）— 自执行，无需初始化
  *   Layer 1: 核心基础设施（constants, event-bus, state, dom-cache, helpers）
- *   Layer 2: Worker管理器、外部工具集成
- *   Layer 3: 功能模块包装层（bookmarks, filter, search, etc.）
- *   Layer 4: 遗留代码（original-script.js）
- *   Layer 5: Patch文件（覆盖遗留代码的函数）
- *   Layer 6: Bridge（同步新旧状态）+ 本文件（初始化）
+ *   Layer 2: Worker管理器
+ *   Layer 3: 功能模块
+ *   Layer 4: 服务模块（模块化 API）
+ *   Layer 5: 遗留代码（original-script.js 拆分 + patch）
+ *   Layer 6: Bridge + 本入口
  */
 
 window.App = window.App || {};
@@ -19,10 +15,9 @@ window.App = window.App || {};
 (function() {
   'use strict';
 
-  console.log('=== VivoLog Modular Version ===');
+  console.log('=== VivoLog v3.0 ===');
 
-  // 版本信息
-  window.App.version = '2.0.0-modular';
+  window.App.version = '3.0.0';
 
   // 公开 API
   window.App.API = {
@@ -33,36 +28,32 @@ window.App = window.App || {};
     getEventBus:  () => window.App.EventBus,
     version:      window.App.version,
 
-    // 功能模块快捷访问
-    bookmarks:    () => window.App.Bookmarks,
-    contextMenu:  () => window.App.ContextMenu,
-    search:       () => window.App.Search,
     filter:       () => window.App.Filter,
+    search:       () => window.App.Search,
     renderer:     () => window.App.LogRenderer,
     fileTree:     () => window.App.FileTree,
     loader:       () => window.App.LogLoader,
     ui:           () => window.App.UI,
     quickLinks:   () => window.App.QuickLinks,
     remoteShare:  () => window.App.RemoteShare,
+    contextMenu:  () => window.App.ContextMenu,
+    keywordHistory: () => window.App.FilterKeywordHistory,
   };
 
-  /**
-   * 应用初始化（在所有脚本加载完成后执行）
-   */
   async function initApp() {
-    console.log('[App] Initializing modules...');
+    console.log('[App] Initializing...');
 
-    // 0. 初始化 IndexedDB（必须在 FilterKeywordHistory 之前）
+    // 0. 初始化 IndexedDB
     if (window.App.IDB && window.App.IDB.init) {
       try {
         await window.App.IDB.init();
         console.log('[App] IDB initialized');
       } catch (e) {
-        console.warn('[App] IDB init failed, will use localStorage fallback:', e);
+        console.warn('[App] IDB init failed:', e);
       }
     }
 
-    // 0.5 初始化过滤关键词历史模块（依赖 IDB，需要 await）
+    // 1. 初始化过滤关键词历史（依赖 IDB）
     if (window.App.FilterKeywordHistory && window.App.FilterKeywordHistory.init) {
       try {
         await window.App.FilterKeywordHistory.init();
@@ -72,16 +63,15 @@ window.App = window.App || {};
       }
     }
 
-    // 1. 初始化 DOM 缓存
+    // 2. 初始化 DOM 缓存
     if (window.App.DOM && window.App.DOM.init) {
       window.App.DOM.init();
     }
 
-    // 2. 初始化功能模块（Phase 1 中这些只是打印日志，Phase 2 会做真正的事）
+    // 3. 初始化服务模块
     const modules = [
-      'Bookmarks', 'ContextMenu', 'Search', 'Filter',
-      'LogRenderer', 'FileTree', 'LogLoader', 'UI',
-      'QuickLinks', 'RemoteShare'
+      'Filter', 'Search', 'LogRenderer', 'FileTree',
+      'LogLoader', 'UI', 'ContextMenu', 'QuickLinks', 'RemoteShare'
     ];
 
     for (const name of modules) {
@@ -89,32 +79,25 @@ window.App = window.App || {};
         try {
           window.App[name].init();
         } catch (e) {
-          console.error(`[App] Module ${name} init failed:`, e);
+          console.error(`[App] ${name} init failed:`, e);
         }
       }
     }
 
-    // 3. 启动桥接层同步
+    // 4. 启动桥接层（延迟等待遗留代码初始化）
     if (window.App.Bridge && window.App.Bridge.start) {
-      // 延迟启动，等待 original-script.js 完成初始化
-      setTimeout(() => {
-        window.App.Bridge.start();
-      }, 200);
+      setTimeout(() => window.App.Bridge.start(), 200);
     }
 
-    console.log('[App] All modules initialized');
-    console.log(`[App] Version: ${window.App.version}`);
+    console.log(`[App] Ready (v${window.App.version})`);
   }
 
-  // DOM 加载完成后初始化
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', initApp);
   } else {
-    // DOMContentLoaded 已触发（脚本在 body 末尾加载时）
     initApp();
   }
 
-  // 窗口加载完成后做额外同步
   window.addEventListener('load', () => {
     setTimeout(() => {
       if (window.App.Bridge && window.App.Bridge.syncOnce) {

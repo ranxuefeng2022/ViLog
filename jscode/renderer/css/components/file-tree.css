@@ -1,0 +1,836 @@
+/* File Tree — tree container, items, server connect, remote directory */
+
+#fileTreeContainer.drag-over {
+  border: 2px dashed #0071e3 !important;
+  background: rgba(0, 113, 227, 0.05) !important;
+}
+
+/* 压缩包文件树样式 */
+.file-tree-item.archive {
+  color: #8b5cf6;
+  font-weight: 500;
+}
+
+.file-tree-item.archive .file-icon {
+  color: #8b5cf6;
+}
+
+/* 🚀 移除压缩包展开时的紫色背景 */
+.file-tree-item.selected {
+  background: rgba(0, 113, 227, 0.15) !important;
+}
+
+.file-tree-item.multi-selected {
+  background: rgba(0, 113, 227, 0.1) !important;
+  border: 1px dashed #0071e3;
+}
+
+/* 🚀 修复：确保hover能正确覆盖其他状态 */
+.file-tree-item:hover {
+  background: rgba(0, 113, 227, 0.08) !important;
+}
+
+.file-tree-item.loading {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.file-tree-item.breathing-highlight {
+  animation: breathe-red 2s ease-in-out 3;
+  border-radius: 4px;
+}
+
+#fileTreeContainer {
+  position: fixed;
+  top: 25px;
+  bottom: 16px;
+  left: 0;
+  /* 停靠文件树默认更宽一点 */
+  width: 360px;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-right: 1px solid rgba(0, 0, 0, 0.1);
+  z-index: 800;
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+}
+#fileTreeContainer.visible {
+  display: flex;
+}
+
+/* Ctrl+G 悬浮文件树：遮罩与悬浮样式（不挤压主内容区） */
+#fileTreeFloatingOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  /* 需要永远高于过滤结果框（过滤框最大化时 z-index=10000） */
+  z-index: 10050;
+  display: none;
+}
+#fileTreeFloatingOverlay.visible {
+  display: block;
+}
+#fileTreeContainer.floating {
+  top: 60px;
+  bottom: 60px;
+  /* Ctrl+G 悬浮文件树：默认宽度尽可能大（左右留一点边距） */
+  left: 20px;
+  /* 优化：不再强制铺满宽度，改为可记忆/可调整的弹窗宽度 */
+  right: auto;
+  width: var(
+    --file-tree-floating-width,
+    min(900px, calc(100vw - 40px))
+  );
+  max-width: calc(100vw - 40px);
+  min-width: 260px;
+  transform: none;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.22);
+  /* 需要永远高于过滤结果框（过滤框最大化时 z-index=10000） */
+  z-index: 10051;
+}
+/* 悬浮模式下隐藏左侧边框按钮，避免困惑（中间可能插入遮罩层） */
+#fileTreeContainer.floating ~ #fileTreeCollapseBtn {
+  display: none;
+}
+/* 优化：防止文本选中 */
+#fileTreeContainer,
+#fileTreeResizer {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+#fileTreeResizer {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 810;
+  background: transparent;
+}
+#fileTreeResizer:hover {
+  background: rgba(0, 113, 227, 0.08);
+}
+#fileTreeResizer.resizing {
+  background: rgba(0, 113, 227, 0.12);
+}
+/* 文件树隐藏时，禁用调整大小手柄 */
+#fileTreeContainer:not(.visible) #fileTreeResizer {
+  display: none;
+  pointer-events: none;
+}
+#fileTreeHeader {
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  font-weight: 500;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+#fileTreeHeader .file-tree-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+#importFilesBtn, #importFoldersBtn, #expandAllFoldersBtn, #collapseAllFoldersBtn {
+  padding: 2px 6px;
+  background: rgba(0, 0, 0, 0.05);
+  color: #1d1d1f;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1.2;
+  white-space: nowrap;
+  max-width: 65px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#importFilesBtn:hover, #importFoldersBtn:hover, #expandAllFoldersBtn:hover, #collapseAllFoldersBtn:hover {
+  background: rgba(0, 113, 227, 0.10);
+  border-color: rgba(0, 113, 227, 0.25);
+  color: #0071e3;
+}
+#serverPath[readonly] {
+  background: rgba(255, 255, 255, 0.6);
+  color: rgba(29, 29, 31, 0.8);
+  cursor: default;
+}
+
+/* 🚀 远程目录区域 */
+#remoteDirectoryArea {
+  padding: 4px 8px;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(245, 245, 247, 0.9);
+}
+#remoteDirectoryHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(60, 60, 67, 0.8);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+#remoteDirectoryHeader .remote-icon {
+  font-size: 12px;
+}
+#remoteDirectoryHeader .remote-title {
+  flex: 1;
+}
+#remoteDirectoryHeader .remote-actions {
+  display: flex;
+  gap: 4px;
+}
+#remoteConnectBtn,
+#localShareBtn {
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 4px;
+  background: rgba(0, 113, 227, 0.15);
+  color: #0071e3;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+#remoteConnectBtn:hover,
+#localShareBtn:hover {
+  background: rgba(0, 113, 227, 0.25);
+}
+#localShareBtn {
+  background: rgba(52, 199, 89, 0.15);
+  color: #34c759;
+}
+#localShareBtn:hover {
+  background: rgba(52, 199, 89, 0.25);
+}
+
+/* 本地共享状态 */
+.local-share-status {
+  display: flex;
+  align-items: center;
+  padding: 6px 8px;
+  margin: 4px;
+  background: rgba(52, 199, 89, 0.1);
+  border: 1px solid rgba(52, 199, 89, 0.3);
+  border-radius: 6px;
+  font-size: 11px;
+  color: #1d1d1f;
+}
+.local-share-status .share-status-icon {
+  color: #34c759;
+  margin-right: 6px;
+  font-weight: bold;
+}
+.local-share-status .share-status-text {
+  flex: 1;
+}
+.local-share-status .share-address {
+  font-weight: 600;
+  color: #0071e3;
+  margin-right: 8px;
+}
+.local-share-status .stop-share-btn {
+  width: 16px;
+  height: 16px;
+  border: none;
+  background: none;
+  color: rgba(60, 60, 67, 0.5);
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+}
+.local-share-status .stop-share-btn:hover {
+  background: rgba(255, 59, 48, 0.15);
+  color: #ff3b30;
+}
+
+#remoteDirectoryList {
+  padding: 2px 0;
+}
+.remote-node {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px 4px 20px;
+  font-size: 12px;
+  color: #1d1d1f;
+  cursor: pointer;
+  border-radius: 4px;
+  margin: 1px 4px;
+  transition: background 0.15s ease;
+}
+.remote-node:hover {
+  background: rgba(0, 113, 227, 0.1);
+}
+.remote-node.selected {
+  background: rgba(0, 113, 227, 0.15);
+}
+.remote-node .remote-node-icon {
+  margin-right: 6px;
+  font-size: 14px;
+}
+.remote-node .remote-node-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.remote-node .remote-node-close {
+  opacity: 0;
+  width: 16px;
+  height: 16px;
+  border: none;
+  background: none;
+  color: rgba(60, 60, 67, 0.5);
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+}
+.remote-node:hover .remote-node-close {
+  opacity: 1;
+}
+.remote-node .remote-node-close:hover {
+  background: rgba(255, 59, 48, 0.15);
+  color: #ff3b30;
+}
+.remote-node-status {
+  font-size: 10px;
+  margin-left: 4px;
+}
+.remote-node-status.connected {
+  color: #34c759;
+}
+.remote-node-status.disconnected {
+  color: #ff9500;
+}
+
+/* 文件树：右键菜单 */
+#fileTreeContextMenu {
+  position: fixed;
+  display: none;
+  min-width: 220px;
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  border-radius: 10px;
+  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.18);
+  z-index: 12000; /* 高于悬浮文件树/过滤结果框 */
+}
+#fileTreeContextMenu.visible {
+  display: block;
+}
+#fileTreeContextMenu button {
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #1d1d1f;
+  font-size: 12px;
+  cursor: pointer;
+}
+#fileTreeContextMenu button:hover {
+  background: rgba(0, 113, 227, 0.10);
+}
+#fileTreeContextMenu button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+#fileTreeContextMenu .menu-title {
+  padding: 10px 12px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #8e8e93;
+  background: rgba(0, 0, 0, 0.02);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 菜单分组样式 */
+#fileTreeContextMenu .menu-group {
+  margin-bottom: 4px;
+}
+
+#fileTreeContextMenu .menu-group-title {
+  padding: 8px 12px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #8e8e93;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+#fileTreeContextMenu .menu-separator {
+  height: 1px;
+  background: rgba(0, 0, 0, 0.08);
+  margin: 4px 12px;
+}
+
+/* 菜单项样式 */
+#fileTreeContextMenu .menu-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: #1d1d1f;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  gap: 10px;
+  min-height: 36px;
+  box-sizing: border-box;
+}
+
+#fileTreeContextMenu .menu-item:hover {
+  background: rgba(0, 113, 227, 0.08);
+  color: #0071e3;
+}
+
+#fileTreeContextMenu .menu-item:active {
+  background: rgba(0, 113, 227, 0.12);
+  transform: scale(0.98);
+}
+
+#fileTreeContextMenu .menu-item:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  color: #8e8e93;
+}
+
+#fileTreeContextMenu .menu-item:disabled:hover {
+  background: transparent;
+  color: #8e8e93;
+  transform: none;
+}
+
+/* 图标样式 */
+#fileTreeContextMenu .menu-item .icon {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+#fileTreeContextMenu .menu-item .text {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 文件树搜索高亮样式 */
+.file-tree-item.search-matched .file-tree-name {
+  background: rgba(255, 230, 0, 0.4);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-weight: 500;
+}
+
+#serverInputGroup {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  /* margin-bottom: 6px; 移除底部边距 */
+  position: relative; /* 用于下拉菜单定位 */
+  overflow: visible; /* 改为visible，避免裁剪下拉按钮 */
+  min-width: 0;
+}
+#serverAddress {
+  flex: 0 0 120px; /* 固定宽度 */
+  padding: 5px 8px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+  font-size: 11px;
+  background: white;
+  min-width: 0;
+}
+#serverAddress:focus {
+  outline: none;
+  border-color: #0071e3;
+  box-shadow: 0 0 0 2px rgba(0, 113, 227, 0.2);
+}
+#serverPath {
+  flex: 1; /* 占据剩余空间 */
+  padding: 5px 8px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+  font-size: 11px;
+  background: white;
+  min-width: 0; /* 防止溢出 */
+}
+#serverPath:focus {
+  outline: none;
+  border-color: #0071e3;
+  box-shadow: 0 0 0 2px rgba(0, 113, 227, 0.2);
+}
+#serverStatus {
+  font-size: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+  text-shadow: 0 0 4px currentColor;
+}
+#serverStatus.connected {
+  color: #007AFF;
+  animation: breathe-blue 2s ease-in-out infinite;
+}
+#serverStatus.disconnected {
+  color: #ff3b30;
+  animation: breathe-red-light 2s ease-in-out infinite;
+}
+#serverStatus.connecting {
+  color: #ff9500;
+  animation: blink 1s infinite;
+}
+
+/* 服务器地址：下拉按钮 + 菜单 */
+#serverAddressDropdownBtn {
+  flex: 0 0 auto;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.98));
+  font-size: 11px;
+  line-height: 22px;
+  cursor: pointer;
+  user-select: none;
+  color: #111827;
+  overflow: hidden;
+  position: relative;
+  z-index: 10;
+  pointer-events: auto;
+}
+#serverAddressDropdownBtn:hover {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 1), rgba(242, 246, 250, 1));
+}
+#serverAddressDropdownBtn:active {
+  background: rgba(0, 0, 0, 0.06);
+}
+#serverAddressDropdownMenu {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 4px);
+  width: 100%;
+  max-height: 180px;
+  overflow: auto;
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+  z-index: 1300;
+  display: none;
+  color: #111827;
+}
+#serverAddressDropdownMenu.visible {
+  display: block;
+}
+#pathInputGroup {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+#serverPath {
+  flex: 1;
+  padding: 5px 8px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+  font-size: 11px;
+  background: white;
+}
+#serverPath:focus {
+  outline: none;
+  border-color: #0071e3;
+  box-shadow: 0 0 0 2px rgba(0, 113, 227, 0.2);
+}
+
+/* 月份选择按钮 */
+#monthSelectBtn {
+  flex: 0 0 auto;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.98));
+  font-size: 14px;
+  line-height: 24px;
+  cursor: pointer;
+  user-select: none;
+  color: #111827;
+  position: relative;
+  z-index: 10;
+}
+#monthSelectBtn:hover {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 1), rgba(242, 246, 250, 1));
+}
+#monthSelectBtn:active {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+/* 月份选择下拉菜单 */
+#monthSelectMenu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  width: 120px;
+  max-height: 200px;
+  overflow: auto;
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+  z-index: 1300;
+  display: none;
+  color: #111827;
+}
+#monthSelectMenu.visible {
+  display: block;
+}
+/* 文件树纵向滚动条：显示且更细（不要太粗） */
+#fileTreeList {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  /* 修复：虚拟列表滚动时频繁替换DOM，浏览器 scroll anchoring 可能反复改写 scrollTop，
+     导致"轻轻滚动/拖动滚动条就停不住直到顶/底"的反馈循环。关闭锚定可显著稳定滚动。 */
+  overflow-anchor: none;
+  /* 优化：避免触发页面/外层的橡皮筋滚动联动（尤其是触控板/高频滚轮） */
+  overscroll-behavior: contain;
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: rgba(0, 0, 0, 0.25) transparent; /* Firefox */
+}
+
+/* 进一步保险：虚拟内容/占位符也禁用锚定，避免浏览器选中锚点导致跳动 */
+#fileTreeVirtualContent,
+#fileTreeTopSpacer,
+#fileTreeBottomSpacer,
+#fileTreeList .file-tree-item {
+  overflow-anchor: none;
+}
+
+/* Webkit 浏览器滚动条细化 */
+#fileTreeList::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+#fileTreeList::-webkit-scrollbar-track {
+  background: transparent;
+}
+#fileTreeList::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.22);
+  border-radius: 999px;
+}
+#fileTreeList::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.32);
+}
+.file-tree-item {
+  padding: 6px 8px 6px 0;
+  margin: 2px 0;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.2s ease;
+  user-select: none;
+  position: relative;
+  /* 让层级更"有层次"：节点对齐 + 按 level 缩进 */
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  /* 🚀 缩进从10px增大到14px，层级更分明 */
+  padding-left: calc(2px + (var(--ft-level, 0) * 14px));
+}
+.file-tree-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-tree-item:hover .ft-indent-guide {
+  background: rgba(0, 113, 227, 0.12);
+}
+.file-tree-item.selected .ft-indent-guide {
+  background: rgba(0, 113, 227, 0.18);
+}
+/* 🚀 hover样式已在前面统一定义，删除重复定义 */
+.file-tree-item.selected {
+  background: rgba(0, 113, 227, 0.15);
+  color: #0071e3;
+  font-weight: 500;
+}
+.file-tree-item.selected::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: #0071e3;
+  border-radius: 0 2px 2px 0;
+}
+.file-tree-item.drag-selected {
+  background: rgba(0, 113, 227, 0.25);
+}
+.file-tree-folder {
+  font-weight: 500;
+  color: #1d1d1f;
+}
+.file-tree-folder .icon {
+  margin-right: 4px;
+}
+.file-tree-file {
+  color: #6e6e73;
+}
+.file-tree-file .icon {
+  margin-right: 4px;
+  opacity: 0.7;
+}
+.file-tree-empty {
+  padding: 20px;
+  text-align: center;
+  color: #6e6e73;
+  font-size: 13px;
+}
+#fileTreeContainer.visible ~ #outerContainer {
+  left: var(--file-tree-width, 360px);
+}
+#fileTreeContainer.visible ~ #hScroll {
+  left: var(--file-tree-width, 360px);
+}
+/* 文件树层次结构样式 */
+.file-tree-level-1 {
+  --ft-level: 1;
+}
+.file-tree-level-2 {
+  --ft-level: 2;
+}
+.file-tree-level-3 {
+  --ft-level: 3;
+}
+.file-tree-level-4 {
+  --ft-level: 4;
+}
+.file-tree-level-5 {
+  --ft-level: 5;
+}
+.file-tree-level-6 {
+  --ft-level: 6;
+}
+.file-tree-level-7 {
+  --ft-level: 7;
+}
+.file-tree-level-8 {
+  --ft-level: 8;
+}
+
+.file-tree-folder-expanded .icon::before {
+  content: "📂";
+}
+.file-tree-folder-collapsed .icon::before {
+  content: "📁";
+}
+
+.file-tree-folder-toggle {
+  /* 旧样式保留但不再使用：现在用更简约的 chevron */
+  display: none;
+}
+
+/* 文件树：更简约高级的展开/折叠 chevron（替换黑色三角） */
+.file-tree-toggle {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 2px;
+  cursor: pointer;
+  color: rgba(29, 29, 31, 0.55);
+}
+.file-tree-toggle::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  /* 右向 chevron */
+  transform: rotate(-45deg);
+  transition: transform 0.12s ease, color 0.12s ease;
+}
+.file-tree-toggle.expanded::before {
+  /* 下向 chevron */
+  transform: rotate(45deg);
+}
+.file-tree-item:hover .file-tree-toggle {
+  color: rgba(0, 113, 227, 0.9);
+}
+
+/* 文件树侧边按钮 - 橄榄形，边框穿过中线 */
+#fileTreeCollapseBtn {
+  position: fixed;
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 22px;
+  background: rgba(0, 113, 227, 0.55);
+  cursor: pointer;
+  z-index: 820;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  font-size: 0;
+  color: transparent;
+  border-radius: 50%;
+  margin-left: -4px;
+}
+
+/* 🔧 文件树折叠后按钮仍然可见，方便用户重新展开 */
+/* 只在悬浮模式下隐藏折叠按钮 */
+#fileTreeContainer.floating ~ #fileTreeCollapseBtn {
+  display: none !important;
+}
+#fileTreeCollapseBtn:hover {
+  background: rgba(0, 113, 227, 0.8);
+}
+#fileTreeCollapseBtn:active {
+  background: rgba(0, 113, 227, 0.9);
+}
