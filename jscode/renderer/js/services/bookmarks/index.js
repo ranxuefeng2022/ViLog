@@ -315,8 +315,7 @@
       // 🔧 内存优化：限制缓存大小，防止内存溢出
       const MAX_HTML_CACHE_SIZE = 1000; // 最多缓存1000行，约300KB
       const filteredLineHtmlCache = new Map();
-      const filteredLineContentCache = new Map(); // 行内容缓存
-      let filteredLineCacheVersion = 0; // 缓存版本号，用于失效缓存
+            let filteredLineCacheVersion = 0; // 缓存版本号，用于失效缓存
 
       // 🚀 缓存LRU淘汰：当缓存满时删除最旧的条目
       function addToFilteredLineCache(key, value) {

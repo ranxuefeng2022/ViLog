@@ -6,6 +6,9 @@
  * 输出: { type: 'fuzzyMatchResult', data: { results: string[], elapsed: number } }
  */
 
+const _DEBUG = false;
+const _log = _DEBUG ? console.log.bind(console) : () => {};
+
 // ========== 综合评分（频率 × 时效） ==========
 // 注：马尔可夫转移分需要外部 transitionsCacheMap 数据，Worker 中不计算
 

@@ -545,6 +545,144 @@
           });
         }
 
+        // 导出CSV分析
+        if (fileTreeCtxExportCsv) {
+          fileTreeCtxExportCsv.addEventListener("click", async () => {
+            const idx = fileTreeContextMenuIndex;
+            hideFileTreeContextMenu();
+            const item = fileTreeHierarchy[idx];
+            if (!item) return;
+            const archivePath = item._originalPath || item.path;
+            if (!archivePath) return;
+
+            // Step 1: Show platform + keyword selection dialog
+            const result = await new Promise(function(resolve) {
+              const selOverlay = document.createElement('div');
+              selOverlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:10006;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;';
+              selOverlay.innerHTML = '<div style="background:#fff;border-radius:12px;padding:24px;min-width:360px;max-width:460px;box-shadow:0 8px 32px rgba(0,0,0,0.2);">' +
+                '<div style="font-size:16px;font-weight:600;margin-bottom:16px;color:#333;">日志分析</div>' +
+                '<div style="margin-bottom:12px;">' +
+                  '<span style="font-size:13px;color:#666;margin-right:10px;">平台:</span>' +
+                  '<label style="cursor:pointer;font-size:13px;margin-right:14px;">' +
+                    '<input type="radio" name="analysisPlatform" value="mtk" checked style="margin-right:4px;accent-color:#2e7d32;">MTK</label>' +
+                  '<label style="cursor:pointer;font-size:13px;">' +
+                    '<input type="radio" name="analysisPlatform" value="qcom" style="margin-right:4px;accent-color:#2e7d32;">高通</label>' +
+                '</div>' +
+                '<div id="analysisKeywordList" style="max-height:240px;overflow-y:auto;border:1px solid #e0e0e0;border-radius:6px;padding:8px 16px;"></div>' +
+                '<div style="display:flex;justify-content:flex-end;gap:12px;margin-top:16px;">' +
+                  '<button id="csvSelCancel" style="padding:8px 24px;border:1px solid #ddd;border-radius:6px;background:#f5f5f5;color:#666;font-size:14px;cursor:pointer;">取消</button>' +
+                  '<button id="csvSelOk" style="padding:8px 24px;border:none;border-radius:6px;background:#2e7d32;color:#fff;font-size:14px;cursor:pointer;">开始分析</button>' +
+                '</div></div>';
+              document.body.appendChild(selOverlay);
+
+              var kwListEl = selOverlay.querySelector('#analysisKeywordList');
+
+              async function loadKeywords(platform) {
+                var keywords = await window.electronAPI.getAnalysisKeywords(platform);
+                if (!keywords || keywords.length === 0) {
+                  kwListEl.innerHTML = '<div style="color:#999;padding:8px 0;font-size:13px;">无可用解析器</div>';
+                  return;
+                }
+                var checks = '';
+                for (var i = 0; i < keywords.length; i++) {
+                  checks += '<label style="display:flex;align-items:center;padding:5px 0;cursor:pointer;font-size:13px;">' +
+                    '<input type="checkbox" value="' + keywords[i].keyword + '" checked style="margin-right:8px;width:15px;height:15px;cursor:pointer;accent-color:#2e7d32;">' +
+                    '<span>' + keywords[i].tabName + '</span></label>';
+                }
+                kwListEl.innerHTML = checks;
+              }
+
+              // Load default platform (MTK)
+              loadKeywords('mtk');
+
+              // Switch platform on radio change
+              selOverlay.querySelectorAll('input[name="analysisPlatform"]').forEach(function(radio) {
+                radio.addEventListener('change', function() {
+                  loadKeywords(this.value);
+                });
+              });
+
+              selOverlay.querySelector('#csvSelOk').onclick = function() {
+                var platform = selOverlay.querySelector('input[name="analysisPlatform"]:checked').value;
+                var cbs = selOverlay.querySelectorAll('#analysisKeywordList input[type=checkbox]');
+                var sel = [];
+                cbs.forEach(function(cb) { if (cb.checked) sel.push(cb.value); });
+                if (sel.length === 0) { alert('请至少选择一个关键词'); return; }
+                if (selOverlay.parentNode) selOverlay.parentNode.removeChild(selOverlay);
+                resolve({ platform: platform, keywords: sel });
+              };
+              selOverlay.querySelector('#csvSelCancel').onclick = function() {
+                if (selOverlay.parentNode) selOverlay.parentNode.removeChild(selOverlay);
+                resolve(null);
+              };
+            });
+
+            if (!result) return;
+            const { platform: selectedPlatform, keywords: selectedKeywords } = result;
+
+            if (!selectedKeywords) return;
+
+            // Step 2: Create progress overlay
+            const overlay = document.createElement('div');
+            overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:10005;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;';
+            overlay.innerHTML = '<div style="background:#fff;border-radius:12px;padding:24px 32px;min-width:360px;max-width:480px;box-shadow:0 8px 32px rgba(0,0,0,0.2);text-align:center;">' +
+              '<div id="csvExportProgressText" style="font-size:16px;font-weight:600;margin-bottom:16px;">正在分析日志...</div>' +
+              '<div id="csvExportProgressDetail" style="font-size:11px;color:#999;"></div>' +
+            '</div>';
+            document.body.appendChild(overlay);
+
+            const progressText = overlay.querySelector('#csvExportProgressText');
+            const progressDetail = overlay.querySelector('#csvExportProgressDetail');
+
+            const progressHandler = (data) => {
+              if (data.stage === 'extracting') {
+                progressText.textContent = '正在解析文件 (' + data.percent + '%)...';
+                progressDetail.textContent = '';
+              } else if (data.stage === 'generating') {
+                progressText.textContent = '正在生成分析报告...';
+                progressDetail.textContent = '';
+              }
+            };
+
+            if (window.electronAPI && window.electronAPI.on) {
+              window.electronAPI.on('csv-export-progress', progressHandler);
+            }
+
+            try {
+              const result = await window.electronAPI.exportCsvAnalysis(archivePath, selectedKeywords, selectedPlatform);
+
+              if (window.electronAPI && window.electronAPI.removeListener) {
+                window.electronAPI.removeListener('csv-export-progress', progressHandler);
+              }
+
+              if (result.success) {
+                progressText.textContent = '分析完成!';
+                progressText.style.color = '#4caf50';
+                progressDetail.textContent = '共解析 ' + result.rowCount + ' 条数据，报告已在新窗口打开';
+                setTimeout(function() { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 1500);
+              } else if (result.cancelled) {
+                if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+              } else {
+                progressText.textContent = '分析失败';
+                progressText.style.color = '#f44336';
+                progressDetail.textContent = result.error || '未知错误';
+                setTimeout(function() { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 3000);
+                if (typeof showMessage === 'function') {
+                  showMessage('分析失败: ' + (result.error || '未知错误'));
+                }
+              }
+            } catch (e) {
+              if (window.electronAPI && window.electronAPI.removeListener) {
+                window.electronAPI.removeListener('csv-export-progress', progressHandler);
+              }
+              if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+              if (typeof showMessage === 'function') {
+                showMessage('分析出错: ' + e.message);
+              }
+            }
+          });
+        }
+
         // 鼠标移出菜单时隐藏菜单
         if (fileTreeContextMenu) {
           fileTreeContextMenu.addEventListener("mouseleave", () => {
@@ -1261,19 +1399,17 @@
       var _staleRefreshRunning = false;
       function scheduleStaleDirectoryRefresh() {
         var now = Date.now();
-        // 节流：5 秒内不重复触发
-        if (now - _lastStaleRefresh < 5000) return;
+        // 节流：10 秒内不重复触发（延长冷却时间，降低磁盘 I/O）
+        if (now - _lastStaleRefresh < 10000) return;
         if (_staleRefreshRunning) return;
 
         if (_staleRefreshTimer) clearTimeout(_staleRefreshTimer);
-        // 延时 500ms：避免鼠标快速划过触发不必要的刷新
         _staleRefreshTimer = setTimeout(async function() {
           _staleRefreshTimer = null;
           _staleRefreshRunning = true;
           _lastStaleRefresh = Date.now();
 
           try {
-            // 收集所有已展开且有子项的目录
             var refreshPaths = [];
             for (var i = 0; i < fileTreeHierarchy.length; i++) {
               var node = fileTreeHierarchy[i];
@@ -1281,7 +1417,10 @@
                 refreshPaths.push({ index: i, path: node.path });
               }
             }
-            // 顺序刷新，避免并发修改 fileTreeHierarchy
+            // 限制最多刷新 10 个目录，避免大量磁盘 I/O
+            if (refreshPaths.length > 10) {
+              refreshPaths = refreshPaths.slice(0, 10);
+            }
             for (var r = 0; r < refreshPaths.length; r++) {
               await refreshDirectoryInTree(refreshPaths[r].path);
             }
@@ -1619,6 +1758,24 @@
 
         // 检查本地共享状态（页面加载时）
         checkLocalShareStatus();
+
+        // 远程目录列表事件委托（只注册一次，避免 renderRemoteDirectoryList 重复绑定）
+        if (remoteDirectoryList) {
+          remoteDirectoryList.addEventListener('click', (e) => {
+            const closeBtn = e.target.closest('.remote-node-close');
+            if (closeBtn) {
+              e.stopPropagation();
+              const id = parseInt(closeBtn.dataset.id, 10);
+              disconnectRemote(id);
+              return;
+            }
+            const node = e.target.closest('.remote-node');
+            if (node) {
+              const id = parseInt(node.dataset.id, 10);
+              handleRemoteNodeClick(id);
+            }
+          });
+        }
       }
 
       // =====================================================================
@@ -1872,25 +2029,8 @@
 
         remoteDirectoryList.innerHTML = html;
 
-        // 绑定点击事件
-        remoteDirectoryList.querySelectorAll('.remote-node').forEach(node => {
-          node.addEventListener('click', (e) => {
-            // 如果点击的是关闭按钮，不触发选中
-            if (e.target.classList.contains('remote-node-close')) return;
-
-            const id = parseInt(node.dataset.id, 10);
-            handleRemoteNodeClick(id);
-          });
-        });
-
-        // 绑定关闭按钮事件
-        remoteDirectoryList.querySelectorAll('.remote-node-close').forEach(btn => {
-          btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const id = parseInt(btn.dataset.id, 10);
-            disconnectRemote(id);
-          });
-        });
+        // 使用事件委托，避免每次渲染都为每个节点添加监听器
+        // 绑定在容器上，通过 data-id 定位具体节点
       }
 
       // 处理远程节点点击
@@ -2113,6 +2253,17 @@
               (item.name && /\.(zip|rar|7z|tar|gz|tgz|bz2)$/i.test(item.name)) ||
               (item.path && /\.(zip|rar|7z|tar|gz|tgz|bz2)$/i.test(item.path));
             fileTreeCtxExtractArchive.style.display = isArchive ? "" : "none";
+          }
+        }
+
+        // "导出CSV分析"仅对ZIP文件显示
+        if (fileTreeCtxExportCsv) {
+          if (isBlankArea || !item) {
+            fileTreeCtxExportCsv.style.display = "none";
+          } else {
+            const isZip = (item.name && /\.zip$/i.test(item.name)) ||
+                          (item.path && /\.zip$/i.test(item.path));
+            fileTreeCtxExportCsv.style.display = isZip ? "" : "none";
           }
         }
 
@@ -2723,6 +2874,19 @@
         let selectedHistoryIndex = -1; // 当前选中的历史记录索引
         let historyItems = []; // 存储当前显示的历史记录项
 
+        // 事件委托：点击历史记录项时填入输入框
+        if (filterHistoryList) {
+          filterHistoryList.addEventListener('click', (e) => {
+            const item = e.target.closest('.filter-history-item');
+            if (!item) return;
+            const index = parseInt(item.getAttribute('data-index'));
+            if (isNaN(index) || index < 0 || index >= historyItems.length) return;
+            filterDialogTextarea.value = historyItems[index].keyword;
+            filterHistorySuggestions.style.display = 'none';
+            filterDialogTextarea.focus();
+          });
+        }
+
         // 自动调整输入框高度
         function autoResizeTextarea() {
           const minHeight = 60;
@@ -2768,17 +2932,6 @@
                 <div class="keyword">${item.keyword}</div>
               </div>
             `).join('');
-
-            // 添加点击事件 - 只填入输入框，不立即应用过滤
-            filterHistoryList.querySelectorAll('.filter-history-item').forEach(item => {
-              item.addEventListener('click', () => {
-                const index = parseInt(item.getAttribute('data-index'));
-                filterDialogTextarea.value = historyItems[index].keyword;
-                // 不立即应用过滤，只隐藏历史提示框
-                filterHistorySuggestions.style.display = 'none';
-                filterDialogTextarea.focus();
-              });
-            });
           }
 
           filterHistorySuggestions.style.display = 'block';

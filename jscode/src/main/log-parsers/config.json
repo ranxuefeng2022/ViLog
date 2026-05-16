@@ -1,0 +1,111 @@
+{
+  "filePatterns": ["kernel_log"],
+  "parsers": [
+    {
+      "tag": "ap_info_vfcs",
+      "keyword": "vfcs_get_ap_state_info",
+      "platform": "qcom",
+      "format": [
+        "[AP] chg_status=%d,vbus_mv=%d,ibus_ma=%d,usb_type=%d,bc1p2_type=%d,",
+        "vbat_mv=%d,ibat_ma=%d,bat_temp=%d,bat_soc=%d,",
+        "chg_ic_vbat_mv=%d,chg_ic_status=%d,chg_ic_vfloat_mv=%d,chg_ic_iterm_ma=%d,",
+        "vcell1_mv=%d,vcell2_mv=%d,",
+        "ex_fg_present=%d,ex_fg_soc=%d,ex_fg_cycle_count=%d,",
+        "delay_cycle_flag=%d,delay_cycle_count=%d,soh_learning_state=%d,bat_cycle_count=%d,",
+        "cms_health_status=0x%x,board_temp=%d,usb_enum_done=%d,",
+        "data_role=%d,factory_mode_state=%d,bat_resistor_detect_state=%d,FG_ENCRYPTION_VERIFY_RESULT=%d\\n"
+      ],
+      "labels": [
+        "充电状态", "VBUS电压(mV)", "IBUS电流(mA)", "USB类型", "BC1.2类型",
+        "电池电压(mV)", "电池电流(mA)", "电池温度(0.1°C)", "电量百分比(%)",
+        "充电IC电压(mV)", "充电IC状态", "充电IC浮充电压(mV)", "充电IC终止电流(mA)",
+        "电芯1电压(mV)", "电芯2电压(mV)", "外部FG在位", "外部FG电量(%)",
+        "外部FG循环次数", "延迟循环标志", "延迟循环计数", "SOH学习状态",
+        "电池循环次数", "CMS健康状态", "板温(0.1°C)", "USB枚举完成",
+        "数据角色", "工厂模式状态", "电池电阻检测状态", "FG加密验证结果"
+      ],
+      "fieldAliases": {
+        "FG_ENCRYPTION_VERIFY_RESULT": "fg_encryption_verify_result"
+      }
+    },
+    {
+      "tag": "ap_info_cms",
+      "keyword": "vfcs_cms_get_ap_state_info",
+      "platform": "qcom",
+      "format": [
+        "[AP] chg_status=%d,chg_full=%d,vbus_mv=%d,usb_type=%d,bc1p2_type=%d,",
+        "vbat_mv=%d,ibat_ma=%d,ibat_avg_ma=%d,bat_temp=%d,bat_soc=%d,",
+        "vcell1_mv=%d,vcell2_mv=%d,vbat_adsp_mv=%d,",
+        "designed_cap_mah=%d,learned_cap_mah=%d,",
+        "charger_counter=%d,cycle_counter=%d(%d),",
+        "fb_state=%d,charge_protocol=%d,vivo_flash_charge_type=%d,vchg_state=%d,",
+        "fchg_mode=(%d,%d),chg_adapter_power=%d,tbat_heating=%d,",
+        "board_temp=(%d,%d),usb_enum_done=%d,data_role=%d\\n"
+      ],
+      "labels": [
+        "充电状态", "充满标志", "VBUS电压(mV)", "USB类型", "BC1.2类型",
+        "电池电压(mV)", "电池电流(mA)", "平均电流(mA)", "电池温度(0.1°C)", "电量百分比(%)",
+        "电芯1电压(mV)", "电芯2电压(mV)", "ADSP电池电压(mV)",
+        "设计容量(mAh)", "学习容量(mAh)", "充电计数",
+        "循环次数", "ADSP循环次数",
+        "亮灭屏", "充电协议", "Flash充电类型", "VCHG状态",
+        "快充模式", "快充模式切换支持", "适配器功率(mW)", "电池加热",
+        "主板温度1(0.1°C)", "主板温度2(0.1°C)",
+        "USB枚举完成", "数据角色"
+      ]
+    },
+    {
+      "tag": "ap_info_vfcs",
+      "keyword": "vfcs_get_ap_state_info",
+      "platform": "mtk",
+      "format": [
+        "[AP] chg_status=%d,vbus_mv=%d,usb_type=%d,",
+        "vbat_mv=%d,ibat_ma=%d,bat_temp=%d,bat_soc=%d,",
+        "chg_ic_vbat_mv=%d,chg_ic_status=%d,refuse_fchg_vbat_thr_mv=%d,chg_ic_vfloat_mv=%d,chg_ic_iterm_ma=%d,",
+        "vcell1_mv=%d,vcell2_mv=%d,",
+        "ex_fg_present=%d,ex_fg_soc=%d,ex_fg_cycle_count=%d,",
+        "soh_learning_state=%d,bat_cycle_count=%d,",
+        "cms_health_status=%d,board_temp=%d,usb_enum_done=%d,",
+        "data_role=%d,bat_resistor_detect_state=%d\\n"
+      ],
+      "labels": [
+        "充电状态", "VBUS电压(mV)", "USB类型",
+        "电池电压(mV)", "电池电流(mA)", "电池温度(0.1°C)", "电量百分比(%)",
+        "充电IC电压(mV)", "充电IC状态", "拒绝快充电压阈值(mV)", "充电IC浮充电压(mV)", "充电IC终止电流(mA)",
+        "电芯1电压(mV)", "电芯2电压(mV)", "外部FG在位", "外部FG电量(%)",
+        "外部FG循环次数", "SOH学习状态", "电池循环次数",
+        "CMS健康状态", "板温(0.1°C)", "USB枚举完成",
+        "数据角色", "电池电阻检测状态"
+      ]
+    },
+    {
+      "tag": "ap_info_cms",
+      "keyword": "vfcs_cms_get_ap_state_info",
+      "platform": "mtk",
+      "format": [
+        "[AP] chg_status=%d,chg_full=%d,vbus_mv=%d,usb_type=%d,bc1p2_type=%d,",
+        "vbat_mv=%d,ibat_ma=%d,ibat_avg_ma=%d,bat_temp=%d,bat_soc=%d,",
+        "vcell1_mv=%d,vcell2_mv=%d,vbat_adsp_mv=%d,",
+        "designed_cap_mah=%d,learned_cap_mah=%d,",
+        "charger_counter=%d,cycle_counter=%d(%d),",
+        "fb_state=%d,charge_protocol=%d,vivo_flash_charge_type=%d,vchg_state=%d,",
+        "fchg_mode=(%d,%d),chg_adapter_power=%d,tbat_heating=%d,",
+        "board_temp=(%d,%d),usb_enum_done=%d,data_role=%d,usb_con:%d\\n"
+      ],
+      "labels": [
+        "充电状态", "充满标志", "VBUS电压(mV)", "USB类型", "BC1.2类型",
+        "电池电压(mV)", "电池电流(mA)", "平均电流(mA)", "电池温度(0.1°C)", "电量百分比(%)",
+        "电芯1电压(mV)", "电芯2电压(mV)", "ADSP电池电压(mV)",
+        "设计容量(mAh)", "学习容量(mAh)", "充电计数",
+        "循环次数", "ADSP循环次数",
+        "亮灭屏", "充电协议", "Flash充电类型", "VCHG状态",
+        "快充模式", "快充模式切换支持", "适配器功率(mW)", "电池加热",
+        "主板温度1(0.1°C)", "主板温度2(0.1°C)",
+        "USB枚举完成", "数据角色", "USB连接器温度(0.1°C)"
+      ],
+      "fieldAliases": {
+        "usb_con": "usb_conn_temp"
+      }
+    }
+  ]
+}

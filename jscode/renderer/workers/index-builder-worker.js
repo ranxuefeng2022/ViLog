@@ -8,6 +8,11 @@
  * worker.onmessage = (e) => { ... };
  */
 
+const MAX_TIME_RANGES = 50000;
+
+const _DEBUG = false;
+const _log = _DEBUG ? console.log.bind(console) : () => {};
+
 // 索引数据结构（在Worker线程中）
 let indices = {
   fullText: new Map(),
@@ -118,7 +123,9 @@ function processBatch(lines, startLine, batchSize) {
       // 使用 setTimeout 让出CPU，避免阻塞
       setTimeout(processChunk, 0);
     } else {
-      // 构建完成
+      // 构建完成 — 冻结全文索引为 Uint32Array（内存减少 ~75%）
+      _finalizeFullText();
+
       const buildTime = performance.now() - state.startTime;
 
       self.postMessage({
@@ -150,6 +157,9 @@ function handleAppend(data) {
   }
 
   state.totalLines += lines.length;
+
+  // 增量追加后重新冻结
+  _finalizeFullText();
 
   self.postMessage({
     type: 'appendComplete',
@@ -219,10 +229,31 @@ function indexTimeRange(line, lineNumber) {
   if (timeMatch) {
     const timestamp = timeMatch[1];
 
-    indices.timeRanges.push({
-      timestamp,
-      lineNumber,
-    });
+    if (indices.timeRanges.length < MAX_TIME_RANGES) {
+      indices.timeRanges.push({
+        timestamp,
+        lineNumber,
+      });
+    }
+  }
+}
+
+/**
+ * 将全文索引构建数组转为 Uint32Array（冻结索引）
+ * 内存在转换后减少约 75%
+ */
+function _finalizeFullText() {
+  for (const [word, arr] of indices.fullText.entries()) {
+    if (arr instanceof Uint32Array) continue;
+    // 排序去重后转为 Uint32Array
+    arr.sort((a, b) => a - b);
+    const deduped = [];
+    for (let i = 0; i < arr.length; i++) {
+      if (i === 0 || arr[i] !== arr[i - 1]) {
+        deduped.push(arr[i]);
+      }
+    }
+    indices.fullText.set(word, new Uint32Array(deduped));
   }
 }
 

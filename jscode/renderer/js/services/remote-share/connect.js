@@ -1,7 +1,16 @@
       // ============ 服务器连接相关函数 ============
-      
+
+      // 连接状态定时器 ID（防止重复创建）
+      let _serverConnectionIntervalId = null;
+
       // 初始化服务器连接
       function initServerConnection() {
+        // 防止重复初始化导致 interval 泄漏
+        if (_serverConnectionIntervalId !== null) {
+          console.log('[Server Connection] 已经初始化，跳过重复调用');
+          return;
+        }
+
         const serverAddressInput = document.getElementById("serverAddress");
         const serverPathInput = document.getElementById("serverPath");
         const serverStatus = document.getElementById("serverStatus");
@@ -42,18 +51,18 @@
             }
           });
         }
-        
+
         if (serverAddressInput) {
           // 服务器地址改变时检查连接
           serverAddressInput.addEventListener("change", function() {
             checkServerConnection();
           });
-          
+
           // 初始检查连接
           checkServerConnection();
-          
+
           // 定时检查连接状态（每30秒检查一次）
-          setInterval(checkServerConnection, 30000);
+          _serverConnectionIntervalId = setInterval(checkServerConnection, 30000);
         }
 
         // 服务器地址下拉菜单：点击按钮展开/收起；选择后写入 input 并触发 change
@@ -111,11 +120,13 @@
           });
 
           // 点击其它区域关闭
-          document.addEventListener("click", () => closeServerAddressDropdown());
+          const _onServerDropdownClickOutside = () => closeServerAddressDropdown();
+          document.addEventListener("click", _onServerDropdownClickOutside);
           // Esc 关闭
-          document.addEventListener("keydown", (e) => {
+          const _onServerDropdownEsc = (e) => {
             if (e.key === "Escape") closeServerAddressDropdown();
-          });
+          };
+          document.addEventListener("keydown", _onServerDropdownEsc);
         }
 
         // 📅 月份选择功能
@@ -228,11 +239,13 @@
           });
 
           // 点击其它区域关闭
-          document.addEventListener("click", () => closeMonthSelectMenu());
+          const _onMonthMenuClickOutside = () => closeMonthSelectMenu();
+          document.addEventListener("click", _onMonthMenuClickOutside);
           // Esc 关闭
-          document.addEventListener("keydown", (e) => {
+          const _onMonthMenuEsc = (e) => {
             if (e.key === "Escape") closeMonthSelectMenu();
-          });
+          };
+          document.addEventListener("keydown", _onMonthMenuEsc);
         }
       }
       

@@ -448,6 +448,9 @@ window.App.VirtualScroll.highlightCache = {
   maxSize: 5000,
   stats: { hits: 0, misses: 0, evictions: 0 },
   state: { searchKeyword: '', customHighlights: [], filterKeywords: [] },
+  // 🚀 P0: 预编译正则缓存，配置不变时复用
+  compiledRegexes: null,
+  lastRegexConfig: null,
 
   getKey(originalText, searchKeyword, customHighlights, filterKeywords) {
     const searchId = searchKeyword ? `s:${searchKeyword.length > 20 ? searchKeyword.slice(0,20) + '...' : searchKeyword}` : '';
@@ -462,9 +465,16 @@ window.App.VirtualScroll.highlightCache = {
     return `${stateKey}#${hash}`;
   },
 
+  // 🚀 P1: LRU 缓存 — 读取时移动到末尾
   get(key) {
     const value = this.cache.get(key);
-    if (value !== undefined) { this.stats.hits++; } else { this.stats.misses++; }
+    if (value !== undefined) {
+      this.stats.hits++;
+      this.cache.delete(key);
+      this.cache.set(key, value);
+    } else {
+      this.stats.misses++;
+    }
     return value;
   },
 
@@ -539,27 +549,32 @@ function _mergeHighlightRanges(ranges, originalText) {
     }
   }
   merged.push(current);
-  const htmlEscapedText = _escapeHtml(originalText);
-  function getHtmlIndex(originalIndex) {
-    let htmlIndex = 0;
-    let originalPos = 0;
-    while (originalPos < originalIndex && htmlIndex < htmlEscapedText.length) {
-      const char = originalText[originalPos];
-      if (char === '&') { htmlIndex += 5; }
-      else if (char === '<') { htmlIndex += 4; }
-      else if (char === '>') { htmlIndex += 4; }
-      else if (char === '"') { htmlIndex += 6; }
-      else if (char === "'") { htmlIndex += 5; }
-      else { htmlIndex += 1; }
-      originalPos++;
-    }
-    return htmlIndex;
+  // 🚀 P1: 单次前向扫描计算所有 htmlIndex，替代 N×M 的逐 range 重新遍历
+  // 预计算每个原始字符位置的 html 索引增量
+  const charLens = new Uint8Array(originalText.length);
+  for (let i = 0; i < originalText.length; i++) {
+    const c = originalText.charCodeAt(i);
+    if (c === 38) charLens[i] = 5;       // & → &amp;
+    else if (c === 60) charLens[i] = 4;   // < → &lt;
+    else if (c === 62) charLens[i] = 4;   // > → &gt;
+    else if (c === 34) charLens[i] = 6;   // " → &quot;
+    else if (c === 39) charLens[i] = 5;   // ' → &#39;
+    else charLens[i] = 1;
   }
-  return merged.map(range => ({
-    ...range,
-    htmlStart: getHtmlIndex(range.start),
-    htmlEnd: getHtmlIndex(range.end),
-  }));
+  // 单次扫描：按 start 排序的 range 只需前向遍历
+  let htmlPos = 0;
+  let origPos = 0;
+  for (const range of merged) {
+    while (origPos < range.start && origPos < charLens.length) {
+      htmlPos += charLens[origPos++];
+    }
+    range.htmlStart = htmlPos;
+    while (origPos < range.end && origPos < charLens.length) {
+      htmlPos += charLens[origPos++];
+    }
+    range.htmlEnd = htmlPos;
+  }
+  return merged;
 }
 
 window.App.VirtualScroll.highlightContent = function(originalText, highlightConfig) {
@@ -572,63 +587,55 @@ window.App.VirtualScroll.highlightContent = function(originalText, highlightConf
 
   this.highlightCache.updateState(searchKeyword, customHighlights, filterKeywords);
 
+  // 🚀 P0: 预编译正则 — 配置不变时复用，避免逐行 new RegExp
+  const configKey = searchKeyword + '|' + (customHighlights || []).map(h => h.keyword).join(',') + '|' + (filterKeywords || []).slice(0, 3).join(',');
+  const hc = this.highlightCache;
+  if (hc.lastRegexConfig !== configKey) {
+    const compiled = { search: null, custom: [], filter: [] };
+    if (searchKeyword && searchKeyword.trim()) {
+      try { compiled.search = new RegExp(_escapeRegex(searchKeyword), 'gi'); } catch (_) { compiled.search = null; }
+    }
+    for (const h of (customHighlights || [])) {
+      if (!h.keyword) continue;
+      try { compiled.custom.push({ regex: new RegExp(_escapeRegex(h.keyword), 'gi'), color: h.color }); } catch (_) {}
+    }
+    for (let k = 0; k < Math.min((filterKeywords || []).length, 3); k++) {
+      const kw = filterKeywords[k];
+      if (!kw) continue;
+      try { compiled.filter.push({ regex: new RegExp(_escapeRegex(kw), 'gi'), classIndex: k }); } catch (_) {}
+    }
+    hc.compiledRegexes = compiled;
+    hc.lastRegexConfig = configKey;
+  }
+  const rc = hc.compiledRegexes;
+
   let result = _escapeHtml(originalText);
   const highlightRanges = [];
 
-  if (searchKeyword && searchKeyword.trim()) {
-    try {
-      const regex = new RegExp(_escapeRegex(searchKeyword), 'gi');
-      let match;
-      while ((match = regex.exec(originalText)) !== null) {
-        highlightRanges.push({ start: match.index, end: match.index + match[0].length, type: 'search', text: match[0] });
-      }
-    } catch (e) {
-      const lowerText = originalText.toLowerCase();
-      const lowerKeyword = searchKeyword.toLowerCase();
-      let idx = 0;
-      while ((idx = lowerText.indexOf(lowerKeyword, idx)) !== -1) {
-        highlightRanges.push({ start: idx, end: idx + searchKeyword.length, type: 'search', text: originalText.slice(idx, idx + searchKeyword.length) });
-        idx++;
-      }
+  // search keyword
+  if (rc.search) {
+    rc.search.lastIndex = 0;
+    let match;
+    while ((match = rc.search.exec(originalText)) !== null) {
+      highlightRanges.push({ start: match.index, end: match.index + match[0].length, type: 'search', text: match[0] });
     }
   }
 
-  for (const highlight of customHighlights) {
-    if (!highlight.keyword) continue;
-    try {
-      const regex = new RegExp(_escapeRegex(highlight.keyword), 'gi');
-      let match;
-      while ((match = regex.exec(originalText)) !== null) {
-        highlightRanges.push({ start: match.index, end: match.index + match[0].length, type: 'custom', color: highlight.color });
-      }
-    } catch (e) {
-      const lowerText = originalText.toLowerCase();
-      const lowerKeyword = highlight.keyword.toLowerCase();
-      let idx = 0;
-      while ((idx = lowerText.indexOf(lowerKeyword, idx)) !== -1) {
-        highlightRanges.push({ start: idx, end: idx + highlight.keyword.length, type: 'custom', color: highlight.color });
-        idx++;
-      }
+  // custom highlights
+  for (const ch of rc.custom) {
+    ch.regex.lastIndex = 0;
+    let match;
+    while ((match = ch.regex.exec(originalText)) !== null) {
+      highlightRanges.push({ start: match.index, end: match.index + match[0].length, type: 'custom', color: ch.color });
     }
   }
 
-  for (let k = 0; k < Math.min(filterKeywords.length, 3); k++) {
-    const keyword = filterKeywords[k];
-    if (!keyword) continue;
-    try {
-      const regex = new RegExp(_escapeRegex(keyword), 'gi');
-      let match;
-      while ((match = regex.exec(originalText)) !== null) {
-        highlightRanges.push({ start: match.index, end: match.index + match[0].length, type: 'filter', classIndex: k });
-      }
-    } catch (e) {
-      const lowerText = originalText.toLowerCase();
-      const lowerKeyword = keyword.toLowerCase();
-      let idx = 0;
-      while ((idx = lowerText.indexOf(lowerKeyword, idx)) !== -1) {
-        highlightRanges.push({ start: idx, end: idx + keyword.length, type: 'filter', classIndex: k });
-        idx++;
-      }
+  // filter keywords
+  for (const fk of rc.filter) {
+    fk.regex.lastIndex = 0;
+    let match;
+    while ((match = fk.regex.exec(originalText)) !== null) {
+      highlightRanges.push({ start: match.index, end: match.index + match[0].length, type: 'filter', classIndex: fk.classIndex });
     }
   }
 

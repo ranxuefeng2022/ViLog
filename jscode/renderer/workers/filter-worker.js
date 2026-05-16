@@ -11,6 +11,9 @@
 
 importScripts('aho-corasick.js');
 
+const _DEBUG = false;
+const _log = _DEBUG ? console.log.bind(console) : () => {};
+
 // 全局变量
 let currentIndex = 0;
 let processedCount = 0;

@@ -10,6 +10,9 @@
 
 importScripts('aho-corasick.js');
 
+const _DEBUG = false;
+const _log = _DEBUG ? console.log.bind(console) : () => {};
+
 let isCancelled = false;
 let compiledRegexes = [];
 let stringKeywords = [];
@@ -105,7 +108,7 @@ function processChunk(data) {
   const hasStr = stringKeywords.length > 0;
   const hasRx = compiledRegexes.length > 0;
 
-  console.log(`[Worker ${activeChunkIndex}] 开始: ${linesLen} 行 ${lines ? '(新数据)' : '(缓存)'}`);
+  _log(`[Worker ${activeChunkIndex}] 开始: ${linesLen} 行 ${lines ? '(新数据)' : '(缓存)'}`);
 
   for (let i = 0; i < linesLen; i++) {
     const line = activeLines[i];
@@ -214,7 +217,7 @@ function processChunk(data) {
   const totalTime = performance.now() - startTime;
   const linesPerMs = (linesLen / totalTime).toFixed(0);
 
-  console.log(`[Worker ${activeChunkIndex}] 完成: ${matchCount} 匹配, ${totalTime.toFixed(2)}ms, ${linesPerMs} 行/ms`);
+  _log(`[Worker ${activeChunkIndex}] 完成: ${matchCount} 匹配, ${totalTime.toFixed(2)}ms, ${linesPerMs} 行/ms`);
 
   const finalResults = results.buffer.byteLength === matchCount * 4
     ? results
@@ -247,7 +250,7 @@ function cancelOperation() {
  */
 function decodeLinesFromSAB(sab, headerSize, startLine, endLine) {
   const decoder = new TextDecoder('utf-8');
-  const offsetsView = new Uint32Array(sab, 4); // 偏移表从第4字节开始
+  const offsetsView = new Uint32Array(sab, 4);
   const dataView = new Uint8Array(sab, headerSize);
 
   const lines = new Array(endLine - startLine);
@@ -263,6 +266,107 @@ function decodeLinesFromSAB(sab, headerSize, startLine, endLine) {
   return lines;
 }
 
+/**
+ * 🚀 P2: 直接在 SAB 的 UTF-8 字节上做快速路径匹配（AC + 单字符），
+ * 避免全量解码为 JS 字符串。ASCII 字符的 charCode 与 UTF-8 字节值一致。
+ * 只对匹配行做按需解码。
+ * 返回匹配行的原始索引数组。
+ */
+function matchOnSAB(sab, headerSize, startLine, endLine, keywords, sessionId, chunkIndex) {
+  precompileKeywords(keywords);
+
+  const offsetsView = new Uint32Array(sab, 4);
+  const dataView = new Uint8Array(sab, headerSize);
+  const totalLines = endLine - startLine;
+
+  const hasSC = singleCharCodes.size > 0;
+  const hasAC = acNodes !== null;
+  const hasStr = stringKeywords.length > 0;
+  const hasRx = compiledRegexes.length > 0;
+
+  let resultCap = Math.max(256, totalLines >> 2);
+  let results = new Int32Array(resultCap);
+  let matchCount = 0;
+
+  for (let i = 0; i < totalLines; i++) {
+    const byteStart = offsetsView[startLine + i];
+    const byteEnd = offsetsView[startLine + i + 1];
+    const lineLen = byteEnd - byteStart;
+
+    if (lineLen === 0) continue;
+
+    let matched = false;
+
+    // 快速路径：在 UTF-8 字节上做 AC + 单字符匹配（仅 ASCII 范围内正确）
+    if (hasAC || hasSC) {
+      let nodeIdx = 0;
+      for (let j = byteStart; j < byteEnd; j++) {
+        let cc = dataView[j];
+        // ASCII 大写转小写
+        if (cc >= 65 && cc <= 90) cc += 32;
+        // 跳过非 ASCII 字节（UTF-8 多字节序列，首字节 >= 0xC0）
+        if (cc >= 128) {
+          if (hasAC) {
+            // 非 ASCII 字符走 AC 的 extendedChildren 路径
+            // 但 SAB 字节是 UTF-8 编码，charCode 不等于字节值
+            // 回退：对含非 ASCII 的行，跳过快速路径，走慢速路径
+            matched = false;
+            nodeIdx = -1;
+            break;
+          }
+          continue;
+        }
+
+        if (hasSC && singleCharCodes.has(cc)) { matched = true; break; }
+
+        if (hasAC) {
+          let children = acNodes[nodeIdx].children;
+          while (nodeIdx !== 0 && children[cc] === -1) {
+            nodeIdx = acNodes[nodeIdx].fail;
+            children = acNodes[nodeIdx].children;
+          }
+          const next = children[cc];
+          if (next !== -1) {
+            nodeIdx = next;
+            if (acNodes[nodeIdx].output.length > 0) { matched = true; break; }
+          }
+        }
+      }
+      // 如果 nodeIdx === -1 表示有非 ASCII 字节，需要走慢路径
+      if (nodeIdx === -1) matched = false;
+    }
+
+    // 慢速路径：仅解码匹配行或含非 ASCII 的行
+    if (!matched && (hasStr || hasRx)) {
+      const line = new TextDecoder('utf-8').decode(dataView.subarray(byteStart, byteEnd));
+      const lowerLine = line.toLowerCase();
+      if (hasStr) {
+        for (let k = 0; k < stringKeywords.length; k++) {
+          if (lowerLine.includes(stringKeywords[k])) { matched = true; break; }
+        }
+      }
+      if (!matched && hasRx) {
+        for (let k = 0; k < compiledRegexes.length; k++) {
+          if (compiledRegexes[k].test(lowerLine)) { matched = true; break; }
+        }
+      }
+    }
+
+    if (matched) {
+      if (matchCount >= resultCap) {
+        const newCap = resultCap + (resultCap >> 1) + 1;
+        const newResults = new Int32Array(newCap);
+        newResults.set(results);
+        results = newResults;
+        resultCap = newCap;
+      }
+      results[matchCount++] = startLine + i;
+    }
+  }
+
+  return results.slice(0, matchCount);
+}
+
 // 监听消息
 self.onmessage = function(e) {
   const { type, data } = e.data;
@@ -272,20 +376,28 @@ self.onmessage = function(e) {
       processChunk(data);
       break;
     case 'process-sab':
-      // 🚀 SharedArrayBuffer 路径：从共享内存解码行数据后走正常过滤流程
+      // 🚀 SharedArrayBuffer 路径：优先在 SAB 字节上直接匹配，避免全量解码
       try {
         const { sab, headerSize, startLine, endLine, keywords, sessionId, chunkIndex, totalChunks } = data;
-        console.log(`[Worker] 收到 process-sab: chunk=${chunkIndex}, lines=${endLine - startLine}, sab=${sab ? sab.byteLength : 'null'}, headerSize=${headerSize}`);
-        const lines = decodeLinesFromSAB(sab, headerSize, startLine, endLine);
-        console.log(`[Worker] SAB 解码完成: ${lines.length} 行, 首行=${lines[0] ? lines[0].substring(0, 50) : 'empty'}`);
-        processChunk({
-          lines: lines,
-          keywords: keywords,
-          sessionId: sessionId,
-          chunkIndex: chunkIndex,
-          totalChunks: totalChunks,
-          startIndex: startLine
-        });
+        const startTime = performance.now();
+
+        // 尝试直接在 SAB 上匹配（纯 ASCII 行可跳过解码）
+        const matchResults = matchOnSAB(sab, headerSize, startLine, endLine, keywords, sessionId, chunkIndex);
+        const elapsed = (performance.now() - startTime).toFixed(1);
+
+        self.postMessage({
+          type: 'result',
+          data: {
+            indices: matchResults,
+            sessionId: sessionId,
+            chunkIndex: chunkIndex,
+            totalChunks: totalChunks,
+            matchedCount: matchResults.length,
+            lineCount: endLine - startLine,
+            fromSAB: true,
+            elapsed: elapsed
+          }
+        }, [matchResults.buffer]);
       } catch (err) {
         console.error(`[Worker] process-sab 失败:`, err.message, err.stack);
       }

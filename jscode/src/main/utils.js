@@ -248,6 +248,105 @@ function resolveZip64ExtraField(cdBuffer, entryStart, fileNameLength, extraField
 }
 
 /**
+ * 批量提取：解析 ZIP Central Directory 一次，返回索引供后续 extractByIndex 使用
+ * @param {string} archivePath
+ * @returns {{ fd: number, cdBuffer: Buffer, entries: Map<string, object> } | null}
+ */
+function buildZipIndex(archivePath) {
+  if (!fs.existsSync(archivePath)) return null;
+  const fileSize = fs.statSync(archivePath).size;
+  const fd = fs.openSync(archivePath, 'r');
+
+  try {
+    const eocd = parseZipCentralDir(fd, fileSize);
+    if (!eocd) { fs.closeSync(fd); return null; }
+
+    const { cdEntryCount, cdSize, cdOffset } = eocd;
+    const cdBuffer = Buffer.alloc(cdSize);
+    fs.readSync(fd, cdBuffer, 0, cdSize, cdOffset);
+
+    const entries = new Map();
+    let pos = 0;
+    for (let i = 0; i < cdEntryCount && pos < cdBuffer.length; i++) {
+      if (cdBuffer.readUInt32LE(pos) !== 0x02014b50) break;
+
+      const compressionMethod = cdBuffer.readUInt16LE(pos + 10);
+      let compressedSize = cdBuffer.readUInt32LE(pos + 20);
+      let uncompressedSize = cdBuffer.readUInt32LE(pos + 24);
+      const fileNameLength = cdBuffer.readUInt16LE(pos + 28);
+      const extraFieldLength = cdBuffer.readUInt16LE(pos + 30);
+      const fileCommentLength = cdBuffer.readUInt16LE(pos + 32);
+      let localHeaderOffset = cdBuffer.readUInt32LE(pos + 42);
+
+      if (compressedSize === 0xFFFFFFFF || uncompressedSize === 0xFFFFFFFF || localHeaderOffset === 0xFFFFFFFF) {
+        const resolved = resolveZip64ExtraField(cdBuffer, pos, fileNameLength, extraFieldLength,
+          compressedSize, uncompressedSize, localHeaderOffset);
+        compressedSize = resolved.compressedSize;
+        uncompressedSize = resolved.uncompressedSize;
+        localHeaderOffset = resolved.localHeaderOffset;
+      }
+
+      const entryName = cdBuffer.toString('utf8', pos + 46, pos + 46 + fileNameLength);
+      const normalized = entryName.replace(/^\/+/, '').replace(/\\/g, '/');
+
+      if (normalized) {
+        entries.set(normalized, {
+          localHeaderOffset,
+          compressedSize,
+          uncompressedSize,
+          compressionMethod
+        });
+      }
+
+      pos += 46 + fileNameLength + extraFieldLength + fileCommentLength;
+    }
+
+    return { fd, cdBuffer, entries };
+  } catch (e) {
+    fs.closeSync(fd);
+    return null;
+  }
+}
+
+/**
+ * 批量提取：根据索引提取单个文件内容（不重复解析 CD）
+ * @param {number} fd
+ * @param {Buffer} cdBuffer - unused, kept for API symmetry
+ * @param {object} info - { localHeaderOffset, compressedSize, compressionMethod }
+ * @returns {{ success: boolean, content?: string, error?: string }}
+ */
+function extractByIndex(fd, cdBuffer, info) {
+  try {
+    const lfhBuffer = Buffer.alloc(30);
+    fs.readSync(fd, lfhBuffer, 0, 30, info.localHeaderOffset);
+    if (lfhBuffer.readUInt32LE(0) !== 0x04034b50) {
+      return { success: false, error: '本地文件头签名无效' };
+    }
+
+    const lfhFileNameLength = lfhBuffer.readUInt16LE(26);
+    const lfhExtraFieldLength = lfhBuffer.readUInt16LE(28);
+    const dataOffset = info.localHeaderOffset + 30 + lfhFileNameLength + lfhExtraFieldLength;
+
+    const compressedData = Buffer.alloc(info.compressedSize);
+    fs.readSync(fd, compressedData, 0, info.compressedSize, dataOffset);
+
+    let resultBuffer;
+    if (info.compressionMethod === 0) {
+      resultBuffer = compressedData;
+    } else if (info.compressionMethod === 8) {
+      resultBuffer = zlib.inflateRawSync(compressedData);
+    } else {
+      return { success: false, error: '不支持的压缩方式: ' + info.compressionMethod };
+    }
+
+    const { content } = extractTextFromBuffer(resultBuffer);
+    return { success: true, content };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+/**
  * 原生 ZIP 单文件提取核心逻辑（供 extract-zip-native 和 extract-file-from-archive 共用）
  */
 function extractZipEntryNative(archivePath, filePath) {
@@ -353,5 +452,7 @@ module.exports = {
   copyDirRecursive,
   parseZipCentralDir,
   resolveZip64ExtraField,
-  extractZipEntryNative
+  extractZipEntryNative,
+  buildZipIndex,
+  extractByIndex
 };

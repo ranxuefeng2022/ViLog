@@ -10,12 +10,10 @@
 // ========== 工具函数 ==========
 
 /**
- * HTML转义
+ * HTML转义（纯字符串实现，兼容 Worker 线程）
  */
 function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 /**

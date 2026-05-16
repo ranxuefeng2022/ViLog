@@ -20,62 +20,48 @@ if %errorlevel% equ 0 (
 
 echo       Node.js is NOT installed.
 echo.
-echo   Attempting to install Node.js via winget...
-echo.
 
-where winget >nul 2>&1
-if %errorlevel% equ 0 (
-    winget install OpenJS.NodeJS.LTS --accept-package-agreements --accept-source-agreements
+REM --- Method 1: Use local MSI in project root ---
+set "LOCAL_MSI="
+for %%f in ("%~dp0node-v*-x64.msi") do set "LOCAL_MSI=%%f"
+if defined LOCAL_MSI (
+    echo       Found local installer: !LOCAL_MSI!
+    echo       Installing Node.js...
+    msiexec /i "!LOCAL_MSI!" /qn /norestart
+    call :refresh_path
+    where node >nul 2>&1
     if !errorlevel! equ 0 (
-        echo.
-        echo       Node.js installed successfully.
-        echo       Refreshing PATH...
-        REM Refresh PATH from registry so we can use node immediately
-        for /f "tokens=2*" %%a in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul') do set "SYS_PATH=%%b"
-        for /f "tokens=2*" %%a in ('reg query "HKCU\Environment" /v Path 2^>nul') do set "USR_PATH=%%b"
-        set "PATH=!SYS_PATH!;!USR_PATH!"
-
-        where node >nul 2>&1
-        if !errorlevel! neq 0 (
-            echo.
-            echo       Cannot detect Node.js yet. Please close this window,
-            echo       open a NEW terminal, and run start.bat again.
-            pause
-            exit /b 1
-        )
         for /f "tokens=*" %%v in ('node -v 2^>nul') do set NODE_VER=%%v
-        echo       Node.js !NODE_VER! detected after install.
+        echo       Node.js !NODE_VER! installed successfully.
         goto :node_ok
-    ) else (
-        echo       winget install failed.
     )
-) else (
-    echo       winget is not available.
+    echo       Local MSI install failed.
+    echo.
 )
 
-REM winget not available or failed - try other methods
-echo.
-echo   winget not available or failed, trying fnm...
-where fnm >nul 2>&1
-if %errorlevel% equ 0 (
-    fnm install --lts
-    fnm use lts-latest
-    for /f "tokens=*" %%v in ('node -v 2^>nul') do set NODE_VER=%%v
-    echo       Node.js !NODE_VER! installed via fnm.
-    goto :node_ok
+REM --- Method 2: winget ---
+echo       Trying winget...
+where winget >nul 2>&1
+if !errorlevel! equ 0 (
+    winget install OpenJS.NodeJS.LTS --accept-package-agreements --accept-source-agreements
+    call :refresh_path
+    where node >nul 2>&1
+    if !errorlevel! equ 0 (
+        for /f "tokens=*" %%v in ('node -v 2^>nul') do set NODE_VER=%%v
+        echo       Node.js !NODE_VER! installed via winget.
+        goto :node_ok
+    )
+    echo       winget install failed.
+    echo.
 )
 
+:node_manual
 echo.
 echo   --------------------------------------------
 echo   Cannot auto-install Node.js.
-echo   Please install Node.js manually:
-echo.
-echo     Option 1: Download from https://nodejs.org
-echo     Option 2: Run in admin PowerShell:
-echo               winget install OpenJS.NodeJS.LTS
-echo   --------------------------------------------
-echo.
+echo   Please download from https://nodejs.org
 echo   After installing, reopen this terminal and run start.bat again.
+echo   --------------------------------------------
 pause
 exit /b 1
 
@@ -108,5 +94,17 @@ echo [3/3] Starting LogView...
 echo.
 cd /d "%~dp0"
 call npm start
+if %errorlevel% neq 0 (
+    echo.
+    echo       App exited with error code %errorlevel%.
+    pause
+)
 
 endlocal
+exit /b 0
+
+:refresh_path
+for /f "tokens=2*" %%a in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul') do set "SYS_PATH=%%b"
+for /f "tokens=2*" %%a in ('reg query "HKCU\Environment" /v Path 2^>nul') do set "USR_PATH=%%b"
+set "PATH=!SYS_PATH!;!USR_PATH!"
+goto :eof

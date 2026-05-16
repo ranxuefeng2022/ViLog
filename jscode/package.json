@@ -7,15 +7,10 @@
   "scripts": {
     "start": "electron .",
     "test": "node --test test/*.test.js",
-    "lint": "npx eslint src/ renderer/js/core/ renderer/js/services/ renderer/js/utils/ preload.js",
-    "postinstall": "electron-rebuild"
+    "lint": "npx eslint src/ renderer/js/core/ renderer/js/services/ renderer/js/utils/ preload.js"
   },
   "devDependencies": {
-    "@electron/rebuild": "^4.0.4",
     "electron": "^33.0.0",
     "globals": "^17.6.0"
-  },
-  "dependencies": {
-    "better-sqlite3": "^12.9.0"
   }
 }

@@ -717,33 +717,50 @@ async function parseRipgrepOutputParallel(ripgrepOutput, fileHeaders, maxWorkers
   const blob = new Blob([workerCode], { type: 'application/javascript' });
   const workerUrl = URL.createObjectURL(blob);
 
-  // 启动 Workers
+  // 启动 Workers（每个 Worker 有 10 秒超时保护）
   const workerPromises = chunks.map((chunk, index) => {
-    return new Promise((resolve) => {
-      const worker = new Worker(workerUrl);
+    let workerRef = null;
+    let resolved = false;
 
-      worker.onmessage = (e) => {
-        const { chunkId, success, matches, error } = e.data;
-        worker.terminate();
+    return Promise.race([
+      new Promise((resolve) => {
+        const worker = new Worker(workerUrl);
+        workerRef = worker;
 
-        if (success) {
-          resolve({ chunkId, matches, error: null });
-        } else {
-          resolve({ chunkId, matches: [], error });
+        worker.onmessage = (e) => {
+          if (resolved) return;
+          resolved = true;
+          const { chunkId, success, matches, error } = e.data;
+          worker.terminate();
+
+          if (success) {
+            resolve({ chunkId, matches, error: null });
+          } else {
+            resolve({ chunkId, matches: [], error });
+          }
+        };
+
+        worker.onerror = (err) => {
+          if (resolved) return;
+          resolved = true;
+          worker.terminate();
+          resolve({ chunkId: index, matches: [], error: err.message });
+        };
+
+        worker.postMessage({
+          chunkId: index,
+          chunkData: chunk,
+          fileHeaders: fileHeaders
+        });
+      }),
+      new Promise((resolve) => setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          if (workerRef) workerRef.terminate();
         }
-      };
-
-      worker.onerror = (err) => {
-        worker.terminate();
-        resolve({ chunkId: index, matches: [], error: err.message });
-      };
-
-      worker.postMessage({
-        chunkId: index,
-        chunkData: chunk,
-        fileHeaders: fileHeaders
-      });
-    });
+        resolve(null);
+      }, 10000))
+    ]);
   });
 
   // 等待所有 Workers 完成
@@ -757,6 +774,7 @@ async function parseRipgrepOutputParallel(ripgrepOutput, fileHeaders, maxWorkers
   const allErrors = [];
 
   for (const result of results) {
+    if (!result) continue; // 超时的 Worker 返回 null
     if (result.matches) {
       allMatches.push(...result.matches);
     }

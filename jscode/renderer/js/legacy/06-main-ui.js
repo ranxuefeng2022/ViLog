@@ -606,6 +606,16 @@
           if (window.App && window.App.FileReader) {
             window.App.FileReader.dispose();
           }
+          // 释放大数组引用，帮助 GC 回收被事件监听器闭包持有的内存
+          if (typeof originalLines !== 'undefined') originalLines = null;
+          if (typeof fileHeaders !== 'undefined') fileHeaders = null;
+          if (typeof currentFilter !== 'undefined') {
+            currentFilter.filteredLines = null;
+            currentFilter.filteredToOriginalIndex = null;
+          }
+          if (typeof filteredPanelAllLines !== 'undefined') filteredPanelAllLines = null;
+          if (typeof filteredPanelAllOriginalIndices !== 'undefined') filteredPanelAllOriginalIndices = null;
+          if (typeof archiveData !== 'undefined') archiveData.clear();
         });
 
         // 新增：防止右键菜单干扰拖拽
@@ -2875,6 +2885,11 @@
             filteredLineHtmlCache.delete(cacheKey);
             filteredLineHtmlCache.set(cacheKey, displayText);
           } else {
+            // 缓存写入时检查上限
+            if (filteredLineHtmlCache.size >= 5000) {
+              const firstKey = filteredLineHtmlCache.keys().next().value;
+              filteredLineHtmlCache.delete(firstKey);
+            }
             // 缓存未命中，计算HTML并缓存
             // 🚀 重要修复：先对原始内容进行HTML转义，防止特殊字符被误解析
             // 例如：now<next=0 会被转义为 now&lt;next=0
@@ -3556,21 +3571,15 @@
         // 立即执行一次修复
         enforceHeaderHeight();
 
-        // 🔧 监听 filteredPanel 的 class 变化，按需启停定时器
+        // 🔧 filteredPanel 可见性变化时主动修复一次（不需要轮询）
         const fp = DOMCache.get('filteredPanel');
         if (fp) {
           const visibilityObserver = new MutationObserver(() => {
             if (fp.classList.contains('visible')) {
-              startHeaderInterval();
-            } else {
-              stopHeaderInterval();
+              enforceHeaderHeight();
             }
           });
           visibilityObserver.observe(fp, { attributes: true, attributeFilter: ['class'] });
-          // 初始状态
-          if (fp.classList.contains('visible')) {
-            startHeaderInterval();
-          }
         }
       }
 

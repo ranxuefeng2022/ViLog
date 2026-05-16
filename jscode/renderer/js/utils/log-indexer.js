@@ -10,6 +10,8 @@
  * - 持久化存储
  */
 
+const MAX_TIME_RANGES = 50000;
+
 class LogIndexer {
   constructor(options = {}) {
     this.options = {
@@ -133,6 +135,10 @@ class LogIndexer {
 
       // 冻结全文索引为 Uint32Array（内存减少 ~75%）
       this._finalizeFullText();
+
+      // 释放全量数据引用，避免长期持有大数组（lineCache 已缓存热点行）
+      this._allLinesLength = this._allLines ? this._allLines.length : 0;
+      this._allLines = null;
 
       // 触发完成回调
       if (this.callbacks.onComplete) {
@@ -286,10 +292,12 @@ class LogIndexer {
     if (timeMatch) {
       const timestamp = timeMatch[1];
 
-      this.indices.timeRanges.push({
-        timestamp,
-        lineNumber,
-      });
+      if (this.indices.timeRanges.length < MAX_TIME_RANGES) {
+        this.indices.timeRanges.push({
+          timestamp,
+          lineNumber,
+        });
+      }
     }
   }
 

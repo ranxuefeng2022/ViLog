@@ -86,6 +86,7 @@ const tempDirManager = require('./temp-dir-manager');
 const searchTools = require('./search-tools');
 const remoteShareIPC = require('./remote-share-ipc');
 const autoUpdate = require('./auto-update');
+const logCsvExporter = require('./log-csv-exporter');
 const { focusWindowSafe } = require('./utils');
 
 // ===================================================================
@@ -109,6 +110,7 @@ fileOperations.registerIpcHandlers();
 searchTools.registerIpcHandlers();
 remoteShareIPC.registerIpcHandlers();
 autoUpdate.registerIpcHandlers();
+logCsvExporter.registerIpcHandlers();
 
 // ===================================================================
 // App lifecycle
@@ -254,4 +256,16 @@ app.on('will-quit', () => {
     }
   }
   tempDirManager.rendererTempDirs.clear();
+
+  // Clean up stale temp dirs from previous sessions (logview_winrar_*, log-viewer-html)
+  try {
+    const os = require('os');
+    const tmpDir = os.tmpdir();
+    const entries = fs.readdirSync(tmpDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory() && (entry.name.startsWith('logview_winrar_') || entry.name === 'log-viewer-html')) {
+        try { fs.rmSync(path.join(tmpDir, entry.name), { recursive: true, force: true }); } catch(e) { /* 忽略 */ }
+      }
+    }
+  } catch(e) { /* 忽略 */ }
 });

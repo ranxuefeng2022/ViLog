@@ -8,6 +8,9 @@
  * worker.onmessage = (e) => { ... };
  */
 
+const _DEBUG = false;
+const _log = _DEBUG ? console.log.bind(console) : () => {};
+
 /**
  * 处理主线程发送的消息
  */
@@ -207,7 +210,7 @@ function handleColumnStats(data) {
       setTimeout(() => processBatch(endIndex), 0);
     } else {
       const elapsed = performance.now() - startTime;
-      console.log(`[Stats Worker] 列统计完成: ${rows.length} 行, ${numColumns} 列, 耗时 ${elapsed.toFixed(2)}ms`);
+      _log(`[Stats Worker] 列统计完成: ${rows.length} 行, ${numColumns} 列, 耗时 ${elapsed.toFixed(2)}ms`);
     }
   }
 
@@ -301,7 +304,7 @@ function handleLineLengthStats(data) {
       stats.avgLength = stats.sumLength / stats.totalLines;
       delete stats.sumLength;
       const elapsed = performance.now() - startTime;
-      console.log(`[Stats Worker] 行长度统计完成: ${lines.length} 行, 耗时 ${elapsed.toFixed(2)}ms`);
+      _log(`[Stats Worker] 行长度统计完成: ${lines.length} 行, 耗时 ${elapsed.toFixed(2)}ms`);
     }
   }
 
@@ -407,7 +410,7 @@ function handleLogLevelStats(data) {
       setTimeout(() => processBatch(endIndex), 0);
     } else {
       const elapsed = performance.now() - startTime;
-      console.log(`[Stats Worker] 日志级别统计完成: ${lines.length} 行, 耗时 ${elapsed.toFixed(2)}ms`);
+      _log(`[Stats Worker] 日志级别统计完成: ${lines.length} 行, 耗时 ${elapsed.toFixed(2)}ms`);
     }
   }
 
@@ -485,7 +488,7 @@ function handleFrequencyStats(data) {
         .map(([word, count]) => ({ word, count }));
 
       const elapsed = performance.now() - startTime;
-      console.log(`[Stats Worker] 词频统计完成: ${wordCounts.size} 个唯一词, 耗时 ${elapsed.toFixed(2)}ms`);
+      _log(`[Stats Worker] 词频统计完成: ${wordCounts.size} 个唯一词, 耗时 ${elapsed.toFixed(2)}ms`);
 
       self.postMessage({
         type: 'frequencyStatsResult',

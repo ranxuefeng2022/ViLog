@@ -8,6 +8,9 @@
  * worker.onmessage = (e) => { ... };
  */
 
+const _DEBUG = false;
+const _log = _DEBUG ? console.log.bind(console) : () => {};
+
 // 当前配置
 let delimiter = ',';
 let quoteChar = '"';
@@ -193,7 +196,7 @@ function handleParse(data) {
       setTimeout(() => processBatch(endIndex), 0);
     } else {
       const elapsed = performance.now() - startTime;
-      console.log(`[CSV Parser Worker] 解析完成: ${lines.length} 行, ${maxColumns} 列, 耗时 ${elapsed.toFixed(2)}ms`);
+      _log(`[CSV Parser Worker] 解析完成: ${lines.length} 行, ${maxColumns} 列, 耗时 ${elapsed.toFixed(2)}ms`);
 
       // 发送完成消息
       self.postMessage({
@@ -252,7 +255,7 @@ function handleNormalize(data) {
       setTimeout(() => processBatch(endIndex), 0);
     } else {
       const elapsed = performance.now() - startTime;
-      console.log(`[CSV Parser Worker] 标准化完成: ${parsedData.length} 行, ${maxColumns} 列, 耗时 ${elapsed.toFixed(2)}ms`);
+      _log(`[CSV Parser Worker] 标准化完成: ${parsedData.length} 行, ${maxColumns} 列, 耗时 ${elapsed.toFixed(2)}ms`);
     }
   }
 

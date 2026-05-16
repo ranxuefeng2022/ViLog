@@ -3,6 +3,9 @@
  * 所有窗口共享同一组Worker，大幅降低内存占用
  */
 
+const _DEBUG = false;
+const _log = _DEBUG ? console.log.bind(console) : () => {};
+
 // 活跃连接集合
 const connections = new Map(); // clientId -> { port, sessionId, lastActivity }
 
@@ -22,7 +25,7 @@ let workersInitialized = false;
 function initWorkerPool() {
   if (workersInitialized) return;
 
-  console.log(`[SharedFilter] 🚀 初始化 ${WORKER_COUNT} 个并行Worker`);
+  _log(`[SharedFilter] 🚀 初始化 ${WORKER_COUNT} 个并行Worker`);
 
   // 🚀 SharedWorker在workers目录下，所以相对于它，parallel-filter-worker.js在同级目录
   const possiblePaths = [
@@ -32,9 +35,9 @@ function initWorkerPool() {
     '../workers/parallel-filter-worker.js'  // 绝对相对路径
   ];
 
-  console.log(`[SharedFilter] 📁 SharedWorker位置: renderer/workers/shared-filter-worker.js`);
-  console.log(`[SharedFilter] 📁 目标Worker位置: renderer/workers/parallel-filter-worker.js`);
-  console.log(`[SharedFilter] 🔍 尝试相对路径...`);
+  _log(`[SharedFilter] 📁 SharedWorker位置: renderer/workers/shared-filter-worker.js`);
+  _log(`[SharedFilter] 📁 目标Worker位置: renderer/workers/parallel-filter-worker.js`);
+  _log(`[SharedFilter] 🔍 尝试相对路径...`);
 
   for (let i = 0; i < WORKER_COUNT; i++) {
     let workerCreated = false;
@@ -43,7 +46,7 @@ function initWorkerPool() {
     // 尝试每个路径
     for (const path of possiblePaths) {
       try {
-        console.log(`[SharedFilter] [${i}] 尝试: ${path}`);
+        _log(`[SharedFilter] [${i}] 尝试: ${path}`);
 
         const worker = new Worker(path);
 
@@ -75,12 +78,12 @@ function initWorkerPool() {
         };
 
         workers.push(worker);
-        console.log(`[SharedFilter] [${i}] ✅ 成功! 使用路径: ${path}`);
+        _log(`[SharedFilter] [${i}] ✅ 成功! 使用路径: ${path}`);
         workerCreated = true;
         break; // 成功创建，跳出路径循环
       } catch (error) {
         lastError = error;
-        console.log(`[SharedFilter] [${i}] ❌ 失败: ${path} - ${error.message}`);
+        _log(`[SharedFilter] [${i}] ❌ 失败: ${path} - ${error.message}`);
       }
     }
 
@@ -98,7 +101,7 @@ function initWorkerPool() {
     console.error(`[SharedFilter] 🔍 请检查文件结构是否正确`);
     console.error(`[SharedFilter] 📁 需要的文件: renderer/workers/parallel-filter-worker.js`);
   } else {
-    console.log(`[SharedFilter] ✅ Worker池初始化完成: ${workers.length}/${WORKER_COUNT}`);
+    _log(`[SharedFilter] ✅ Worker池初始化完成: ${workers.length}/${WORKER_COUNT}`);
   }
 }
 
@@ -109,7 +112,7 @@ self.onconnect = function(e) {
   const port = e.ports[0];
   const clientId = ++connectionIdCounter;
 
-  console.log(`[SharedFilter] 新连接建立: ${clientId}`);
+  _log(`[SharedFilter] 新连接建立: ${clientId}`);
 
   // 创建连接对象
   const connection = {
@@ -140,6 +143,12 @@ self.onconnect = function(e) {
         dispatchToWorkers(data, sessionId);
         break;
 
+      case 'process-chunk':
+        // 🚀 分块模式：直接将预分块数据转发到对应 Worker
+        connection.sessionId = data.sessionId;
+        dispatchChunk(data);
+        break;
+
       case 'cancel':
         cancelSession(sessionId);
         break;
@@ -162,7 +171,7 @@ self.onconnect = function(e) {
 
   // 监听连接关闭
   port.onclose = function() {
-    console.log(`[SharedFilter] 连接关闭: ${clientId}`);
+    _log(`[SharedFilter] 连接关闭: ${clientId}`);
     cleanupConnection(clientId);
   };
 
@@ -178,12 +187,36 @@ self.onconnect = function(e) {
 };
 
 /**
+ * 🚀 分块模式：将预分块的 lines 直接转发到对应 Worker
+ */
+function dispatchChunk(data) {
+  const { chunkIndex, sessionId } = data;
+
+  if (chunkIndex >= workers.length) {
+    console.warn(`[SharedFilter] chunkIndex ${chunkIndex} 超出 Worker 数量 ${workers.length}`);
+    return;
+  }
+
+  workers[chunkIndex].postMessage({
+    type: 'process',
+    data: {
+      lines: data.lines,
+      keywords: data.keywords,
+      sessionId,
+      chunkIndex: data.chunkIndex,
+      totalChunks: data.totalChunks,
+      startIndex: data.startIndex
+    }
+  });
+}
+
+/**
  * 分发任务到Worker池
  */
 function dispatchToWorkers(data, sessionId) {
   const { lines, keywords, sessionId: dataSessionId, chunkIndex: totalChunks, startIndex } = data;
 
-  console.log(`[SharedFilter] 分发任务到 ${workers.length} 个Worker (会话 ${sessionId})`);
+  _log(`[SharedFilter] 分发任务到 ${workers.length} 个Worker (会话 ${sessionId})`);
 
   const chunkSize = Math.ceil(lines.length / workers.length);
 
@@ -210,7 +243,7 @@ function dispatchToWorkers(data, sessionId) {
  * 取消会话
  */
 function cancelSession(sessionId) {
-  console.log(`[SharedFilter] 取消会话: ${sessionId}`);
+  _log(`[SharedFilter] 取消会话: ${sessionId}`);
 
   for (const worker of workers) {
     worker.postMessage({ type: 'cancel' });
@@ -228,7 +261,7 @@ function cleanupConnection(clientId) {
     return;
   }
 
-  console.log(`[SharedFilter] 清理连接 ${clientId} 的资源`);
+  _log(`[SharedFilter] 清理连接 ${clientId} 的资源`);
 
   try {
     // 关闭端口
@@ -239,14 +272,21 @@ function cleanupConnection(clientId) {
     console.error(`[SharedFilter] 关闭端口失败:`, error);
   }
 
+  // 清理心跳定时器
+  if (connection.heartbeatIntervals) {
+    for (const id of connection.heartbeatIntervals) {
+      clearInterval(id);
+    }
+  }
+
   // 删除连接
   connections.delete(clientId);
 
-  console.log(`[SharedFilter] 连接 ${clientId} 已清理，剩余连接: ${connections.size}`);
+  _log(`[SharedFilter] 连接 ${clientId} 已清理，剩余连接: ${connections.size}`);
 
   // 如果没有活跃连接，可以选择清理Worker池（可选）
   // if (connections.size === 0) {
-  //   console.log('[SharedFilter] 没有活跃连接，清理Worker池');
+  //   _log('[SharedFilter] 没有活跃连接，清理Worker池');
   //   terminateWorkerPool();
   // }
 }
@@ -255,7 +295,7 @@ function cleanupConnection(clientId) {
  * 终止Worker池
  */
 function terminateWorkerPool() {
-  console.log(`[SharedFilter] 终止 ${workers.length} 个Worker`);
+  _log(`[SharedFilter] 终止 ${workers.length} 个Worker`);
 
   for (const worker of workers) {
     worker.terminate();
@@ -297,7 +337,7 @@ function startHeartbeat(clientId) {
  * 清理所有资源（用于页面卸载时）
  */
 self.onunload = function() {
-  console.log('[SharedFilter] SharedWorker卸载，清理所有资源');
+  _log('[SharedFilter] SharedWorker卸载，清理所有资源');
 
   // 清理所有连接
   for (const [clientId, connection] of connections) {

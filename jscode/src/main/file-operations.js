@@ -27,7 +27,7 @@ const { execSync, spawn, exec } = require('child_process');
 const { Worker } = require('worker_threads');
 const { ipcMain, app, BrowserWindow, shell, dialog } = require('electron');
 const { extractTextFromBuffer, copyDirRecursive, isArchiveFile, find7z } = require('./utils');
-const { find7zExecutable } = require('./tool-finder');
+const { find7zExecutable, findEsExecutable } = require('./tool-finder');
 const { MAX_RECENT_DIRS } = require('./constants');
 const { getWindows } = require('./window-manager');
 const chokidar = (() => { try { return require('chokidar'); } catch(e) { return null; } })();
@@ -770,10 +770,14 @@ ipcMain.handle('read-files', async (event, filePaths) => {
   try {
     const results = [];
     const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+    const fsp = fs.promises;
 
     for (const filePath of filePaths) {
       try {
-        if (!fs.existsSync(filePath)) {
+        let stats;
+        try {
+          stats = await fsp.stat(filePath);
+        } catch (e) {
           results.push({
             path: filePath,
             success: false,
@@ -782,7 +786,6 @@ ipcMain.handle('read-files', async (event, filePaths) => {
           continue;
         }
 
-        const stats = fs.statSync(filePath);
         if (!stats.isFile()) {
           results.push({
             path: filePath,
@@ -801,8 +804,7 @@ ipcMain.handle('read-files', async (event, filePaths) => {
           continue;
         }
 
-        // 🔧 统一读取为 Buffer，通过内容分析提取文本（支持二进制文件中的文本）
-        const buffer = fs.readFileSync(filePath);
+        const buffer = await fsp.readFile(filePath);
         const { content, encoding, isBinary } = extractTextFromBuffer(buffer);
 
         results.push({
@@ -836,11 +838,16 @@ ipcMain.handle('read-files', async (event, filePaths) => {
 // 🚀 增强：支持 Bandizip 临时文件夹搜索
 ipcMain.handle('list-folder', async (event, folderPath, options = {}) => {
   try {
+    const fsp = fs.promises;
+
+    // 辅助：检查路径是否存在
+    const pathExists = async (p) => { try { await fsp.access(p); return true; } catch { return false; } };
+
     // 如果路径不存在，且启用了 Bandizip 搜索，则尝试在 Bandizip 临时目录中搜索
-    if (!fs.existsSync(folderPath) && options.searchBandizipTemp) {
+    if (!(await pathExists(folderPath)) && options.searchBandizipTemp) {
       console.log(`📂 路径不存在，尝试搜索 Bandizip 临时目录: ${folderPath}`);
 
-      const folderName = require('path').basename(folderPath);
+      const folderName = path.basename(folderPath);
       const userWorkDir = process.env.USERPROFILE || process.env.HOME || '.';
       const searchPaths = [
         path.join(userWorkDir, 'AppData', 'Local', 'Temp'),
@@ -850,26 +857,24 @@ ipcMain.handle('list-folder', async (event, folderPath, options = {}) => {
       ];
 
       for (const searchDir of searchPaths) {
-        if (!fs.existsSync(searchDir)) continue;
+        if (!(await pathExists(searchDir))) continue;
 
         try {
           console.log(`  🔍 在 Bandizip 目录中搜索: ${searchDir}`);
-          const entries = fs.readdirSync(searchDir, { withFileTypes: true });
+          const entries = await fsp.readdir(searchDir, { withFileTypes: true });
 
           for (const entry of entries) {
             if (entry.isDirectory()) {
               const fullPath = path.join(searchDir, entry.name);
 
-              // 检查目录名是否匹配（可能是完整路径的最后部分）
               if (entry.name === folderName) {
                 console.log(`✅ 找到匹配的 Bandizip 临时文件夹: ${fullPath}`);
                 folderPath = fullPath;
                 break;
               }
 
-              // 也检查子目录（Bandizip 可能在子目录中创建临时文件夹）
               try {
-                const subEntries = fs.readdirSync(fullPath, { withFileTypes: true });
+                const subEntries = await fsp.readdir(fullPath, { withFileTypes: true });
                 for (const subEntry of subEntries) {
                   if (subEntry.isDirectory() && subEntry.name === folderName) {
                     const subFullPath = path.join(fullPath, subEntry.name);
@@ -878,29 +883,29 @@ ipcMain.handle('list-folder', async (event, folderPath, options = {}) => {
                     break;
                   }
                 }
-                if (fs.existsSync(folderPath)) break;
+                if (await pathExists(folderPath)) break;
               } catch (e) {
                 // 忽略子目录读取错误
               }
             }
-            if (fs.existsSync(folderPath)) break;
+            if (await pathExists(folderPath)) break;
           }
 
-          if (fs.existsSync(folderPath)) break;
+          if (await pathExists(folderPath)) break;
         } catch (e) {
           console.log(`  ⚠️ 搜索目录失败: ${searchDir} - ${e.message}`);
         }
       }
     }
 
-    if (!fs.existsSync(folderPath)) {
+    if (!(await pathExists(folderPath))) {
       return {
         success: false,
         error: `路径不存在: ${folderPath}`
       };
     }
 
-    const stats = fs.statSync(folderPath);
+    const stats = await fsp.stat(folderPath);
     if (!stats.isDirectory()) {
       return {
         success: false,
@@ -909,18 +914,13 @@ ipcMain.handle('list-folder', async (event, folderPath, options = {}) => {
     }
 
     const results = [];
-
-    // 只读取文件夹的直接子项（不递归，不读取文件内容）
-    const entries = fs.readdirSync(folderPath, { withFileTypes: true });
+    const entries = await fsp.readdir(folderPath, { withFileTypes: true });
 
     for (const entry of entries) {
-      const fullPath = require('path').join(folderPath, entry.name);
+      const fullPath = path.join(folderPath, entry.name);
 
       try {
-        const entryStats = fs.statSync(fullPath);
-
         if (entry.isDirectory()) {
-          // 子文件夹：只记录名称
           results.push({
             path: fullPath,
             name: entry.name,
@@ -928,7 +928,7 @@ ipcMain.handle('list-folder', async (event, folderPath, options = {}) => {
             success: true
           });
         } else if (entry.isFile()) {
-          // 文件：只记录名称和大小，不读取内容
+          const entryStats = await fsp.stat(fullPath);
           results.push({
             path: fullPath,
             name: entry.name,
@@ -964,32 +964,33 @@ ipcMain.handle('list-folder', async (event, folderPath, options = {}) => {
 
 ipcMain.handle('read-folder', async (event, folderOrFilePath) => {
   try {
-    if (!fs.existsSync(folderOrFilePath)) {
+    const fsp = fs.promises;
+    let stats;
+    try {
+      stats = await fsp.stat(folderOrFilePath);
+    } catch (e) {
       return {
         success: false,
         error: `路径不存在: ${folderOrFilePath}`
       };
     }
 
-    const stats = fs.statSync(folderOrFilePath);
     const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
     const results = [];
 
-    // 递归读取文件夹中的所有文件
-    const readDirectory = (dirPath) => {
-      const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    // 递归读取文件夹中的所有文件（异步）
+    const readDirectory = async (dirPath) => {
+      const entries = await fsp.readdir(dirPath, { withFileTypes: true });
 
       for (const entry of entries) {
-        const fullPath = require('path').join(dirPath, entry.name);
+        const fullPath = path.join(dirPath, entry.name);
 
         if (entry.isDirectory()) {
-          // 递归读取子文件夹
-          readDirectory(fullPath);
+          await readDirectory(fullPath);
         } else if (entry.isFile()) {
           try {
-            const fileStats = fs.statSync(fullPath);
+            const fileStats = await fsp.stat(fullPath);
 
-            // 跳过过大的文件
             if (fileStats.size > MAX_FILE_SIZE) {
               console.log(`⚠️ 跳过过大文件: ${fullPath} (${(fileStats.size / 1024 / 1024).toFixed(2)}MB)`);
               results.push({
@@ -1000,9 +1001,8 @@ ipcMain.handle('read-folder', async (event, folderOrFilePath) => {
               continue;
             }
 
-            // 尝试读取文本文件
             try {
-              const content = fs.readFileSync(fullPath, 'utf-8');
+              const content = await fsp.readFile(fullPath, 'utf-8');
               results.push({
                 path: fullPath,
                 success: true,
@@ -1010,7 +1010,6 @@ ipcMain.handle('read-folder', async (event, folderOrFilePath) => {
                 size: fileStats.size
               });
             } catch (readError) {
-              // 可能是二进制文件，跳过
               console.log(`⚠️ 跳过二进制文件: ${fullPath}`);
               results.push({
                 path: fullPath,
@@ -1031,9 +1030,8 @@ ipcMain.handle('read-folder', async (event, folderOrFilePath) => {
 
     // 检查是文件还是文件夹
     if (stats.isFile()) {
-      // 如果是单个文件，直接读取
       try {
-        const content = fs.readFileSync(folderOrFilePath, 'utf-8');
+        const content = await fsp.readFile(folderOrFilePath, 'utf-8');
         results.push({
           path: folderOrFilePath,
           success: true,
@@ -1049,7 +1047,7 @@ ipcMain.handle('read-folder', async (event, folderOrFilePath) => {
       }
     } else if (stats.isDirectory()) {
       // 如果是文件夹，递归读取
-      readDirectory(folderOrFilePath);
+      await readDirectory(folderOrFilePath);
     }
 
     console.log(`📁 读取文件夹完成: ${results.length} 个文件`);
@@ -1063,17 +1061,84 @@ ipcMain.handle('read-folder', async (event, folderOrFilePath) => {
   }
 });
 
-// 🚀 智能搜索文件夹 - 在所有驱动器上搜索指定名称的文件夹
+// 🚀 智能搜索文件夹 - 优先使用 Everything (es.exe) 即时搜索，回退到串行 Worker BFS 扫描
 ipcMain.handle('search-folder', async (event, folderName) => {
   const path = require('path');
   const fs = require('fs');
   const os = require('os');
   const { execSync } = require('child_process');
 
+  // 排序函数（抽取为公共，es.exe 和 Worker 路径共用）
+  function sortMatchedFolders(folders) {
+    const tempDirPattern = /\\Temp\\|\/tmp\//i;
+    const userDataPattern = /\\(demolog|logs|log|Documents|Downloads|Desktop)\//i;
+    folders.sort((a, b) => {
+      const aIsTemp = tempDirPattern.test(a);
+      const bIsTemp = tempDirPattern.test(b);
+      const aIsUserData = userDataPattern.test(a);
+      const bIsUserData = userDataPattern.test(b);
+      if (aIsUserData && !bIsUserData) return -1;
+      if (!aIsUserData && bIsUserData) return 1;
+      if (!aIsTemp && bIsTemp) return -1;
+      if (aIsTemp && !bIsTemp) return 1;
+      if (aIsTemp && bIsTemp) return 0;
+      const aRecentIndex = recentDirectories.findIndex(d => a.startsWith(d));
+      const bRecentIndex = recentDirectories.findIndex(d => b.startsWith(d));
+      if (aRecentIndex >= 0 && bRecentIndex < 0) return -1;
+      if (aRecentIndex < 0 && bRecentIndex >= 0) return 1;
+      if (aRecentIndex >= 0 && bRecentIndex >= 0) return aRecentIndex - bRecentIndex;
+      const aDrive = a.charAt(0);
+      const bDrive = b.charAt(0);
+      if (aDrive === 'C' && bDrive !== 'C') return 1;
+      if (aDrive !== 'C' && bDrive === 'C') return -1;
+      return a.localeCompare(b);
+    });
+    return folders;
+  }
+
+  function buildResult(matchedFolders) {
+    if (matchedFolders.length === 0) {
+      return { success: false, error: `未找到文件夹: ${folderName}，请使用"打开文件夹"按钮选择完整路径` };
+    }
+    sortMatchedFolders(matchedFolders);
+    console.log(`📊 排序后的匹配文件夹:`, matchedFolders);
+    if (matchedFolders.length === 1) {
+      return { success: true, path: matchedFolders[0] };
+    }
+    return { success: true, multipleMatches: true, matches: matchedFolders, path: matchedFolders[0] };
+  }
+
   try {
     console.log(`🔍 智能搜索文件夹: ${folderName}`);
 
-    // 1. 获取所有可用的驱动器（Windows）
+    // ===== 优先路径：使用 Everything es.exe 即时搜索（毫秒级，零磁盘压力） =====
+    if (process.platform === 'win32') {
+      try {
+        const esPath = findEsExecutable();
+        if (esPath) {
+          console.log(`🔍 尝试使用 Everything 搜索: ${esPath}`);
+          // es.exe folder:<name> — 只匹配文件夹名，瞬时返回结果
+          const esOutput = execSync(`"${esPath}" "folder:${folderName}"`, {
+            encoding: 'utf-8',
+            windowsHide: true,
+            timeout: 5000,
+            maxBuffer: 10 * 1024 * 1024
+          });
+          const esMatches = esOutput.split('\n')
+            .map(line => line.trim())
+            .filter(line => line && fs.existsSync(line) && fs.statSync(line).isDirectory());
+          if (esMatches.length > 0) {
+            console.log(`🔍 Everything 搜索完成，找到 ${esMatches.length} 个匹配:`, esMatches);
+            return buildResult(esMatches);
+          }
+          console.log(`🔍 Everything 无匹配结果，回退到 BFS 扫描`);
+        }
+      } catch (esError) {
+        console.log(`🔍 Everything 搜索失败: ${esError.message}，回退到 BFS 扫描`);
+      }
+    }
+
+    // ===== 兜底路径：串行 Worker BFS 扫描（降低 HDD 压力） =====
     let drives = [];
     try {
       if (process.platform === 'win32') {
@@ -1083,175 +1148,52 @@ ipcMain.handle('search-folder', async (event, folderName) => {
           .filter(line => line && line.match(/^[A-Z]:$/))
           .map(drive => drive + '\\');
       } else {
-        // Linux/Mac: 只搜索根目录和用户目录
         drives = ['/', path.join(os.homedir())];
       }
-      console.log(`📂 找到 ${drives.length} 个驱动器:`, drives);
     } catch (e) {
-      console.log('⚠️ 获取驱动器列表失败，使用默认列表');
       drives = ['C:\\', 'D:\\', 'E:\\', 'F:\\', 'G:\\', 'H:\\'];
     }
 
-    // 2. 🚀 使用多线程并行扫描 D/E/F 盘的目录树（最多5层深度）
     const MAX_DEPTH = 5;
     const dataDrives = drives.filter(d => ['D', 'E', 'F', 'G', 'H'].includes(d.charAt(0)));
 
     if (dataDrives.length === 0) {
-      return {
-        success: false,
-        error: `未找到可扫描的驱动器（D/E/F 盘）`
-      };
+      return { success: false, error: `未找到可扫描的驱动器（D/E/F 盘）` };
     }
 
-    console.log(`🚀 使用 ${dataDrives.length} 个线程并行扫描 ${dataDrives.join(', ')}，最大深度 ${MAX_DEPTH}...`);
+    // 串行扫描（非并行），降低机械硬盘的随机 I/O 压力
+    console.log(`🔍 串行扫描 ${dataDrives.join(', ')}，最大深度 ${MAX_DEPTH}...`);
 
-    // 创建 Worker Promise
-    const workerPromises = dataDrives.map(drive => {
-      return new Promise((resolve) => {
-        const worker = new Worker(path.join(projectRoot, 'workers', 'directory-scanner.js'), {
-          workerData: { drivePath: drive, folderName, maxDepth: MAX_DEPTH }
-        });
-
-        let resolved = false;
-
-        // 超时保护：10 秒后强制返回
-        const timeout = setTimeout(() => {
-          if (!resolved) {
-            resolved = true;
-            worker.terminate();
-            console.log(`⚠️ ${drive} 扫描超时，跳过`);
-            resolve({ drive, matches: [], dirsScanned: 0, timeout: true });
-          }
-        }, 10000);
-
-        worker.on('message', (result) => {
-          if (!resolved) {
-            resolved = true;
-            clearTimeout(timeout);
-            resolve(result);
-          }
-        });
-
-        worker.on('error', (error) => {
-          if (!resolved) {
-            resolved = true;
-            clearTimeout(timeout);
-            console.error(`❌ ${drive} 扫描出错:`, error.message);
-            resolve({ drive, matches: [], dirsScanned: 0, error: error.message });
-          }
-        });
-
-        worker.on('exit', (code) => {
-          if (!resolved) {
-            resolved = true;
-            clearTimeout(timeout);
-            if (code !== 0) {
-              console.error(`❌ ${drive} Worker 异常退出，代码: ${code}`);
-              resolve({ drive, matches: [], dirsScanned: 0, error: `Worker exit code: ${code}` });
-            }
-          }
-        });
-      });
-    });
-
-    // 等待所有 Worker 完成
-    const results = await Promise.all(workerPromises);
-
-    // 合并结果
     const matchedFolders = [];
     let totalDirsScanned = 0;
 
-    for (const result of results) {
+    for (const drive of dataDrives) {
+      const result = await new Promise((resolve) => {
+        const worker = new Worker(path.join(projectRoot, 'workers', 'directory-scanner.js'), {
+          workerData: { drivePath: drive, folderName, maxDepth: MAX_DEPTH }
+        });
+        let resolved = false;
+        const timeout = setTimeout(() => {
+          if (!resolved) { resolved = true; worker.terminate(); resolve({ drive, matches: [], dirsScanned: 0, timeout: true }); }
+        }, 10000);
+        worker.on('message', (r) => { if (!resolved) { resolved = true; clearTimeout(timeout); resolve(r); } });
+        worker.on('error', (err) => { if (!resolved) { resolved = true; clearTimeout(timeout); resolve({ drive, matches: [], dirsScanned: 0, error: err.message }); } });
+        worker.on('exit', (code) => { if (!resolved) { resolved = true; clearTimeout(timeout); resolve({ drive, matches: [], dirsScanned: 0, error: `exit ${code}` }); } });
+      });
+
       if (result.success !== false && result.matches) {
         matchedFolders.push(...result.matches);
         totalDirsScanned += result.dirsScanned || 0;
-        console.log(`✅ ${result.drive}: 找到 ${result.matches?.length || 0} 个匹配，扫描 ${result.dirsScanned || 0} 个目录`);
-      } else if (result.timeout) {
-        console.log(`⏱️ ${result.drive}: 扫描超时`);
-      } else if (result.error) {
-        console.log(`❌ ${result.drive}: ${result.error}`);
       }
     }
 
-    console.log(`🔍 多线程扫描完成，共扫描 ${totalDirsScanned} 个目录，找到 ${matchedFolders.length} 个匹配:`, matchedFolders);
+    console.log(`🔍 串行扫描完成，共扫描 ${totalDirsScanned} 个目录，找到 ${matchedFolders.length} 个匹配`);
 
     // 4. 根据搜索结果排序并返回
-    if (matchedFolders.length === 0) {
-      console.log(`❌ 未找到文件夹: ${folderName}`);
-      return {
-        success: false,
-        error: `未找到文件夹: ${folderName}，请使用"打开文件夹"按钮选择完整路径`
-      };
-    }
-
-    // 🔧 对匹配的文件夹进行排序，优先级：
-    // 1. 不在临时目录中的路径（包含 demolog, logs 等用户数据目录）
-    // 2. 最近访问的目录
-    // 3. 其他驱动器根目录下的路径
-    // 4. 临时目录（最低优先级）
-    const tempDirPattern = /\\Temp\\|\/tmp\//i;
-    const userDataPattern = /\\(demolog|logs|log|Documents|Downloads|Desktop)\//i;
-
-    matchedFolders.sort((a, b) => {
-      const aIsTemp = tempDirPattern.test(a);
-      const bIsTemp = tempDirPattern.test(b);
-      const aIsUserData = userDataPattern.test(a);
-      const bIsUserData = userDataPattern.test(b);
-
-      // 用户数据目录优先于所有
-      if (aIsUserData && !bIsUserData) return -1;
-      if (!aIsUserData && bIsUserData) return 1;
-
-      // 非临时目录优先于临时目录
-      if (!aIsTemp && bIsTemp) return -1;
-      if (aIsTemp && !bIsTemp) return 1;
-
-      // 临时目录最后
-      if (aIsTemp && bIsTemp) return 0;
-
-      // 都是非临时目录，检查是否在最近访问的目录中
-      const aRecentIndex = recentDirectories.findIndex(d => a.startsWith(d));
-      const bRecentIndex = recentDirectories.findIndex(d => b.startsWith(d));
-
-      if (aRecentIndex >= 0 && bRecentIndex < 0) return -1;
-      if (aRecentIndex < 0 && bRecentIndex >= 0) return 1;
-      if (aRecentIndex >= 0 && bRecentIndex >= 0) return aRecentIndex - bRecentIndex;
-
-      // 按驱动器字母排序（D:, E:, ... 优先于 C:）
-      const aDrive = a.charAt(0);
-      const bDrive = b.charAt(0);
-      if (aDrive === 'C' && bDrive !== 'C') return 1;
-      if (aDrive !== 'C' && bDrive === 'C') return -1;
-
-      return a.localeCompare(b);
-    });
-
-    console.log(`📊 排序后的匹配文件夹:`, matchedFolders);
-
-    if (matchedFolders.length === 1) {
-      // 只找到一个，直接返回
-      console.log(`✅ 唯一匹配: ${matchedFolders[0]}`);
-      return {
-        success: true,
-        path: matchedFolders[0]
-      };
-    } else {
-      // 找到多个，返回所有匹配项让用户选择
-      console.log(`⚠️ 找到 ${matchedFolders.length} 个同名文件夹:`, matchedFolders);
-      return {
-        success: true,
-        multipleMatches: true,
-        matches: matchedFolders,
-        // 默认选择第一个（已排序，优先级最高）
-        path: matchedFolders[0]
-      };
-    }
+    return buildResult(matchedFolders);
   } catch (error) {
     console.error('搜索文件夹失败:', error);
-    return {
-      success: false,
-      error: error.message
-    };
+    return { success: false, error: error.message };
   }
 });
 
@@ -1371,67 +1313,61 @@ ipcMain.handle('get-data-drives', async (event, options = {}) => {
   }
 });
 
-// 🚀 列出目录内容（用于文件树展开）
+// 🚀 列出目录内容（用于文件树展开）— 优化：目录项不做 statSync，减少磁盘 I/O
 ipcMain.handle('list-directory', async (event, dirPath) => {
   try {
-    console.log(`[list-directory] 开始列出目录: ${dirPath}`);
-
     if (!fs.existsSync(dirPath)) {
-      console.log(`[list-directory] 目录不存在: ${dirPath}`);
       return { success: false, error: '目录不存在', items: [] };
     }
 
     const entries = fs.readdirSync(dirPath, { withFileTypes: true });
-    console.log(`[list-directory] 找到 ${entries.length} 个条目`);
 
     const items = [];
 
     for (const entry of entries) {
       const fullPath = path.join(dirPath, entry.name);
-      try {
-        const stats = fs.statSync(fullPath);
-        let itemType = entry.isDirectory() ? 'folder' : 'file';
+      let itemType;
+      let itemSize = 0;
 
-        // 🚀 识别压缩包类型
-        if (!entry.isDirectory()) {
-          if (isArchiveFile(entry.name)) {
-            itemType = 'archive';
-          }
+      if (entry.isDirectory()) {
+        itemType = 'folder';
+      } else {
+        // 文件项：识别压缩包，并获取 size（文件树需要区分大小）
+        if (isArchiveFile(entry.name)) {
+          itemType = 'archive';
+        } else {
+          itemType = 'file';
         }
-
-        items.push({
-          name: entry.name,
-          path: fullPath,
-          type: itemType,
-          size: stats.size || 0,
-          isArchive: itemType === 'archive'
-        });
-      } catch (e) {
-        // 跳过无法访问的条目
+        try {
+          itemSize = fs.statSync(fullPath).size;
+        } catch (_) {
+          // 文件可能正在被写入，跳过
+        }
       }
+
+      items.push({
+        name: entry.name,
+        path: fullPath,
+        type: itemType,
+        size: itemSize,
+        isArchive: itemType === 'archive'
+      });
     }
 
-    // 排序：文件夹和压缩包在前，普通文件在后，使用 Windows 资源管理器风格的排序
-    // 创建排序器（缓存以提高性能）
     const collator = new Intl.Collator(undefined, {
-      numeric: true,    // 数字按数值大小排序（file1, file2, file10）
-      sensitivity: 'base',  // 忽略大小写和重音
-      caseFirst: 'lower'    // 小写字母优先（与 Windows 一致）
+      numeric: true,
+      sensitivity: 'base',
+      caseFirst: 'lower'
     });
 
     items.sort((a, b) => {
-      // 压缩包和文件夹优先级相同，都在文件前面
       const aIsFolder = a.type === 'folder' || a.type === 'archive';
       const bIsFolder = b.type === 'folder' || b.type === 'archive';
-
       if (aIsFolder && !bIsFolder) return -1;
       if (!aIsFolder && bIsFolder) return 1;
-
-      // 同类型按名称排序（使用自然排序）
       return collator.compare(a.name, b.name);
     });
 
-    console.log(`[list-directory] 成功，返回 ${items.length} 个项`);
     return { success: true, items };
   } catch (error) {
     console.error('[list-directory] 错误:', error);

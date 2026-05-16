@@ -10,6 +10,10 @@ let workerSessionId = 0;
 // 🚀 标志：指示文件头索引需要重新计算（用于 ripgrep 过滤后）
 window.needsFileHeaderRecompute = false;
 
+// 🚀 性能：生产环境关闭过滤路径 debug 日志
+const _FILTER_DEBUG = false;
+const _flog = _FILTER_DEBUG ? console.log.bind(console, '[Filter]') : () => {};
+
 // ==================== Worker 管理 ====================
 
 /**
@@ -735,8 +739,9 @@ function applyFilterWithParallelWorkers(keywords) {
 
   // 清空旧数据
   filteredPanelAllLines = [];
-  // 🚀 优化：使用Int32Array存储索引，内存减半（8字节 → 4字节）
-  filteredPanelAllOriginalIndices = new Int32Array(0);
+  // 🚀 优化：预分配 Int32Array（按总行数预估），避免 chunk 完成时反复扩容拷贝
+  filteredPanelAllOriginalIndices = new Int32Array(originalLines.length);
+  let _filteredWritePtr = 0;
   filteredPanelAllPrimaryIndices = [];
   filteredPanelVisibleStart = -1;
   filteredPanelVisibleEnd = -1;
@@ -780,90 +785,34 @@ function applyFilterWithParallelWorkers(keywords) {
       // 🔧 代数检查
       if (myGeneration !== rgFilterGeneration) return;
 
-      // 🚀 方案1：节流更新 - 只累积数据，不更新DOM
-      console.log(`[ParallelFilter] 块 ${chunkIndex} 完成，新增 ${results.length} 条结果`);
+      _flog(`块 ${chunkIndex} 完成，新增 ${results.length} 条结果`);
 
-      const chunkStartTime = performance.now();
-
-      // 🚀 只处理新增的部分，获取新行的内容（但不更新DOM）
-      const newFilteredLines = [];
-      const newFilteredToOriginalIndex = [];
-
+      // 🚀 预分配路径：直接写入预分配的 Int32Array，零扩容
       for (const index of results) {
         if (index >= 0 && index < originalLines.length) {
-          newFilteredLines.push(originalLines[index]);
-          newFilteredToOriginalIndex.push(index);
-        }
-      }
-
-      // 🚀 追加到全局数组（用 push 避免 O(n) concat）
-      for (let i = 0; i < newFilteredLines.length; i++) {
-        filteredPanelAllLines.push(newFilteredLines[i]);
-      }
-      // filteredPanelAllOriginalIndices 可能是 Int32Array 或普通数组，兼容处理
-      if (filteredPanelAllOriginalIndices instanceof Int32Array) {
-        const newArr = new Int32Array(filteredPanelAllOriginalIndices.length + newFilteredToOriginalIndex.length);
-        newArr.set(filteredPanelAllOriginalIndices);
-        newArr.set(newFilteredToOriginalIndex, filteredPanelAllOriginalIndices.length);
-        filteredPanelAllOriginalIndices = newArr;
-      } else {
-        for (let i = 0; i < newFilteredToOriginalIndex.length; i++) {
-          filteredPanelAllOriginalIndices.push(newFilteredToOriginalIndex[i]);
+          filteredPanelAllOriginalIndices[_filteredWritePtr++] = index;
+          filteredPanelAllLines.push(originalLines[index]);
         }
       }
       filteredPanelAllPrimaryIndices = [];
 
       // 🚀 关键：不显示行数和百分比
-      filteredCount.textContent = "";  // 隐藏行数和百分比
-
-      const chunkTime = performance.now() - chunkStartTime;
-      console.log(`[ParallelFilter] 📊 块 ${chunkIndex} 数据收集完成: +${results.length} 条，总计 ${filteredPanelAllLines.length} 条（耗时${chunkTime.toFixed(0)}ms）`);
+      filteredCount.textContent = "";
     });
 
     manager.setCompleteCallback((results, stats) => {
-      // 🔧 代数检查
-      if (myGeneration !== rgFilterGeneration) {
-        console.log(`[ParallelFilter] ⚠️ 过滤已过期 (my=${myGeneration}, current=${rgFilterGeneration})，丢弃结果`);
-        return;
-      }
+      if (myGeneration !== rgFilterGeneration) return;
 
-      // 🎉 所有 Worker 完成
-      console.log(`[ParallelFilter] 全部完成: ${stats.matchedCount} 个匹配`);
+      _flog(`全部完成: ${stats.matchedCount} 个匹配`);
 
-      // 🚀 调试：检查返回的原始结果（优化：不输出大数组）
-      console.log(`[ParallelFilter] Worker 返回的索引数量: ${results.length}`);
-
-      // 只显示前5个索引（转换为字符串，避免输出大对象）
-      if (results.length > 0) {
-        const sampleSize = Math.min(5, results.length);
-        const sample = Array.from(results.slice(0, sampleSize)).join(', ');
-        const more = results.length > sampleSize ? `... (+${results.length - sampleSize} 更多)` : '';
-        console.log(`[ParallelFilter] 前${sampleSize}个索引: [${sample}]${more}`);
-      }
-
-      // 🔧 计算总耗时
       const totalTime = (performance.now() - filterStartTime).toFixed(2);
-      console.log(`[ParallelFilter] ✅ 结果验证: 从 ${originalLines.length} 行中找到 ${stats.matchedCount} 个匹配 (耗时 ${totalTime}ms)`);
 
-      // 🚀 关键修复：使用归并排序后的结果重建全局数组，确保按原始索引顺序
       let sortedFilteredLines = [];
       let sortedFilteredToOriginalIndex = [];
 
       // 🚀 去重并过滤无效索引
       const uniqueResults = [...new Set(results)].filter(idx => idx >= 0 && idx < originalLines.length);
-      console.log(`[ParallelFilter] 去重后的索引数量: ${uniqueResults.length} (原始: ${results.length})`);
-
-      // 只显示前5个去重后的索引
-      if (uniqueResults.length > 0) {
-        const sampleSize = Math.min(5, uniqueResults.length);
-        const sample = uniqueResults.slice(0, sampleSize).join(', ');
-        const more = uniqueResults.length > sampleSize ? `... (+${uniqueResults.length - sampleSize} 更多)` : '';
-        console.log(`[ParallelFilter] 前${sampleSize}个去重后索引: [${sample}]${more}`);
-      }
-
-      // 🚀 性能优化：分批复制，避免主线程长时间阻塞
-      // 同时按文件分组，插入文件头标记（与 ripgrep 路径一致）
-      console.log(`[ParallelFilter] 开始复制 ${uniqueResults.length} 条结果...`);
+      _flog(`去重后: ${uniqueResults.length} 条 (原始: ${results.length})`);
 
       // 🚀 预计算文件头分组信息
       // fileHeaders 每项有 startIndex 和 fileName，按 startIndex 排序
@@ -889,52 +838,30 @@ function applyFilterWithParallelWorkers(keywords) {
       let finalIndices = [];
 
       if (sortedHeaders.length > 0 && uniqueResults.length > 0) {
-        // 按文件分组：遍历 uniqueResults，检测文件边界
-        let currentHeaderIdx = 0;
-        // 🚀 二分查找：sortedHeaders 按 startIndex 升序排列，找到 origIndex 所属的文件
-        function findHeaderIndex(origIndex) {
-          let lo = 0, hi = sortedHeaders.length - 1, best = -1;
-          while (lo <= hi) {
-            const mid = (lo + hi) >>> 1;
-            if (sortedHeaders[mid].startIndex <= origIndex) {
-              best = mid;
-              lo = mid + 1;
-            } else {
-              hi = mid - 1;
-            }
-          }
-          // 验证 origIndex 确实在这个文件的范围内
-          if (best >= 0 && origIndex >= sortedHeaders[best].startIndex + sortedHeaders[best].lineCount + 1) {
-            return -1; // 超出文件范围
-          }
-          return best;
-        }
-
-        // 先统计每个文件的匹配数
-        const headerMatchCounts = new Map(); // headerIdx -> count
-        for (const origIndex of uniqueResults) {
-          const hIdx = findHeaderIndex(origIndex);
-          if (hIdx >= 0) {
-            headerMatchCounts.set(hIdx, (headerMatchCounts.get(hIdx) || 0) + 1);
-          }
-        }
-
-        // 构建带文件头的最终数组
+        // 🚀 线性扫描：结果已排序，文件头也排序，一次遍历 O(m+h) 替代 O(m×log(h))
+        let headerPtr = 0;
         let lastHeaderIdx = -1;
+
         for (const origIndex of uniqueResults) {
-          const hIdx = findHeaderIndex(origIndex);
-          if (hIdx >= 0 && hIdx !== lastHeaderIdx) {
-            // 新文件开始，插入原始文件头（从 originalLines 取，避免重复）
-            const header = sortedHeaders[hIdx];
-            finalLines.push(originalLines[header.startIndex]);
-            finalIndices.push(-1);
-            lastHeaderIdx = hIdx;
+          // 推进 headerPtr 到包含 origIndex 的文件
+          while (headerPtr < sortedHeaders.length - 1 &&
+                 sortedHeaders[headerPtr + 1].startIndex <= origIndex) {
+            headerPtr++;
           }
-          finalLines.push(originalLines[origIndex]);
-          finalIndices.push(origIndex);
+          // 检查是否在文件范围内（+1 包含文件头行自身）
+          const header = sortedHeaders[headerPtr];
+          if (origIndex >= header.startIndex && origIndex <= header.endIndex) {
+            if (headerPtr !== lastHeaderIdx) {
+              finalLines.push(originalLines[header.startIndex]);
+              finalIndices.push(-1);
+              lastHeaderIdx = headerPtr;
+            }
+            finalLines.push(originalLines[origIndex]);
+            finalIndices.push(origIndex);
+          }
         }
 
-        console.log(`[ParallelFilter] 已插入 ${headerMatchCounts.size} 个文件头标记，总行数: ${finalLines.length}`);
+        _flog(`已插入 ${lastHeaderIdx + 1} 个文件头标记，总行数: ${finalLines.length}`);
       } else {
         // 没有 fileHeaders 或只有单文件，直接复制
         for (const origIndex of uniqueResults) {

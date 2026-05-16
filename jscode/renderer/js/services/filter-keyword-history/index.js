@@ -1233,10 +1233,11 @@
       };
       fuzzyMatchWorker.onerror = function() {
         fuzzyMatchWorkerBusy = false;
+        if (fuzzyMatchWorker) fuzzyMatchWorker.terminate();
         fuzzyMatchWorker = null;
         if (_pendingWorkerQuery === currentQuery) { _pendingWorkerQuery = null; runMainThreadFuzzyMatch(); }
       };
-    } catch (e) { fuzzyMatchWorker = null; }
+    } catch (e) { if (fuzzyMatchWorker) fuzzyMatchWorker.terminate(); fuzzyMatchWorker = null; }
   }
 
   function runMainThreadFuzzyMatch(startTime) {

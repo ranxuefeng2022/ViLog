@@ -310,6 +310,7 @@ class SharedFilterManager {
 
   /**
    * 开始并行过滤
+   * 🚀 优化：分块传输，避免一次性 structured clone 整个 lines 数组
    */
   start(lines, keywords) {
     if (this.isProcessing) {
@@ -339,18 +340,30 @@ class SharedFilterManager {
     this.totalMatched = 0;
     this.totalLines = lines.length;
 
+    const workerCount = this.totalChunks || 1;
     console.log(`[SharedFilter] 开始并行过滤 (会话 ${this.sessionId})`);
-    console.log(`[SharedFilter] 总行数: ${lines.length}, 使用 ${this.totalChunks} 个SharedWorker`);
+    console.log(`[SharedFilter] 总行数: ${lines.length}, 使用 ${workerCount} 个SharedWorker`);
 
-    // 发送过滤请求到SharedWorker
-    this.port.postMessage({
-      type: 'process',
-      data: {
-        lines,
-        keywords,
-        sessionId: this.sessionId
-      }
-    });
+    // 🚀 分块传输：将 lines 拆分为 N 块，逐块发送，降低单次 structured clone 开销
+    const chunkSize = Math.ceil(lines.length / workerCount);
+
+    for (let i = 0; i < workerCount; i++) {
+      const start = i * chunkSize;
+      const end = Math.min(start + chunkSize, lines.length);
+      const chunkLines = lines.slice(start, end);
+
+      this.port.postMessage({
+        type: 'process-chunk',
+        data: {
+          lines: chunkLines,
+          keywords,
+          sessionId: this.sessionId,
+          chunkIndex: i,
+          totalChunks: workerCount,
+          startIndex: start
+        }
+      });
+    }
 
     // 启动心跳
     this.startHeartbeat();

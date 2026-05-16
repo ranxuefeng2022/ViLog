@@ -189,6 +189,7 @@
       const fileTreeCtxDeleteFile = document.getElementById("fileTreeCtxDeleteFile");
       const fileTreeCtxRefresh = document.getElementById("fileTreeCtxRefresh");
       const fileTreeCtxExtractArchive = document.getElementById("fileTreeCtxExtractArchive");
+      const fileTreeCtxExportCsv = document.getElementById("fileTreeCtxExportCsv");
       const importFileInput = document.getElementById("importFileInput");
       const importFolderInput = document.getElementById("importFolderInput");
       const lineFileHoverTip = document.getElementById("lineFileHoverTip");

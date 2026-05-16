@@ -2,6 +2,7 @@
  * 搜索工具 - es.exe / rg.exe / batch search
  */
 
+const fs = require('fs');
 const { execSync, spawn } = require('child_process');
 const { ipcMain } = require('electron');
 const { findEsExecutable, findRgExecutable, findFzfExecutable, find7zExecutable } = require('./tool-finder');

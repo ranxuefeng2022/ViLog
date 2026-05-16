@@ -3931,6 +3931,25 @@
         fileIndexToHeaderIndices.delete(fileTreeIndex);
         loadedFileIndices.delete(fileTreeIndex);
 
+        // 释放关联的压缩包数据（如果该文件属于某个压缩包）
+        const treeItem = fileTreeHierarchy[fileTreeIndex];
+        if (treeItem && treeItem.archiveName && typeof archiveData !== 'undefined') {
+          // 检查是否还有其他文件引用同一个压缩包
+          const archiveName = treeItem.archiveName;
+          let stillReferenced = false;
+          for (const [idx, indices] of fileIndexToHeaderIndices) {
+            const item = fileTreeHierarchy[idx];
+            if (item && item.archiveName === archiveName && idx !== fileTreeIndex) {
+              stillReferenced = true;
+              break;
+            }
+          }
+          if (!stillReferenced) {
+            archiveData.delete(archiveName);
+            console.log(`[removeFileContent] 释放压缩包数据: ${archiveName}`);
+          }
+        }
+
         // 🔧 更新剩余文件的映射关系（因为 header 索引变了）
         updateFileIndexMappingsAfterRemoval();
 
@@ -6010,32 +6029,32 @@
         }
       }
 
-      // 监听索引构建完成事件
-      window.addEventListener('searchIndexComplete', (e) => {
-        const { totalLines, buildTime } = e.detail;
-        if (window.searchStatus) {
-          window.searchStatus.textContent = `索引已构建 (${totalLines}行, ${buildTime.toFixed(0)}ms)`;
-        }
-        console.log(`✓ Search index complete: ${totalLines} lines in ${buildTime.toFixed(2)}ms`);
-      });
 
-      window.addEventListener('filterIndexComplete', (e) => {
-        const { totalLines, buildTime } = e.detail;
-        console.log(`✓ Filter index complete: ${totalLines} lines in ${buildTime.toFixed(2)}ms`);
-      });
+      // 监听索引构建完成/进度事件（只注册一次，避免每次加载文件重复注册）
+      if (!window._indexListenersRegistered) {
+        window._indexListenersRegistered = true;
 
-      // 监听索引构建进度事件
-      window.addEventListener('searchIndexProgress', (e) => {
-        const { indexedLines, totalLines, progress } = e.detail;
-        if (window.searchStatus) {
-          window.searchStatus.textContent = `索引构建: ${progress.toFixed(1)}%`;
-        }
-      });
+        window.addEventListener('searchIndexComplete', (e) => {
+          const { totalLines, buildTime } = e.detail;
+          if (window.searchStatus) {
+            window.searchStatus.textContent = `索引已构建 (${totalLines}行, ${buildTime.toFixed(0)}ms)`;
+          }
+        });
 
-      window.addEventListener('filterIndexProgress', (e) => {
-        const { indexedLines, totalLines, progress } = e.detail;
-        // 可以添加专门的过滤索引进度显示
-      });
+        window.addEventListener('filterIndexComplete', (e) => {
+          const { totalLines, buildTime } = e.detail;
+        });
+
+        window.addEventListener('searchIndexProgress', (e) => {
+          const { progress } = e.detail;
+          if (window.searchStatus) {
+            window.searchStatus.textContent = `索引构建: ${progress.toFixed(1)}%`;
+          }
+        });
+
+        window.addEventListener('filterIndexProgress', (e) => {
+        });
+      }
 
       // 执行搜索（基于原始日志）
       async function performSearch() {
@@ -9479,27 +9498,28 @@
         });
 
         // 关闭按钮事件
+        const closeModal = () => {
+          modal.remove();
+          document.removeEventListener('keydown', escHandler);
+        };
         if (showCloseButton) {
           const closeBtn = document.getElementById('modalCloseBtn');
           if (closeBtn) {
-            closeBtn.addEventListener('click', () => {
-              modal.remove();
-            });
+            closeBtn.addEventListener('click', closeModal);
           }
         }
 
         // 点击背景关闭
         modal.addEventListener('click', (e) => {
           if (e.target === modal) {
-            modal.remove();
+            closeModal();
           }
         });
 
         // ESC键关闭
         const escHandler = (e) => {
           if (e.key === 'Escape') {
-            modal.remove();
-            document.removeEventListener('keydown', escHandler);
+            closeModal();
           }
         };
         document.addEventListener('keydown', escHandler);
@@ -10213,6 +10233,11 @@
         window.logLineIndex = null;
         window.logKeywordIndex = null;
 
+        // 11.5 释放压缩包数据（JSZip 对象可能占用大量内存）
+        if (typeof archiveData !== 'undefined') {
+          archiveData.clear();
+        }
+
         // 12. 隐藏过滤面板
         if (filteredPanel) {
           filteredPanel.classList.remove("visible");
@@ -10245,6 +10270,14 @@
 
         // 17. 重置选中行
         selectedOriginalIndex = -1;
+
+        // 18. 清理高亮 Worker 和缓存
+        if (typeof window.HighlightWorkerManager !== 'undefined') {
+          window.HighlightWorkerManager.terminate();
+        }
+        if (typeof window.clearHighlightCache === 'function') {
+          window.clearHighlightCache();
+        }
 
         console.log('[Memory] 日志内存释放完成');
       }

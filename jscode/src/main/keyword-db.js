@@ -8,8 +8,8 @@ const { execSync } = require('child_process');
 const { ipcMain } = require('electron');
 
 const { findFzfExecutable } = require('./tool-finder');
-const Database = require('better-sqlite3');
 const projectRoot = path.resolve(__dirname, '..', '..');
+const Database = require(path.join(projectRoot, 'better-sqlite3'));
 
 // Delay import of windows to avoid circular deps
 let getWindows = () => [];

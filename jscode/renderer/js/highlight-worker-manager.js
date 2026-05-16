@@ -24,6 +24,8 @@ window.HighlightWorkerManager = (function() {
   let taskId = 0;
   let pendingTasks = new Map();
   let isInitialized = false;
+  const MAX_DISPATCH_RETRIES = 200;
+  const dispatchRetryCounts = new Map(); // chunkIndex -> retry count
 
   /**
    * 初始化 Worker 池
@@ -201,9 +203,10 @@ window.HighlightWorkerManager = (function() {
       // 分发任务到可用 Workers
       let workerIndex = 0;
       for (let i = 0; i < chunks.length; i++) {
+        dispatchRetryCounts.set(i, 0);
         if (availableWorkers.length === 0) {
           // 等待有 Worker 可用
-          setTimeout(() => dispatchChunk(i), 10);
+          setTimeout(() => dispatchChunk(i, tid, chunks, config), 10);
           continue;
         }
 
@@ -224,14 +227,37 @@ window.HighlightWorkerManager = (function() {
   /**
    * 分发分片任务
    */
-  function dispatchChunk(chunkIndex) {
-    if (availableWorkers.length === 0) {
-      setTimeout(() => dispatchChunk(chunkIndex), 50);
+  function dispatchChunk(chunkIndex, tid, chunks, config) {
+    const retries = (dispatchRetryCounts.get(chunkIndex) || 0) + 1;
+    dispatchRetryCounts.set(chunkIndex, retries);
+
+    if (retries > MAX_DISPATCH_RETRIES) {
+      console.error(`[HighlightWorkerManager] dispatchChunk(${chunkIndex}) exceeded max retries (${MAX_DISPATCH_RETRIES})`);
+      dispatchRetryCounts.delete(chunkIndex);
+      const task = pendingTasks.get(tid);
+      if (task && task.reject) {
+        task.reject(new Error(`Chunk ${chunkIndex} dispatch timed out after ${MAX_DISPATCH_RETRIES} retries`));
+        cleanupTask(tid);
+      }
       return;
     }
 
+    if (availableWorkers.length === 0) {
+      setTimeout(() => dispatchChunk(chunkIndex, tid, chunks, config), 50);
+      return;
+    }
+
+    dispatchRetryCounts.delete(chunkIndex);
     const worker = availableWorkers.shift();
-    // ... 发送消息
+    worker.postMessage({
+      type: 'batchHighlight',
+      taskId: `${tid}-${chunkIndex}`,
+      lines: chunks[chunkIndex],
+      config: {
+        ...config,
+        lineOffset: chunkIndex * CONFIG.chunkSize
+      }
+    });
   }
 
   /**

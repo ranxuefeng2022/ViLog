@@ -16,7 +16,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 // Valid receive channels for on/removeListener whitelist
 const VALID_RECEIVE_CHANNELS = [
   'import-file-from-taskbar', 'uart-log-data', 'directory-changed',
-  'archive-file-extracted', 'keyword-changed', 'extract-progress'
+  'archive-file-extracted', 'keyword-changed', 'extract-progress',
+  'csv-export-progress'
 ];
 
 // Invoke channel mapping: { apiMethod: 'ipc-channel-name' }
@@ -65,6 +66,9 @@ const INVOKE_CHANNELS = {
   extractToTempDir: 'extract-to-temp-dir',
   deleteTempExtractDir: 'delete-temp-extract-dir',
   getTempExtractDir: 'get-temp-extract-dir',
+  // Log CSV analysis
+  exportCsvAnalysis: 'export-csv-analysis',
+  getAnalysisKeywords: 'get-analysis-keywords',
   // Logging
   getLogFilePath: 'get-log-file-path',
   // System
