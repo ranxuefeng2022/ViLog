@@ -6,8 +6,11 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const zlib = require('zlib');
-const { execSync, spawn } = require('child_process');
+const { execSync, exec, spawn } = require('child_process');
+const { promisify } = require('util');
 const { ipcMain } = require('electron');
+const execAsync = promisify(exec);
+const fsp = fs.promises;
 const { find7z, isArchiveFile, parseZipCentralDir, resolveZip64ExtraField, extractZipEntryNative, extractTextFromBuffer } = require('./utils');
 
 // ===================================================================
@@ -88,10 +91,18 @@ ipcMain.handle('list-archive', async (event, archivePath) => {
       }
       use7z = true;
       command = `"${sevenZipPath}" l -ba -y "${archivePath}"`;
-    } else if (ext === '.tar' || ext === '.tgz' || fileName.endsWith('.tar.gz') || fileName.endsWith('.tgz')) {
-      // tar 格式：.tar 不需要 -z，.tgz/.tar.gz 需要 -z
-      if (ext === '.tar') {
+    } else if (ext === '.tar' || ext === '.tgz' || ext === '.bz2' || ext === '.xz' ||
+               fileName.endsWith('.tar.gz') || fileName.endsWith('.tar.bz2') || fileName.endsWith('.tgz')) {
+      // tar 相关格式：优先用 7z，回退到 tar 命令
+      if (has7z) {
+        use7z = true;
+        command = `"${sevenZipPath}" l -ba -y "${archivePath}"`;
+      } else if (ext === '.tar') {
         command = `tar -tf "${archivePath}"`;
+      } else if (ext === '.bz2' || fileName.endsWith('.tar.bz2')) {
+        command = `tar -tjf "${archivePath}"`;
+      } else if (ext === '.xz') {
+        command = `tar -tJf "${archivePath}"`;
       } else {
         command = `tar -tzf "${archivePath}"`;
       }
@@ -181,30 +192,20 @@ ipcMain.handle('list-archive', async (event, archivePath) => {
           continue;
         }
 
-        // 移除日期时间部分（前19个字符）
-        let remainingLine = trimmedLine.substring(19).trim();
-
-        // 提取属性（5个字符）
-        const attributes = remainingLine.substring(0, 5);
-        remainingLine = remainingLine.substring(5).trim();
-
-        // 提取大小（到下一个空白或行尾）
-        const sizeMatch = remainingLine.match(/^(\d+)/);
-        if (!sizeMatch) {
+        // 用正则完整匹配 7z l -ba 输出行：
+        // 日期(10) 空格 时间(8) 空格 属性(5) 空格 大小 空格 [压缩大小 空格] 路径
+        // 例如: 2024-01-10 14:23:45 ....A         1234         5678  path/to/file
+        //       2024-01-10 14:23:45 D....            0            0  folder
+        const lineMatch = trimmedLine.match(
+          /^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+(\S{5})\s+(\d+)(?:\s+(\d+))?\s+(.*)/
+        );
+        if (!lineMatch) {
           skippedCount++;
           continue;
         }
-        const size = parseInt(sizeMatch[1], 10);
-        remainingLine = remainingLine.substring(sizeMatch[1].length).trim();
-
-        // 跳过压缩后大小（如果有）
-        const compressedSizeMatch = remainingLine.match(/^(\d+)/);
-        if (compressedSizeMatch) {
-          remainingLine = remainingLine.substring(compressedSizeMatch[1].length).trim();
-        }
-
-        // 剩余部分是文件路径
-        let filePath = remainingLine.trim();
+        const attributes = lineMatch[1];
+        const size = parseInt(lineMatch[2], 10);
+        let filePath = (lineMatch[4] || '').trim();
 
         if (!filePath) {
           skippedCount++;
@@ -230,7 +231,19 @@ ipcMain.handle('list-archive', async (event, archivePath) => {
         });
         parsedCount++;
       }
-      console.log(`[list-archive] 7z 解析完成: 解析 ${parsedCount} 个，跳过 ${skippedCount} 行`);
+      // 7z 对 .7z 格式可能输出重复条目（块信息与文件信息），按 path 去重
+      const seen = new Set();
+      const dedupedFiles = [];
+      for (const f of files) {
+        const key = f.path + (f.isDirectory ? '/' : '');
+        if (!seen.has(key)) {
+          seen.add(key);
+          dedupedFiles.push(f);
+        }
+      }
+      files.length = 0;
+      files.push(...dedupedFiles);
+      console.log(`[list-archive] 7z 解析完成: 解析 ${parsedCount} 个，去重后 ${files.length} 个，跳过 ${skippedCount} 行`);
     } else {
       // 解析 tar 输出格式（每行一个文件路径）
       const lines = output.split('\n');
@@ -601,41 +614,53 @@ ipcMain.handle('extract-file-from-archive', async (event, archivePath, filePath)
     const tempExtractDir = path.join(tempDir, `logview_extract_${tempId}`);
     fs.mkdirSync(tempExtractDir, { recursive: true });
 
-    // 使用 7z 提取单个文件到临时目录
-    // 使用 x 命令（保留目录结构）而非 e 命令，避免 .7z 格式下 e+spf 组合导致解压异常
-    const command = `"${sevenZipPath}" x -y -o"${tempExtractDir}" "${archivePath}" "${filePath}"`;
-    console.log(`[extract-file-from-archive] 执行命令: ${command}`);
+    // 使用 spawn 异步提取，不阻塞主进程
+    const extractResult = await new Promise((resolve) => {
+      const args = ['x', '-y', '-mmt=on', `-o${tempExtractDir}`, archivePath, filePath];
+      console.log(`[extract-file-from-archive] spawn: ${sevenZipPath} ${args.join(' ')}`);
 
-    let stderrOutput = '';
-    let hasSymlinkError = false;
-
-    try {
-      const result = execSync(command, {
-        encoding: 'utf-8',
+      const child = spawn(sevenZipPath, args, {
         windowsHide: true,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        maxBuffer: 100 * 1024 * 1024 // 100MB buffer
+        stdio: ['ignore', 'pipe', 'pipe']
       });
-    } catch (error) {
-      stderrOutput = error.stderr ? error.stderr.toString() : '';
-      // 检查是否只是符号链接错误（7z 安全功能）
-      // 如果错误只包含 "Dangerous link path was ignored"，仍然尝试读取已提取的文件
-      const lines = stderrOutput.split('\n').filter(l => l.trim());
-      const hasOnlySymlinkErrors = lines.every(line =>
-        line.includes('Dangerous link path was ignored') ||
-        line.includes('Everything is Ok') ||
-        line.trim() === ''
-      );
 
-      if (hasOnlySymlinkErrors && lines.some(l => l.includes('Dangerous link path was ignored'))) {
-        hasSymlinkError = true;
-        console.log(`[extract-file-from-archive] 检测到符号链接错误，尝试继续读取已提取的文件`);
-      } else {
-        // 其他类型的错误，清理临时目录并抛出
-        fs.rmSync(tempExtractDir, { recursive: true, force: true });
-        throw error;
-      }
+      let stderrOutput = '';
+
+      child.stderr.on('data', (data) => {
+        stderrOutput += data.toString();
+      });
+
+      child.on('close', (code) => {
+        if (code === 0) {
+          resolve({ success: true, stderr: stderrOutput });
+        } else {
+          // 检查是否只是符号链接错误
+          const lines = stderrOutput.split('\n').filter(l => l.trim());
+          const hasOnlySymlinkErrors = lines.every(line =>
+            line.includes('Dangerous link path was ignored') ||
+            line.includes('Everything is Ok') ||
+            line.trim() === ''
+          );
+
+          if (hasOnlySymlinkErrors && lines.some(l => l.includes('Dangerous link path was ignored'))) {
+            console.log(`[extract-file-from-archive] 检测到符号链接错误，尝试继续读取已提取的文件`);
+            resolve({ success: true, stderr: stderrOutput, symlinkWarning: true });
+          } else {
+            resolve({ success: false, error: `7z 退出码: ${code}\n${stderrOutput}` });
+          }
+        }
+      });
+
+      child.on('error', (err) => {
+        resolve({ success: false, error: err.message });
+      });
+    });
+
+    if (!extractResult.success) {
+      fs.rmSync(tempExtractDir, { recursive: true, force: true });
+      return { success: false, error: extractResult.error };
     }
+    const hasSymlinkError = !!extractResult.symlinkWarning;
 
     // 读取提取的文件
     // 使用 x 命令时，7z 保留目录结构，文件路径即为 filePath 在 tempExtractDir 下的映射
@@ -840,11 +865,22 @@ ipcMain.handle('stream-extract-from-archive', async (event, archivePath, filePat
       fs.mkdirSync(tempExtractDir, { recursive: true });
 
       try {
-        // 一次性提取所有文件到同一个临时目录
-        const fileArgs = filePaths.map(fp => `"${fp}"`).join(' ');
-        const command = `"${sevenZipPath}" x -y -o"${tempExtractDir}" "${archivePath}" ${fileArgs}`;
-        console.log(`[stream-extract] 批量提取命令: ${command}`);
-        execSync(command, { encoding: 'utf-8', windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 100 * 1024 * 1024 });
+        // 一次性提取所有文件到同一个临时目录（spawn 异步，不阻塞主进程）
+        const spawnArgs = ['x', '-y', '-mmt=on', `-o${tempExtractDir}`, archivePath, ...filePaths];
+        console.log(`[stream-extract] 批量提取: ${sevenZipPath} ${spawnArgs.join(' ')}`);
+        await new Promise((resolve, reject) => {
+          const child = spawn(sevenZipPath, spawnArgs, {
+            windowsHide: true,
+            stdio: ['ignore', 'pipe', 'pipe']
+          });
+          let stderr = '';
+          child.stderr.on('data', (d) => { stderr += d.toString(); });
+          child.on('close', (code) => {
+            if (code === 0) resolve();
+            else reject(new Error(`7z exit code ${code}: ${stderr}`));
+          });
+          child.on('error', reject);
+        });
 
         // 按文件树顺序逐个读取并推送
         for (let idx = 0; idx < filePaths.length; idx++) {
@@ -895,7 +931,11 @@ ipcMain.handle('stream-extract-from-archive', async (event, archivePath, filePat
             const tmpDir2 = path.join(tempDir, `logview_extract_${tmpId2}`);
             fs.mkdirSync(tmpDir2, { recursive: true });
             try {
-              execSync(`"${sevenZipPath}" x -y -o"${tmpDir2}" "${archivePath}" "${fp}"`, { encoding: 'utf-8', windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 100 * 1024 * 1024 });
+              await new Promise((res, rej) => {
+                const c = spawn(sevenZipPath, ['x', '-y', '-mmt=on', `-o${tmpDir2}`, archivePath, fp], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+                c.on('close', (code) => { code === 0 ? res() : rej(new Error(`7z exit ${code}`)); });
+                c.on('error', rej);
+              });
               function _findFile(dir) {
                 const entries = fs.readdirSync(dir, { withFileTypes: true });
                 for (const entry of entries) {
@@ -1282,7 +1322,7 @@ ipcMain.handle('extract-archive', async (event, archivePath, targetPath) => {
     let command = '';
     if (use7z && has7z) {
       // 使用 7z 解压：x 表示完整路径解压（保持目录结构）
-      command = `"${sevenZipPath}" x -y -o"${targetPath}" "${archivePath}"`;
+      command = `"${sevenZipPath}" x -y -mmt=on -o"${targetPath}" "${archivePath}"`;
     } else if (ext === '.tar' || ext === '.tgz' || fileName.endsWith('.tar.gz') || fileName.endsWith('.tgz')) {
       // tar 格式
       if (fileName.endsWith('.tar.gz') || fileName.endsWith('.tgz')) {
@@ -1343,7 +1383,7 @@ ipcMain.handle('extract-archive-progress', async (event, archivePath, targetPath
     let cmd, args;
     if (use7z && sevenZipPath) {
       cmd = sevenZipPath;
-      args = ['x', '-y', '-bsp1', `-o${targetPath}`, archivePath];
+      args = ['x', '-y', '-mmt=on', '-bsp1', `-o${targetPath}`, archivePath];
     } else if (ext === '.tar' || ext === '.tgz' || fileName.endsWith('.tar.gz') || fileName.endsWith('.tgz')) {
       cmd = 'tar';
       if (fileName.endsWith('.tar.gz') || fileName.endsWith('.tgz')) {
@@ -1421,14 +1461,10 @@ ipcMain.handle('extract-archive-progress', async (event, archivePath, targetPath
 async function extractArchiveToDir(archivePath, targetPath) {
 
   try {
-    if (!fs.existsSync(archivePath)) {
-      return { success: false, error: '压缩包不存在' };
-    }
+    await fsp.access(archivePath);
 
     // 确保目标目录存在
-    if (!fs.existsSync(targetPath)) {
-      fs.mkdirSync(targetPath, { recursive: true });
-    }
+    await fsp.mkdir(targetPath, { recursive: true });
 
     // 检测文件类型以决定使用哪个命令
     const ext = path.extname(archivePath).toLowerCase();
@@ -1442,17 +1478,14 @@ async function extractArchiveToDir(archivePath, targetPath) {
 
     let command = '';
     if (use7z && has7z) {
-      // 使用 7z 解压：x 表示完整路径解压（保持目录结构）
       command = `"${sevenZipPath}" x -y -o"${targetPath}" "${archivePath}"`;
     } else if (ext === '.tar' || ext === '.tgz' || fileName.endsWith('.tar.gz') || fileName.endsWith('.tgz')) {
-      // tar 格式
       if (fileName.endsWith('.tar.gz') || fileName.endsWith('.tgz')) {
         command = `tar -xzf "${archivePath}" -C "${targetPath}"`;
       } else {
         command = `tar -xf "${archivePath}" -C "${targetPath}"`;
       }
     } else if (ext === '.gz' && !fileName.endsWith('.tar.gz')) {
-      // 单独的 .gz 文件
       const outputFileName = path.basename(archivePath, '.gz');
       command = `gunzip -c "${archivePath}" > "${path.join(targetPath, outputFileName)}"`;
     } else {
@@ -1461,12 +1494,11 @@ async function extractArchiveToDir(archivePath, targetPath) {
 
     console.log(`[extract-archive] 执行解压命令: ${command}`);
 
-    // 执行解压命令
-    execSync(command, {
+    // 异步执行解压命令，不阻塞主进程
+    await execAsync(command, {
       encoding: 'utf-8',
       windowsHide: true,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      maxBuffer: 100 * 1024 * 1024 // 100MB buffer
+      maxBuffer: 100 * 1024 * 1024
     });
 
     console.log(`[extract-archive] 解压成功`);

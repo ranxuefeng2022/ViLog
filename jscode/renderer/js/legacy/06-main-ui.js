@@ -30,6 +30,9 @@
         filteredPanelPlaceholder.style.height = totalHeight + "px";
 
         // 清空虚拟内容
+        if (filteredPanelDomPool) {
+          filteredPanelDomPool.releaseAll();
+        }
         filteredPanelVirtualContent.innerHTML = "";
 
         // 🚀 如果指定了要保留的索引，则保留；否则重置
@@ -92,16 +95,15 @@
         // 🚀 不转义HTML，直接使用原始内容
         let displayText = lineContent;
 
-        // 添加行号显示（使用原始日志行号）
+        // 行号由 CSS ::before 显示
         if (!isFileHeader) {
           const originalIndex = filteredPanelAllPrimaryIndices
             ? filteredPanelAllPrimaryIndices[index]
             : index;
-          const lineNumber = originalIndex + 1;
-          displayText = `<span class="line-number">${lineNumber}</span>${displayText}`;
+          lineElement.dataset.lineNumber = originalIndex + 1;
         }
 
-        lineElement.innerHTML = displayText;
+        lineElement.textContent = displayText;
         // 🚀 性能优化：使用transform替代top，启用GPU加速
         lineElement.style.transform = `translateY(${Math.floor(index * filteredPanelLineHeight)}px)`;
 
@@ -110,10 +112,7 @@
           lineElement.classList.add("highlighted");
         }
 
-        // 如果是二级过滤，添加特殊样式
-        if (secondaryFilter.isActive) {
-          lineElement.classList.add("filter-match-highlight");
-        }
+        // 二级过滤关键词高亮由渲染路径的 inline span 处理
 
         return lineElement;
       }
@@ -173,10 +172,15 @@
           contextMenu.classList.remove('visible');
         });
 
-        // 键盘事件：ESC隐藏菜单
+        // 键盘事件：ESC隐藏菜单和浮动框
         document.addEventListener('keydown', (e) => {
           if (e.key === 'Escape') {
             contextMenu.classList.remove('visible');
+            // 关闭浮动搜索框
+            const searchBar = document.getElementById('searchFloatingBar');
+            if (searchBar && searchBar.classList.contains('visible')) {
+              searchBar.classList.remove('visible');
+            }
           }
         });
       }
@@ -249,83 +253,38 @@
       DOMCache.init();
 
       function init() {
-        // 监听串口日志数据
-        if (window.electronAPI && window.electronAPI.on) {
-          window.electronAPI.on('uart-log-data', (data) => {
-            // 检查用户是否在底部
-            const wasAtBottom = outer && (outer.scrollHeight - outer.scrollTop - outer.clientHeight < 50);
-
-            // 将数据按行分割并添加到日志中
-            const lines = data.split('\n');
-            const startIndex = originalLines.length;
-
-            lines.forEach(line => {
-              if (line.trim()) {
-                // 🚀 不转义HTML，直接使用原始内容
-                originalLines.push(line);
-              }
-            });
-
-            const endIndex = originalLines.length;
-            const newLineCount = endIndex - startIndex;
-
-            // 如果有新数据
-            if (newLineCount > 0) {
-              // 更新 placeholder 高度（使用安全高度计算）
-              const placeholder = inner.querySelector('.log-placeholder');
-              if (placeholder) {
-                const { height: safeHeight } = computeSafeScrollHeight(originalLines.length);
-                placeholder.style.height = safeHeight + 'px';
-              }
-
-              // 只在用户在底部时才触发可见行更新和自动滚动
-              if (wasAtBottom) {
-                // 重置可见范围，强制重新渲染
-                lastVisibleStart = -1;
-                lastVisibleEnd = -1;
-
-                // 使用 requestAnimationFrame 确保在 DOM 更新后滚动
-                requestAnimationFrame(() => {
-                  if (outer) {
-                    updateVisibleLines();
-                    outer.scrollTop = outer.scrollHeight;
-                  }
-                });
-              }
-              // 如果用户不在底部，不触发任何渲染更新，让用户安静查看历史日志
-            }
-          });
-        }
-
+        console.log('[UI] Legacy init started');
         // 初始化过滤历史
-        loadFilterHistory();
-        loadSearchHistory(); // 初始化搜索历史
-        loadFilteredPanelSearchHistory(); // 初始化过滤结果框搜索历史
-        loadSecondaryFilterHistory(); // 初始化二级过滤历史
+        try { loadFilterHistory(); } catch(e) { console.error('[init] loadFilterHistory:', e); }
+        try { loadSearchHistory(); } catch(e) { console.error('[init] loadSearchHistory:', e); }
+        try { loadFilteredPanelSearchHistory(); } catch(e) { console.error('[init] loadFilteredPanelSearchHistory:', e); }
+        try { loadSecondaryFilterHistory(); } catch(e) { console.error('[init] loadSecondaryFilterHistory:', e); }
 
-        initQuickLinksPanel(); // 初始化快速链接面板
-        initWindowShortcuts(); // 初始化窗口切换快捷键
-        initGlobalContextMenu(); // 初始化全局右键菜单
-        initCopyHandler(); // 初始化复制事件处理器
-        initPasteHandler(); // 初始化粘贴事件处理器 - 支持文件粘贴
-        initScrollProgressIndicator(); // 虚拟滚动优化：初始化滚动进度指示器
+        if (typeof initQuickLinksPanel === 'function') initQuickLinksPanel();
+        try { initWindowShortcuts(); } catch(e) { console.error('[init] initWindowShortcuts:', e); }
+        try { initGlobalContextMenu(); } catch(e) { console.error('[init] initGlobalContextMenu:', e); }
+        try { initCopyHandler(); } catch(e) { console.error('[init] initCopyHandler:', e); }
+        try { initPasteHandler(); } catch(e) { console.error('[init] initPasteHandler:', e); }
+        try { initScrollProgressIndicator(); } catch(e) { console.error('[init] initScrollProgressIndicator:', e); }
 
         // 🔧 初始化头部高度保护器
-        initHeaderHeightProtector();
+        try { initHeaderHeightProtector(); } catch(e) { console.error('[init] initHeaderHeightProtector:', e); }
 
         // 初始化搜索框事件监听
-        initSearchBoxEvents();
+        try { initSearchBoxEvents(); } catch(e) { console.error('[init] initSearchBoxEvents:', e); }
 
         // 初始化过滤状态（原始数据）
         // 🚀 不转义HTML，直接使用原始内容
         originalLines = demo.split("\n");
-        resetFilter(false); // 不显示提示信息
+        try { resetFilter(false); } catch(e) { console.error('[init] resetFilter:', e); }
 
         // ========== 虚拟滚动优化：初始化缓冲区大小 ==========
-        updateBufferSize();
+        try { updateBufferSize(); } catch(e) { console.error('[init] updateBufferSize:', e); }
 
-        renderLogLines();
-        initKeyboardShortcuts(); // 初始化快捷键（依赖 originalLines）
+        try { renderLogLines(); } catch(e) { console.error('[init] renderLogLines:', e); }
+        try { initKeyboardShortcuts(); } catch(e) { console.error('[init] initKeyboardShortcuts:', e); }
+
+        console.log('[UI] Legacy init done, demo lines:', originalLines.length);
 
         // ========== 虚拟滚动优化：优化滚动事件监听 ==========
         // 使用passive选项提升滚动性能
@@ -369,20 +328,8 @@
           window.mainLinesObserver = visibleLinesObserver;
         }
 
-        // 🚀 使用浏览器原生滚动，更流畅、更符合系统习惯
-        // 已禁用自定义平滑滚动，保留原生滚动体验
-        // enableFastSmoothWheelScroll(outer, {
-        //   mouseMultiplier: 2.2,
-        //   mouseMaxStep: 520,
-        //   trackpadMultiplier: 1.15,
-        //   trackpadMaxStep: 180,
-        // });
-        // enableFastSmoothWheelScroll(filteredPanelContent, {
-        //   mouseMultiplier: 2.2,
-        //   mouseMaxStep: 520,
-        //   trackpadMultiplier: 1.15,
-        //   trackpadMaxStep: 180,
-        // });
+        // 使用浏览器原生滚动，更流畅、更符合系统习惯
+        // enableFastSmoothWheelScroll 已禁用
 
         // ========== 虚拟滚动优化：窗口大小改变时重新计算缓冲区 ==========
         window.addEventListener("resize", () => {
@@ -445,6 +392,19 @@
           if (!document.fullscreenElement) {
            // toggleFullscreen();
           }
+
+          // 自动保存关键词组合（≥2个关键词时）
+          var val = filterBox.value.trim();
+          if (val) {
+            var parts = val.split(/(?<!\\)\|/).map(function(s) { return s.replace(/\\\|/g, '|').trim(); }).filter(Boolean);
+            if (parts.length >= 2 && window.App && window.App.IDB && window.App.IDB.isReady && window.App.IDB.isReady()) {
+              try {
+                var sortedParts = parts.slice().sort();
+                var comboHash = sortedParts.join('\0');
+                window.App.IDB.saveCombo({ comboHash: comboHash, keywordsSorted: sortedParts.join('|'), keywordsOriginal: val });
+              } catch (e) { console.error('[FilterCombo] 保存失败:', e); }
+            }
+          }
           
           applyFilter();
           
@@ -486,7 +446,7 @@
         }, 200);
       });
 
-        initDragDrop();
+        // initDragDrop(); // 拖拽导入已移除
 
         // 监听从任务栏拖放文件到最小化窗口的事件
         if (window.electronAPI && window.electronAPI.on) {
@@ -503,23 +463,24 @@
           });
         }
 
-        initSearchEvents();
-        initLogContentContextMenu();
+        try { initSearchEvents(); } catch(e) { console.error('[init] initSearchEvents FAILED:', e); }
+        try { initLogContentContextMenu(); } catch(e) { console.error('[init] initLogContentContextMenu FAILED:', e); }
 
         // 初始化字体缩放功能
-        initFontZoom();
+        try { initFontZoom(); } catch(e) { console.error('[init] initFontZoom FAILED:', e); }
 
         // 初始化窗口调整大小手柄
-        initWindowResizeHandle();
-        initExpandFilter(); // 新增：初始化展开过滤输入框功能
-        initFilterContextMenu(); // 新增：初始化过滤结果框右键菜单
+        try { initWindowResizeHandle(); } catch(e) { console.error('[init] initWindowResizeHandle FAILED:', e); }
+        try { initExpandFilter(); } catch(e) { console.error('[init] initExpandFilter FAILED:', e); }
+        console.log('[init] ✅ checkpoint-1: initExpandFilter done');
+        try { initFilterContextMenu(); } catch(e) { console.error('[init] initFilterContextMenu FAILED:', e); }
 
-        updateVisibleLines();
+        try { updateVisibleLines(); } catch(e) { console.error('[init] updateVisibleLines FAILED:', e); }
         // 初始化高亮功能
-        initHighlightFeatures();
+        try { initHighlightFeatures(); } catch(e) { console.error('[init] initHighlightFeatures FAILED:', e); }
 
         // 初始化右键菜单
-        initContextMenu();
+        try { initContextMenu(); } catch(e) { console.error('[init] initContextMenu FAILED:', e); }
 
         // 添加 PgUp/PgDn 键连续滚动支持
         document.addEventListener("keydown", handlePageScroll);
@@ -542,21 +503,6 @@
           if (e.ctrlKey && e.key.toLowerCase() === "w") {
             e.preventDefault();
             e.stopPropagation();
-          }
-        });
-
-        // ========== 新增快捷键：Ctrl+J 跳转到指定行 ==========
-        document.addEventListener("keydown", (e) => {
-          // Ctrl+J: 跳转到指定行（不包含Shift，避免干扰开发者工具 Ctrl+Shift+J）
-          if (
-            e.ctrlKey &&
-            !e.shiftKey &&  // 🔧 修复：排除Shift键，避免干扰开发者工具快捷键
-            !e.altKey &&
-            e.key.toLowerCase() === "j" &&
-            !["INPUT", "TEXTAREA", "SELECT"].includes(e.target.tagName)
-          ) {
-            e.preventDefault();
-            showGotoLineModal();
           }
         });
 
@@ -606,6 +552,13 @@
           if (window.App && window.App.FileReader) {
             window.App.FileReader.dispose();
           }
+          // 清理渲染进程产生的所有临时文件
+          if (window.electronAPI && window.electronAPI.cleanupChunkTemp) {
+            window.electronAPI.cleanupChunkTemp();
+          }
+          if (window.electronAPI && window.electronAPI.deleteTempExtractDir) {
+            window.electronAPI.deleteTempExtractDir();
+          }
           // 释放大数组引用，帮助 GC 回收被事件监听器闭包持有的内存
           if (typeof originalLines !== 'undefined') originalLines = null;
           if (typeof fileHeaders !== 'undefined') fileHeaders = null;
@@ -620,10 +573,7 @@
 
         // 新增：防止右键菜单干扰拖拽
         document.addEventListener("contextmenu", (e) => {
-          if (
-            isAiAssistantResizing ||
-            isCornerResizing
-          ) {
+          if (isCornerResizing) {
             e.preventDefault();
             handleGlobalMouseUp();
           }
@@ -633,7 +583,7 @@
         document.addEventListener("keydown", (e) => {
           if (
             e.key === "Escape" &&
-            (isAiAssistantResizing || isCornerResizing)
+            isCornerResizing
           ) {
             e.preventDefault();
             cleanupAllDragStates();
@@ -689,6 +639,7 @@
           }
         });
 
+        console.log('[init] ✅ checkpoint-2: key handlers done');
         // 新增：F键和f键过滤框支持
         document.addEventListener("keydown", (e) => {
           // 避免在输入框中时触发
@@ -707,21 +658,11 @@
           }
 
           if (e.key === "F") {
-            // F键：聚焦工具栏的固定过滤框
+            // F键：弹出过滤关键词列表（与小写f一致）
             e.preventDefault();
 
-            // 🚀 修复：如果二级过滤侧边栏打开，先隐藏它，避免遮挡过滤框
-            const secondaryFilterSidebar = document.getElementById('secondaryFilterSidebar');
-            if (secondaryFilterSidebar && secondaryFilterSidebar.classList.contains('visible')) {
-              secondaryFilterSidebar.classList.remove('visible');
-              console.log('[F键] 临时隐藏二级过滤侧边栏，避免遮挡过滤框');
-            }
-
-            filterBox.focus();
-
-            // 如果是全屏模式，显示工具栏按钮
-            if (document.body.classList.contains('fullscreen')) {
-              showToolbarInFullscreen();
+            if (window.App && window.App.FilterKeywordHistory && window.App.FilterKeywordHistory.openDialogUnified) {
+              window.App.FilterKeywordHistory.openDialogUnified();
             }
 
             showShortcutHint();
@@ -760,19 +701,7 @@
           }
         });
 
-        // 新增：Ctrl+G 弹出/隐藏悬浮文件树框
-        document.addEventListener("keydown", (e) => {
-          if (
-            e.ctrlKey &&
-            !e.altKey &&
-            !e.metaKey &&
-            (e.key === "g" || e.key === "G")
-          ) {
-            e.preventDefault();
-            toggleFloatingFileTree();
-            showShortcutHint();
-          }
-        });
+        // Ctrl+G 悬浮文件树已禁用
 
         // 新增：主日志框鼠标位置跟踪（用于 Ctrl+F 快捷键）
         // focusOnMainLog 由鼠标位置控制，不受焦点影响
@@ -784,11 +713,14 @@
           outer.addEventListener("mouseleave", () => {
             focusOnMainLog = false;
           });
+
+          // 鼠标移到主日志框顶部时显示窗口控制按钮
+
         }
 
         // 新增：Ctrl+F 智能聚焦搜索框
         // - 当鼠标悬浮在过滤结果框内时，聚焦正则搜索框(filteredPanelSearchBox)
-        // - 当鼠标悬浮在主日志框内时，聚焦搜索关键词框(searchBox)
+        // - 当鼠标悬浮在主日志框内时，弹出浮动搜索框
         // - 当焦点在过滤框(filterBox)时，聚焦正则搜索框(filteredPanelSearchBox)
         document.addEventListener("keydown", (e) => {
           if (
@@ -801,26 +733,27 @@
             const activeElement = document.activeElement;
 
             // 检查是否应该聚焦正则搜索框：
-            // 条件1：鼠标在过滤结果框内（最高优先级）
-            // 条件2：鼠标不在主日志框内 且 焦点在过滤相关的输入框
             const shouldFocusFilteredPanelSearch =
-              focusOnFilteredPanel || // 鼠标在过滤结果框内
+              focusOnFilteredPanel ||
               (!focusOnMainLog && (
-                activeElement === filterBox || // 焦点在过滤框
-                activeElement === filteredPanelFilterBox || // 焦点在二级过滤框
-                activeElement === filteredPanelSearchBox || // 焦点在正则搜索框
-                filteredPanelContent.contains(activeElement) // 焦点在过滤结果框内容中
+                activeElement === filterBox ||
+                activeElement === filteredPanelFilterBox ||
+                activeElement === filteredPanelSearchBox ||
+                filteredPanelContent.contains(activeElement)
               ));
 
             if (shouldFocusFilteredPanelSearch && filteredPanelSearchBox) {
-              // 聚焦正则搜索框
               filteredPanelSearchBox.focus();
             } else if (focusOnFileTree && fileTreeSearch) {
-              // 鼠标在文件树内 → 聚焦文件树搜索框
               fileTreeSearch.focus();
             } else if (searchBox) {
-              // 聚焦搜索关键词框
+              // 弹出浮动搜索框
+              const searchBar = document.getElementById('searchFloatingBar');
+              searchBar.style.right = '';
+              searchBar.style.left = '200px';
+              searchBar.classList.add('visible');
               searchBox.focus();
+              searchBox.select();
             }
             showShortcutHint();
           }
@@ -928,56 +861,35 @@
         });
 
         // 初始化文件树功能
-        initFileTree();
+        console.log('[init] >>> 即将调用 initFileTree...');
+        try { initFileTree(); console.log('[init] <<< initFileTree 完成'); } catch(e) { console.error('[init] initFileTree FAILED:', e); }
 
         // 初始化悬浮过滤内容框
-        initFilteredPanel();
+        try { initFilteredPanel(); } catch(e) { console.error('[init] initFilteredPanel FAILED:', e); }
 
         // 新增：初始化二级过滤功能
-        initSecondaryFilter();
+        try { initSecondaryFilter(); } catch(e) { console.error('[init] initSecondaryFilter FAILED:', e); }
 
-        // 新增：初始化AI助手
-        initAiAssistant();
+        if (typeof initAiAssistant === 'function') initAiAssistant(); // AI助手已移除
 
         // 新增：全局鼠标事件监听
         document.addEventListener("mousemove", handleGlobalMouseMove);
         document.addEventListener("mouseup", handleGlobalMouseUp);
 
         // 新增：自动应用默认过滤
-        autoApplyDefaultFilter();
+        try { autoApplyDefaultFilter(); } catch(e) { console.error('[init] autoApplyDefaultFilter FAILED:', e); }
 
         // 新增：自动添加默认高亮
-        addDefaultHighlights();
+        try { addDefaultHighlights(); } catch(e) { console.error('[init] addDefaultHighlights FAILED:', e); }
 
         // 初始调整过滤面板高度
-        adjustFilteredPanelHeight();
+        try { adjustFilteredPanelHeight(); } catch(e) { console.error('[init] adjustFilteredPanelHeight FAILED:', e); }
 
-        // 根据默认目录变量自动加载文件树或折叠文件树
-        // 注意：DEFAULT_SERVER_PATH 可能由外部模板注入，这里要兼容未定义的情况
-        const defaultServerPath =
-          typeof DEFAULT_SERVER_PATH !== "undefined" ? DEFAULT_SERVER_PATH : "";
-        if (defaultServerPath && String(defaultServerPath).trim() !== "") {
-          // 设置服务器路径输入框的值
-          const serverPathInput = document.getElementById("serverPath");
-          if (serverPathInput) {
-            serverPathInput.value = String(defaultServerPath);
-          }
-          // 延迟加载，确保页面完全初始化
-          setTimeout(() => {
-            loadServerTree();
-          }, 500);
-        } else {
-          // 🚀 如果默认目录为空，文件树保持展开状态（不再折叠）
-          // if (fileTreeContainer.classList.contains("visible")) {
-          //   fileTreeContainer.classList.remove("visible");
-          //   updateLayout();
-          //   fileTreeCollapseBtn.innerHTML = "▶";
-          //   updateButtonPosition();
-          // }
-        }
+        // 🚀 文件树保持展开状态
+        console.log('[init] ✓ init() completed successfully');
       }
 
-      // 轻量滚轮加速 + 平滑：只在 wheel 时工作；用 rAF 收敛到 targetScrollTop
+      // 惯性滚动：速度 + 摩擦力物理模型
       function enableFastSmoothWheelScroll(container, opts) {
         if (!container) return;
 
@@ -987,146 +899,136 @@
             mouseMaxStep: 480,
             trackpadMultiplier: 1.1,
             trackpadMaxStep: 160,
+            friction: 0.94,
+            onFrame: null,
           },
           opts || {}
         );
 
-        let targetTop = container.scrollTop;
-        let rafId = null;
-        let lastAnimWriteAt = 0;
+        var velocity = 0; // px/frame
+        var rafId = null;
+        var lastAnimWriteAt = 0;
 
-        const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+        var clamp = function(v, min, max) { return Math.max(min, Math.min(max, v)); };
 
-        const cancelAnim = () => {
+        var cancelAnim = function() {
           if (rafId) cancelAnimationFrame(rafId);
           rafId = null;
+          container._smoothAnimating = false;
         };
 
-        // 暴露取消接口：用于“程序跳转滚动”时立刻停止 rAF，避免与跳转抢写 scrollTop
-        // 注：不要用 Symbol，避免在调试台/旧环境里不好排查
+        // 暴露取消接口
         try {
-          container.__fastSmoothWheelCancel = () => {
+          container.__fastSmoothWheelCancel = function() {
             cancelAnim();
-            targetTop = container.scrollTop;
+            velocity = 0;
           };
-        } catch (_) {
-          // ignore
-        }
+        } catch (_) {}
 
-        // 优化：用户尝试拖动滚动条/点击容器时，立刻取消动画，避免“回弹/抢滚动”
-        // pointerdown 对滚动条拖拽更友好（部分浏览器滚动条交互会触发到元素本身）
-        container.addEventListener(
-          "pointerdown",
-          () => {
-            if (!rafId) return;
-            cancelAnim();
-            targetTop = container.scrollTop;
-          },
-          { passive: true }
-        );
+        // 点击/拖拽立刻停止
+        container.addEventListener("pointerdown", function() {
+          if (!rafId) return;
+          cancelAnim();
+          velocity = 0;
+        }, { passive: true });
 
-        const step = () => {
+        var step = function() {
           rafId = null;
-          const cur = container.scrollTop;
-          const diff = targetTop - cur;
-          if (Math.abs(diff) < 0.5) {
-            container.scrollTop = targetTop;
+
+          // 摩擦减速
+          velocity *= options.friction;
+
+          if (Math.abs(velocity) < 0.3) {
+            velocity = 0;
+            container._smoothAnimating = false;
+            if (options.onFrame) options.onFrame();
             return;
           }
-          // 收敛系数：帧数少、足够顺滑，避免长时间占用
+
           lastAnimWriteAt = performance.now();
-          container.scrollTop = cur + diff * 0.35;
+          container._smoothAnimating = true;
+
+          var maxTop = Math.max(0, container.scrollHeight - container.clientHeight);
+          var newTop = clamp(container.scrollTop + velocity, 0, maxTop);
+
+          // 碰到边界立刻停止
+          if (newTop === container.scrollTop && Math.abs(velocity) > 0.3) {
+            velocity = 0;
+            container._smoothAnimating = false;
+            if (options.onFrame) options.onFrame();
+            return;
+          }
+
+          container.scrollTop = newTop;
+          if (options.onFrame) options.onFrame();
           rafId = requestAnimationFrame(step);
         };
 
-        container.addEventListener(
-          "wheel",
-          (e) => {
-            // Ctrl+滚轮用于字体缩放，只阻止默认行为，让事件继续传播给字体缩放监听器
-            if (e.ctrlKey) {
-              e.preventDefault();
-              // 不调用 stopPropagation()，让事件继续传播
-              return;
-            }
+        container.addEventListener("wheel", function(e) {
+          if (options.shouldSkip && options.shouldSkip()) return;
 
-            // 🚀 新增：Alt+滚轮用于横向滚动
-            if (e.altKey) {
-              e.preventDefault();
-              e.stopPropagation();
-
-              let delta = e.deltaX;
-              // 如果没有deltaX，尝试使用deltaY（某些触控板/鼠标）
-              if (Math.abs(delta) < 0.1) {
-                delta = e.deltaY;
-              }
-
-              if (Math.abs(delta) < 0.1) return; // 忽略微小的滚动
-
-              if (e.deltaMode === 1) delta *= 16; // 行
-              else if (e.deltaMode === 2) delta *= window.innerWidth; // 页
-
-              const abs = Math.abs(delta);
-              const isTrackpad = e.deltaMode === 0 && abs < 18;
-              const mult = isTrackpad ? options.trackpadMultiplier : options.mouseMultiplier;
-              const maxStep = isTrackpad ? options.trackpadMaxStep : options.mouseMaxStep;
-
-              delta = Math.max(-maxStep, Math.min(maxStep, delta * mult));
-
-              // 直接设置scrollLeft，不使用动画
-              const maxScrollLeft = Math.max(0, container.scrollWidth - container.clientWidth);
-              const targetScrollLeft = clamp(container.scrollLeft + delta, 0, maxScrollLeft);
-              container.scrollLeft = targetScrollLeft;
-
-              return;
-            }
-
-            // 以横向为主（shift 或 deltaX 较大）时不接管，避免影响水平滚动体验
-            if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
-
-            // 没有可滚动空间时，不接管（避免影响其它区域/滚动条交互）
-            if (container.scrollHeight <= container.clientHeight) return;
-
-            // 这里需要 preventDefault 才能避免原生滚动 + 我们的滚动叠加
+          if (e.ctrlKey) {
             e.preventDefault();
+            return;
+          }
 
-            let delta = e.deltaY;
-            if (e.deltaMode === 1) delta *= 16; // 行
-            else if (e.deltaMode === 2) delta *= window.innerHeight; // 页
+          // Alt+滚轮横向滚动
+          if (e.altKey) {
+            e.preventDefault();
+            e.stopPropagation();
 
-            const abs = Math.abs(delta);
-            // 简单区分：触控板通常 delta 更细碎
-            const isTrackpad = e.deltaMode === 0 && abs < 18;
-            const mult = isTrackpad ? options.trackpadMultiplier : options.mouseMultiplier;
-            const maxStep = isTrackpad ? options.trackpadMaxStep : options.mouseMaxStep;
+            var delta = e.deltaX;
+            if (Math.abs(delta) < 0.1) delta = e.deltaY;
+            if (Math.abs(delta) < 0.1) return;
 
+            if (e.deltaMode === 1) delta *= 16;
+            else if (e.deltaMode === 2) delta *= window.innerWidth;
+
+            var abs = Math.abs(delta);
+            var isTrackpad = e.deltaMode === 0 && abs < 18;
+            var mult = isTrackpad ? options.trackpadMultiplier : options.mouseMultiplier;
+            var maxStep = isTrackpad ? options.trackpadMaxStep : options.mouseMaxStep;
             delta = Math.max(-maxStep, Math.min(maxStep, delta * mult));
 
-            const maxTop = Math.max(0, container.scrollHeight - container.clientHeight);
-            targetTop = clamp(targetTop + delta, 0, maxTop);
+            var maxScrollLeft = Math.max(0, container.scrollWidth - container.clientWidth);
+            container.scrollLeft = clamp(container.scrollLeft + delta, 0, maxScrollLeft);
+            return;
+          }
 
-            if (!rafId) {
-              rafId = requestAnimationFrame(step);
-            }
-          },
-          { passive: false, capture: true }
-        );
+          if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+          if (container.scrollHeight <= container.clientHeight) return;
 
-        // 如果用户拖动滚动条/程序滚动，更新 target；若检测到用户在动画中“抢滚动”，则取消动画
-        container.addEventListener(
-          "scroll",
-          () => {
-            if (!rafId) {
-              targetTop = container.scrollTop;
-              return;
-            }
-            // 动画运行时，如果滚动并非紧跟我们刚写入的那一帧，认为是用户拖动滚动条导致
-            if (performance.now() - lastAnimWriteAt > 80) {
-              cancelAnim();
-              targetTop = container.scrollTop;
-            }
-          },
-          { passive: true }
-        );
+          e.preventDefault();
+
+          var delta = e.deltaY;
+          if (e.deltaMode === 1) delta *= 16;
+          else if (e.deltaMode === 2) delta *= window.innerHeight;
+
+          var abs = Math.abs(delta);
+          var isTrackpad = e.deltaMode === 0 && abs < 18;
+          var mult = isTrackpad ? options.trackpadMultiplier : options.mouseMultiplier;
+          var maxStep = isTrackpad ? options.trackpadMaxStep : options.mouseMaxStep;
+          delta = Math.max(-maxStep, Math.min(maxStep, delta * mult));
+
+          // 累加速度
+          velocity += delta;
+
+          if (!rafId) {
+            rafId = requestAnimationFrame(step);
+          }
+        }, { passive: false, capture: true });
+
+        // 检测用户拖动滚动条抢滚动
+        container.addEventListener("scroll", function() {
+          if (!rafId) {
+            velocity = 0;
+            return;
+          }
+          if (performance.now() - lastAnimWriteAt > 80) {
+            cancelAnim();
+            velocity = 0;
+          }
+        }, { passive: true });
       }
 
       // 调整过滤面板高度以保持与内容框底部对齐
@@ -1214,33 +1116,97 @@
         }
       }
 
-      // 在全屏模式下显示工具栏
-      function showToolbarInFullscreen() {
-        if (!document.body.classList.contains('fullscreen')) return;
-        
-        const toolbar = document.getElementById('toolbar');
-        // 临时显示工具栏
-        toolbar.style.transition = 'top 0.3s ease';
-        toolbar.style.top = '0';
-        
-        // 3秒后自动隐藏
-        clearTimeout(window.toolbarHideTimeout);
-        window.toolbarHideTimeout = setTimeout(() => {
-          toolbar.style.top = '-36px';
-        }, 3000);
-        
-        // 当用户鼠标移入工具栏区域时，取消自动隐藏
-        toolbar.addEventListener('mouseenter', () => {
-          clearTimeout(window.toolbarHideTimeout);
-        }, { once: true });
-        
-        // 当用户鼠标移出工具栏区域时，延迟隐藏
-        toolbar.addEventListener('mouseleave', () => {
-          clearTimeout(window.toolbarHideTimeout);
-          window.toolbarHideTimeout = setTimeout(() => {
-            toolbar.style.top = '-36px';
-          }, 1000);
-        }, { once: true });
+      // 浮动搜索框关闭
+      window.closeFloatingSearch = function() {
+        document.getElementById('searchFloatingBar').classList.remove('visible');
+        if (typeof resetSearch === 'function') resetSearch();
+      };
+
+      // 通用拖拽逻辑
+      function makeDraggable(handleEl, targetEl) {
+        let startX, startY, startLeft, startTop;
+        handleEl.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          const rect = targetEl.getBoundingClientRect();
+          startX = e.clientX;
+          startY = e.clientY;
+          startLeft = rect.left;
+          startTop = rect.top;
+          // 取消 transform 居中（如果有），改用 left
+          if (targetEl.style.transform) {
+            targetEl.style.transform = 'none';
+            targetEl.style.left = startLeft + 'px';
+            targetEl.style.top = startTop + 'px';
+          }
+          // 取消 CSS right 定位，避免拖拽时右边框被钉住不动
+          targetEl.style.right = 'auto';
+          targetEl.style.left = startLeft + 'px';
+          const onMove = (ev) => {
+            targetEl.style.left = (startLeft + ev.clientX - startX) + 'px';
+            targetEl.style.top = (startTop + ev.clientY - startY) + 'px';
+          };
+          const onUp = () => {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+          };
+          document.addEventListener('mousemove', onMove);
+          document.addEventListener('mouseup', onUp);
+        });
+      }
+
+      // 初始化拖拽
+      const searchBar = document.getElementById('searchFloatingBar');
+      const searchHandle = document.getElementById('searchFloatingBarHandle');
+      if (searchBar && searchHandle) makeDraggable(searchHandle, searchBar);
+
+      // 窗口拖拽手柄 — 按住拖动移动整个窗口（通过 IPC setBounds）
+      const windowDragHandle = document.getElementById('windowDragHandle');
+      if (windowDragHandle && window.electronAPI && window.electronAPI.windowControl) {
+        let winDragStartX = 0, winDragStartY = 0, winStartX = 0, winStartY = 0;
+        windowDragHandle.addEventListener('mousedown', async (e) => {
+          e.preventDefault();
+          // If maximized, restore window first then start dragging
+          const isMaximized = await window.electronAPI.windowControl.isMaximized();
+          if (isMaximized) {
+            // Save current maximized bounds as lastUnmaximized before restoring
+            const maxBounds = await window.electronAPI.windowControl.getBounds();
+            window.electronAPI.windowControl.setBounds({
+              x: undefined,
+              y: undefined,
+              width: lastUnmaximizedBounds.width || 1200,
+              height: lastUnmaximizedBounds.height || 800
+            });
+            // Use restored window position as drag start
+            winDragStartX = e.screenX;
+            winDragStartY = e.screenY;
+            // Center the restored window on the mouse cursor
+            var restoredW = lastUnmaximizedBounds.width || 1200;
+            winStartX = e.screenX - restoredW / 2;
+            winStartY = e.screenY - 10;
+            window.electronAPI.windowControl.setBounds({ x: winStartX, y: winStartY });
+            // Update lastUnmaximizedBounds for next maximize toggle
+            lastUnmaximizedBounds = { width: maxBounds.width, height: maxBounds.height, x: maxBounds.x, y: maxBounds.y };
+          } else {
+            const bounds = await window.electronAPI.windowControl.getBounds();
+            winDragStartX = e.screenX;
+            winDragStartY = e.screenY;
+            winStartX = bounds.x;
+            winStartY = bounds.y;
+          }
+          windowDragHandle.style.cursor = 'grabbing';
+          const onMove = (ev) => {
+            const nx = winStartX + (ev.screenX - winDragStartX);
+            const ny = winStartY + (ev.screenY - winDragStartY);
+            window.electronAPI.windowControl.setBounds({ x: nx, y: ny });
+          };
+          const onUp = () => {
+            windowDragHandle.style.cursor = 'grab';
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+          };
+          document.addEventListener('mousemove', onMove);
+          document.addEventListener('mouseup', onUp);
+        });
       }
 
       // 自动应用默认过滤
@@ -1503,7 +1469,7 @@
               isFilterPanelMaximized = false;
 
               // 恢复到默认大小（从工具栏下方到窗口底部）
-              const toolbarHeight = 25;
+              const toolbarHeight = 0;
               filteredPanel.style.top = toolbarHeight + 'px';
               filteredPanel.style.setProperty('--filtered-panel-top', toolbarHeight + 'px');
               filteredPanel.style.left = '0';
@@ -1554,7 +1520,7 @@
               const deltaY = e.clientY - dragStartY;
               const windowHeight = window.innerHeight;
               const hScrollHeight = 16;
-              const toolbarHeight = 25; // 工具栏高度
+              const toolbarHeight = 0; // 工具栏已移除
               const minHeight = 200; // 最小高度
 
               // 往上拖动时 deltaY 为负，top 减小；往下拖动时 deltaY 为正，top 增大
@@ -1728,46 +1694,13 @@
           console.log('[FilteredPanel] Close button event added');
         }
 
-        // 新增：四角调整大小事件
-        resizeHandleNW.addEventListener("mousedown", (e) =>
-          startCornerResize(e, "nw")
-        );
-        resizeHandleNE.addEventListener("mousedown", (e) =>
-          startCornerResize(e, "ne")
-        );
-        resizeHandleSW.addEventListener("mousedown", (e) =>
-          startCornerResize(e, "sw")
-        );
-        resizeHandleSE.addEventListener("mousedown", (e) =>
-          startCornerResize(e, "se")
-        );
-
-        // 快捷键说明面板事件
-        const shortcutsToggleBtn = document.getElementById('shortcutsToggleBtn');
-        const shortcutsPanel = document.getElementById('shortcutsPanel');
-        const shortcutsClose = document.getElementById('shortcutsClose');
-
-        if (shortcutsToggleBtn && shortcutsPanel) {
-          shortcutsToggleBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            shortcutsPanel.classList.toggle('visible');
-          });
-
-          if (shortcutsClose) {
-            shortcutsClose.addEventListener('click', (e) => {
-              e.stopPropagation();
-              shortcutsPanel.classList.remove('visible');
-            });
-          }
-
-          // 点击其他地方关闭面板
-          document.addEventListener('click', (e) => {
-            if (!shortcutsPanel.contains(e.target) && e.target !== shortcutsToggleBtn) {
-              shortcutsPanel.classList.remove('visible');
-            }
-          });
+        // 顶部边缘拖拽调整高度
+        const resizeHandleN = document.querySelector("#filteredPanel > .panel-resize-handle.n");
+        if (resizeHandleN) {
+          resizeHandleN.addEventListener("mousedown", (e) =>
+            startCornerResize(e, "n")
+          );
         }
-
 
         // 全局鼠标事件
         document.addEventListener("mousemove", handlePanelMouseMove);
@@ -1901,26 +1834,11 @@
        * 如果文件树之前因为过滤面板显示而被自动隐藏，现在恢复它的显示
        */
       function restoreFileTreePanel() {
-        const fileTreeContainer = DOMCache.get('fileTreeContainer');
-        const fileTreeCollapseBtn = DOMCache.get('fileTreeCollapseBtn');
-
-        // 只有在文件树被过滤面板隐藏的情况下才恢复
-        if (fileTreeWasHiddenByFilter && fileTreeContainer) {
-          fileTreeContainer.classList.add('visible');
-          if (fileTreeCollapseBtn) {
-            fileTreeCollapseBtn.innerHTML = '◀';
-            fileTreeCollapseBtn.style.display = 'flex'; // 🔧 恢复显示折叠按钮
-          }
-          console.log('[Filter] 文件树面板已恢复');
-          fileTreeWasHiddenByFilter = false;
-
-          // 触发布局更新
-          if (typeof updateLayout === 'function') {
-            updateLayout();
-          }
-          if (typeof updateButtonPosition === 'function') {
-            updateButtonPosition();
-          }
+        // 只清除标记，不自动展开文件树
+        // 文件树会在鼠标靠近左边缘时由 smartExpandFileTree 自动展开
+        window._fileTreeHiddenByFilter = false;
+        if (typeof updateLayout === 'function') {
+          updateLayout();
         }
       }
 
@@ -2034,6 +1952,16 @@
 
           // 根据调整方向计算新的位置和大小
           switch (resizeDirection) {
+            case "n":
+              newY = Math.min(
+                panelStartY + deltaY,
+                panelStartY + panelStartHeight - minHeight
+              );
+              newHeight = Math.max(
+                minHeight,
+                Math.min(maxHeight, panelStartHeight - deltaY)
+              );
+              break;
             case "nw": // 左上角：调整左边和上边
               newX = Math.min(
                 panelStartX + deltaX,
@@ -2098,8 +2026,8 @@
             newHeight = maxBottom - newY;
           }
 
-          // 确保面板顶部不低于工具栏
-          const toolbarHeight = 25;
+          // 确保面板顶部不低于顶部
+          const toolbarHeight = 0;
           if (newY < toolbarHeight) {
             newY = toolbarHeight;
             // 调整高度以保持面板底部位置
@@ -2191,6 +2119,7 @@
           if (e.key === "Enter") {
             e.preventDefault();
             e.stopPropagation();
+            hideFilteredPanelSearchSuggestions();
             const currentValue = filteredPanelSearchBox.value;
 
             // 搜索框为空时重置搜索
@@ -2228,28 +2157,73 @@
       }
 
       // 过滤结果框搜索功能
-      function filteredPanelPerformSearch() {
+      async function filteredPanelPerformSearch() {
         filteredPanelSearchMatches = [];
         filteredPanelCurrentMatchIndex = -1;
         filteredPanelTotalMatchCount = 0;
 
-        // 🚀 性能优化：搜索关键词变化时失效缓存
         invalidateFilteredLineCache();
 
-        // 保存搜索历史
         addToFilteredPanelSearchHistory(filteredPanelSearchKeyword);
 
-        // 使用trim检查是否为空，但保留原始值用于搜索
         if (filteredPanelSearchKeyword.trim() === "") {
           filteredPanelUpdateSearchUI();
           updateFilteredPanelVisibleLines();
           return;
         }
 
-        // 尝试将搜索关键词解析为正则表达式
+        // 分片模式：用 ripgrep 搜索临时文件
+        if (window._filteredChunkActive && window.App && window.App.FilteredChunkCache && window.App.FilteredChunkCache.isActive()) {
+          try {
+            var fcc = window.App.FilteredChunkCache;
+            var tempPath = fcc.getStats().tempFilePath;
+            if (!tempPath) {
+              if (typeof showMessage === 'function') showMessage('分片模式搜索失败：临时文件不存在');
+              return;
+            }
+
+            var rgPattern = filteredPanelSearchKeyword.split('|').map(function(k) {
+              return k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            }).join('|');
+
+            document.getElementById('status').textContent = '⏳ ripgrep 搜索中...';
+
+            var result = await window.electronAPI.callRGBatch({
+              execPath: './rg.exe',
+              pattern: rgPattern,
+              files: [tempPath],
+              caseInsensitive: true
+            });
+
+            var allMatches = [];
+            if (result && result.success && result.files && result.files.length > 0) {
+              var entry = result.files[0];
+              for (var li = 0; li < entry.count; li++) {
+                var rgLineNum = result.lineNums[entry.offset + li];
+                allMatches.push(rgLineNum - 1);
+              }
+            }
+
+            filteredPanelSearchMatches = allMatches;
+            filteredPanelTotalMatchCount = allMatches.length;
+            if (filteredPanelTotalMatchCount > 0) {
+              filteredPanelCurrentMatchIndex = 0;
+              filteredPanelJumpToMatch(filteredPanelCurrentMatchIndex);
+            }
+
+            filteredPanelUpdateSearchUI();
+            updateFilteredPanelVisibleLines();
+            return;
+          } catch (e) {
+            console.error('[FilterPanelSearch] ripgrep 搜索失败:', e);
+            if (typeof showMessage === 'function') showMessage('搜索失败: ' + e.message);
+            return;
+          }
+        }
+
+        // 内存模式：线性扫描
         let regex;
         try {
-          // 支持多关键词搜索：按 | 分割，转义后重新组合
           const parts = filteredPanelSearchKeyword.split('|');
           const escapedPattern = parts.map(part => escapeRegExp(part)).join('|');
           regex = new RegExp(escapedPattern, "gi");
@@ -2257,11 +2231,10 @@
           regex = new RegExp(escapeRegExp(filteredPanelSearchKeyword), "gi");
         }
 
-        // 🚀 修复：从头到尾顺序搜索，不受滚动或点击影响
-        let allMatches = [];
+        allMatches = [];
 
         for (let i = 0; i < filteredPanelAllLines.length; i++) {
-          const lineContent = filteredPanelAllLines[i]; // 直接使用原始内容
+          const lineContent = filteredPanelAllLines[i];
           regex.lastIndex = 0;
           if (regex.test(lineContent)) {
             allMatches.push(i);
@@ -2342,52 +2315,28 @@
 
       // 新增：高亮过滤结果框中的搜索匹配
       function highlightFilteredPanelSearchMatch(filteredIndex) {
-        // 移除之前的高亮
-        const existingHighlights = filteredPanelVirtualContent.querySelectorAll(
-          ".filtered-log-line.search-match-highlight"
-        );
-        existingHighlights.forEach((line) => {
-          line.classList.remove("search-match-highlight");
-        });
-
-        // 🔧 移除多余的 updateFilteredPanelVisibleLines 调用
-        // 这个函数已经在 filteredPanelJumpToMatch 的 rAF 中被调用
-        // 再次调用会导致竞态条件和性能问题
-
-        // 高亮目标行
-        const lineElement = filteredPanelVirtualContent.querySelector(
-          `[data-filtered-index="${filteredIndex}"]`
-        );
-        if (lineElement) {
-          lineElement.classList.add("search-match-highlight");
-        }
+        // 搜索关键词高亮由渲染路径的 inline span 处理，不再给整行加 class
       }
 
-      // 新增：过滤结果框上一个匹配（支持循环）
+      // 新增：过滤结果框上一个匹配（不循环）
       function filteredPanelPrevMatch() {
         if (filteredPanelTotalMatchCount === 0) return;
-
         if (filteredPanelCurrentMatchIndex > 0) {
-          // 跳转到上一个
           filteredPanelCurrentMatchIndex--;
         } else {
-          // 已经在第一个，循环到最后一个
-          filteredPanelCurrentMatchIndex = filteredPanelTotalMatchCount - 1;
+          showMessage('已到顶部'); return;
         }
         filteredPanelJumpToMatch(filteredPanelCurrentMatchIndex);
         filteredPanelUpdateSearchUI();
       }
 
-      // 新增：过滤结果框下一个匹配（支持循环）
+      // 新增：过滤结果框下一个匹配（不循环）
       function filteredPanelNextMatch() {
         if (filteredPanelTotalMatchCount === 0) return;
-
         if (filteredPanelCurrentMatchIndex < filteredPanelTotalMatchCount - 1) {
-          // 跳转到下一个
           filteredPanelCurrentMatchIndex++;
         } else {
-          // 已经在最后一个，循环到第一个
-          filteredPanelCurrentMatchIndex = 0;
+          showMessage('已到底部'); return;
         }
         filteredPanelJumpToMatch(filteredPanelCurrentMatchIndex);
         filteredPanelUpdateSearchUI();
@@ -2488,113 +2437,235 @@
         });
       }
 
-      // 处理过滤面板滚动 - 虚拟滚动核心 - 修复：确保正确更新可见行
-      // 🚀 性能优化：使用 rAF 节流，避免重复渲染，提升滚动流畅度 50-70%
+      // 处理过滤面板滚动
+      // 与主日志框一致：滚动期间用 textContent 快速渲染，停止后再渲染高亮
+      var _filteredPanelScrollStopTimer = null;
+      var _fpHighlightedLines = new Set(); // 追踪已高亮行索引，scroll-stop 时跳过
+      var _fpLastScrollTop = 0;
+      var _fpLastScrollTime = 0;
+      var _fpIsFastScrolling = false;
+
+      // Clear filter panel CSS highlights (lightweight — just delete from registry)
+      function clearFpCssHighlights() {
+        if (typeof CSS === 'undefined' || !CSS.highlights) return;
+        for (var ci = 0; ci < 20; ci++) {
+          CSS.highlights.delete('fp-kw-' + ci);
+        }
+        CSS.highlights.delete('fp-search');
+      }
+
       function handleFilteredPanelScroll() {
-        // 保存滚动位置
         filteredPanelScrollPosition = filteredPanelContent.scrollTop;
 
-        // 清除之前的高亮定时器
-        if (filteredPanelScrollDebounce) {
-          clearTimeout(filteredPanelScrollDebounce);
-          filteredPanelScrollDebounce = null;
+        // Fast scroll detection
+        var now = Date.now();
+        var dt = now - _fpLastScrollTime;
+        if (dt > 0 && _fpLastScrollTime > 0) {
+          var velocity = Math.abs(filteredPanelScrollPosition - _fpLastScrollTop) / dt;
+          _fpIsFastScrolling = velocity > 10;
+        }
+        _fpLastScrollTop = filteredPanelScrollPosition;
+        _fpLastScrollTime = now;
+
+        if (_filteredPanelScrollStopTimer !== null) {
+          clearTimeout(_filteredPanelScrollStopTimer);
         }
 
-        // 🚀 rAF 节流：如果已有待处理的渲染请求，跳过本次
         if (filteredPanelScrollRafId !== null) {
           return;
         }
 
-        // 请求在下一帧渲染，避免同一帧内多次更新
         filteredPanelScrollRafId = requestAnimationFrame(() => {
-          // 🚀 优化：滚动期间正常计算高亮，已有缓存直接复用（O(1)）
-          // 未缓存的行照常计算高亮并写入缓存，后续滚动即可命中
-          updateFilteredPanelVisibleLines(false, false);
+          updateFilteredPanelVisibleLines(false, true);
           filteredPanelScrollRafId = null;
-
-          // 🚀 滚停后 150ms 对可见区域补充高亮（安全兜底）
-          filteredPanelScrollDebounce = setTimeout(() => {
-            _applyFilteredPanelHighlight();
-            filteredPanelScrollDebounce = null;
-          }, 150);
         });
+
+        // Scroll stop: debounce — clear stale highlights, re-render, apply new highlights
+        var stopDelay = _fpIsFastScrolling ? 300 : 200;
+        _filteredPanelScrollStopTimer = setTimeout(() => {
+          _fpIsFastScrolling = false;
+          _filteredPanelScrollStopTimer = null;
+          clearFpCssHighlights();
+          updateFilteredPanelVisibleLines(false, true);
+          applyCssHighlights();
+        }, stopDelay);
       }
 
-      /**
-       * 🚀 惰性高亮：滚停后对可见区域应用高亮
-       * 只处理视口内的少量行（~50行），不影响滚动帧率
-       */
-      function _applyFilteredPanelHighlight() {
-        if (filteredPanelAllLines.length === 0) return;
+      // 🚀 异步高亮：用 Worker 计算高亮 HTML，不阻塞主线程
+      var _highlightGeneration = 0;
 
-        const hasPrimaryKeywords = currentFilter.filterKeywords && currentFilter.filterKeywords.length > 0;
-        const hasSecondaryKeywords = secondaryFilter.isActive && secondaryFilter.filterKeywords.length > 0;
-        const hasCustomHighlights = customHighlights && customHighlights.length > 0;
+      // 🚀 CSS Custom Highlight API — 零 DOM 修改的高亮方案
+      // 使用 CSS.highlights.set() + ::highlight() 实现，
+      // textContent 保持不变，高亮是纯 CSS overlay，不触发 innerHTML/重排
+      var _fpHighlightKeywords = [];  // [{keyword, color, type}]
+      var _fpHighlightStyleEl = null; // 动态注入 ::highlight() CSS 规则
 
-        // 没有任何高亮需求，跳过
-        if (!hasPrimaryKeywords && !hasSecondaryKeywords && !hasCustomHighlights) return;
+      function buildHighlightKeywords() {
+        var kwList = (customHighlights || []).filter(function(h) { return h.keyword; })
+          .map(function(h) { return { keyword: h.keyword, color: h.color, type: 'custom' }; });
+        if (secondaryFilter.isActive && secondaryFilter.filterKeywords.length > 0) {
+          var secColors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7'];
+          secondaryFilter.filterKeywords.forEach(function(kw, ki) {
+            if (kw) kwList.push({ keyword: kw, color: secColors[ki % secColors.length], type: 'secondary' });
+          });
+        }
+        if (filteredPanelSearchKeyword && filteredPanelTotalMatchCount > 0) {
+          kwList.push({ keyword: filteredPanelSearchKeyword, color: '#FF3B30', type: 'search' });
+        }
+        return kwList;
+      }
 
-        // 🔧 保存选区，避免 innerHTML 替换时丢失
-        const savedSel = _saveFilteredPanelSelection();
-
-        const scrollTop = filteredPanelContent.scrollTop;
-        const clientHeight = filteredPanelContent.clientHeight;
-        const visStart = Math.max(0, Math.floor(scrollTop / filteredPanelLineHeight));
-        const visEnd = Math.min(filteredPanelAllLines.length - 1,
-          Math.ceil((scrollTop + clientHeight) / filteredPanelLineHeight));
-
-        const skipPrimaryHighlight = hasSecondaryKeywords;
-
-        for (let i = visStart; i <= visEnd; i++) {
-          const el = filteredPanelVirtualContent.querySelector(`[data-filtered-index="${i}"]`);
-          if (!el) continue;
-
-          const lineContent = filteredPanelAllLines[i];
-          const isFileHeader = fileHeaderIndices.has(i);
-          const originalIndex = filteredPanelAllOriginalIndices[i];
-
-          // 计算高亮 HTML
-          let displayText = escapeHtml(lineContent);
-
-          // 自定义高亮
-          if (hasCustomHighlights) {
-            for (let h = 0; h < customHighlights.length; h++) {
-              const highlight = customHighlights[h];
-              if (!highlight.keyword) continue;
-              const escapedKeyword = escapeHtml(highlight.keyword);
-              displayText = safeHighlight(displayText, escapedKeyword,
-                (match) => `<span class="custom-highlight" style="background-color: ${highlight.color}80;">${match}</span>`
-              );
-            }
+      // Dynamically inject ::highlight() CSS rules with current keyword colors
+      function updateHighlightCssRules() {
+        if (!_fpHighlightStyleEl) {
+          _fpHighlightStyleEl = document.createElement('style');
+          _fpHighlightStyleEl.id = 'fp-dynamic-highlights';
+          document.head.appendChild(_fpHighlightStyleEl);
+        }
+        var rules = [];
+        for (var i = 0; i < _fpHighlightKeywords.length; i++) {
+          var c = _fpHighlightKeywords[i].color;
+          // Convert hex to rgba with 0.3 alpha
+          var r = parseInt(c.slice(1, 3), 16);
+          var g = parseInt(c.slice(3, 5), 16);
+          var b = parseInt(c.slice(5, 7), 16);
+          var alpha = _fpHighlightKeywords[i].type === 'search' ? 0.35 : 0.3;
+          if (_fpHighlightKeywords[i].type === 'search') {
+            rules.push('::highlight(fp-search) { background-color: rgba(' + r + ',' + g + ',' + b + ',' + alpha + '); }');
+          } else {
+            rules.push('::highlight(fp-kw-' + i + ') { background-color: rgba(' + r + ',' + g + ',' + b + ',' + alpha + '); }');
           }
+        }
+        _fpHighlightStyleEl.textContent = rules.join('\n');
+      }
 
-          // 二级过滤高亮
-          if (hasSecondaryKeywords) {
-            for (let k = 0; k < secondaryFilter.filterKeywords.length; k++) {
-              const keyword = secondaryFilter.filterKeywords[k];
-              if (!keyword) continue;
-              const colorClass = secondaryFilterHighlightClasses[k % secondaryFilterHighlightClasses.length];
-              const escapedKeyword = escapeHtml(keyword);
-              displayText = safeHighlight(displayText, escapedKeyword,
-                (match) => `<span class="${colorClass}">${match}</span>`
-              );
-            }
-          }
+      // Apply CSS Custom Highlights — only for truly visible viewport lines (not buffer)
+      function applyCssHighlights() {
+        if (!filteredPanelDomPool || !filteredPanelDomPool.activeElements) return;
+        if (!CSS.highlights) return;
 
-          // 添加行号
-          if (!isFileHeader) {
-            displayText = `<span class="line-number">${originalIndex + 1}</span>${displayText}`;
-          }
-
-          el.innerHTML = displayText;
-
-          // 🚀 同步写入行级HTML缓存，下次滚动可直接复用（O(1)命中）
-          const cacheKey = getFilteredLineCacheKey(i, isFileHeader, originalIndex) + '|h:true';
-          addToFilteredLineCache(cacheKey, displayText);
+        _fpHighlightKeywords = buildHighlightKeywords();
+        if (_fpHighlightKeywords.length === 0) {
+          clearFpCssHighlights();
+          return;
         }
 
-        // 🔧 恢复选区
-        _restoreFilteredPanelSelection(savedSel);
+        // Update dynamic CSS rules for highlight colors
+        updateHighlightCssRules();
+
+        // Calculate truly visible range (viewport only, no buffer)
+        var vpTop = filteredPanelContent.scrollTop;
+        var vpHeight = filteredPanelContent.clientHeight;
+        if (vpHeight === 0) return;
+        var visStart = Math.floor(vpTop / filteredPanelLineHeight);
+        var visEnd = Math.min(
+          Math.ceil((vpTop + vpHeight) / filteredPanelLineHeight),
+          filteredPanelDomPool.activeElements.size > 0
+            ? Math.max(...filteredPanelDomPool.activeElements.keys())
+            : visStart + Math.ceil(vpHeight / filteredPanelLineHeight)
+        );
+
+        // Search match line (only highlight on this line)
+        var _matchLine = (filteredPanelSearchMatches && filteredPanelCurrentMatchIndex >= 0)
+          ? filteredPanelSearchMatches[filteredPanelCurrentMatchIndex] : -1;
+
+        // Build keyword range arrays
+        var keywordCount = 0;
+        for (var kc = 0; kc < _fpHighlightKeywords.length; kc++) {
+          if (_fpHighlightKeywords[kc].type !== 'search') keywordCount++;
+        }
+        var keywordRanges = new Array(keywordCount);
+        for (var kri = 0; kri < keywordCount; kri++) keywordRanges[kri] = [];
+        var searchRanges = [];
+
+        // Only iterate truly visible elements — skip buffer lines
+        for (var vi = visStart; vi <= visEnd; vi++) {
+          var el = filteredPanelDomPool.activeElements.get(vi);
+          if (!el) continue;
+
+          var textNode = el.firstChild;
+          if (!textNode || textNode.nodeType !== Node.TEXT_NODE) {
+            var rawText = el.textContent;
+            if (!rawText || rawText === '...') continue;
+            el.textContent = rawText;
+            textNode = el.firstChild;
+          }
+          var text = textNode.textContent;
+          if (!text || text === '...') continue;
+
+          var kwIdx = 0;
+          for (var ki = 0; ki < _fpHighlightKeywords.length; ki++) {
+            var kw = _fpHighlightKeywords[ki].keyword;
+            if (!kw) { if (_fpHighlightKeywords[ki].type !== 'search') kwIdx++; continue; }
+            var kwLen = kw.length;
+            var pos = 0;
+            if (_fpHighlightKeywords[ki].type === 'search') {
+              if (vi !== _matchLine) continue;
+              while (pos < text.length) {
+                var sf = text.indexOf(kw, pos);
+                if (sf === -1) break;
+                var range = new Range();
+                range.setStart(textNode, sf);
+                range.setEnd(textNode, sf + kwLen);
+                searchRanges.push(range);
+                pos = sf + kwLen;
+              }
+            } else {
+              while (pos < text.length) {
+                var found = text.indexOf(kw, pos);
+                if (found === -1) break;
+                var range = new Range();
+                range.setStart(textNode, found);
+                range.setEnd(textNode, found + kwLen);
+                keywordRanges[kwIdx].push(range);
+                pos = found + kwLen;
+              }
+              kwIdx++;
+            }
+          }
+          _fpHighlightedLines.add(vi);
+        }
+
+        // Clear old and register new highlights
+        clearFpCssHighlights();
+
+        var kwRegIdx = 0;
+        for (var ri = 0; ri < _fpHighlightKeywords.length; ri++) {
+          if (_fpHighlightKeywords[ri].type === 'search') continue;
+          if (keywordRanges[kwRegIdx] && keywordRanges[kwRegIdx].length > 0) {
+            try {
+              CSS.highlights.set('fp-kw-' + kwRegIdx, new Highlight(...keywordRanges[kwRegIdx]));
+            } catch(e) {
+              var hl = new Highlight(keywordRanges[kwRegIdx][0]);
+              for (var rj = 1; rj < keywordRanges[kwRegIdx].length; rj++) {
+                hl.add(keywordRanges[kwRegIdx][rj]);
+              }
+              CSS.highlights.set('fp-kw-' + kwRegIdx, hl);
+            }
+          }
+          kwRegIdx++;
+        }
+
+        if (searchRanges.length > 0) {
+          try {
+            CSS.highlights.set('fp-search', new Highlight(...searchRanges));
+          } catch(e2) {
+            var shl = new Highlight(searchRanges[0]);
+            for (var sr = 1; sr < searchRanges.length; sr++) {
+              shl.add(searchRanges[sr]);
+            }
+            CSS.highlights.set('fp-search', shl);
+          }
+        }
+      }
+
+      function applyHighlightsAsync() {
+        var gen = ++_highlightGeneration;
+        updateFilteredPanelVisibleLines(false, true);
+        // DOM is ready (textContent only), apply CSS highlights directly
+        if (gen === _highlightGeneration) {
+          applyCssHighlights();
+        }
       }
 
       // 🚀 性能优化：生成行HTML缓存键
@@ -2613,6 +2684,10 @@
         filteredLineCacheVersion++;
         // 🚀 优化：只清空缓存，不重新分配，减少 GC 压力
         filteredLineHtmlCache.clear();
+        _fpHighlightedLines.clear();
+        // Clear and re-apply CSS Custom Highlights
+        clearFpCssHighlights();
+        requestAnimationFrame(function() { applyCssHighlights(); });
       }
 
       /**
@@ -2699,109 +2774,141 @@
           if (!setRangePoint(range, true, anchorEl, saved.anchorOffset)) return;
           if (!setRangePoint(range, false, focusEl, saved.focusOffset)) return;
 
+          // Prevent addRange from auto-scrolling
+          var savedScrollTop = filteredPanelContent.scrollTop;
           const sel = window.getSelection();
           sel.removeAllRanges();
           sel.addRange(range);
+          filteredPanelContent.scrollTop = savedScrollTop;
         } catch (e) {
           // 静默失败
         }
+      }
+
+      // 分片模式专用：异步加载完成后，刷新标记为 chunk-pending 的占位行
+      function filteredChunkRefreshVisibleText(loadedIndices) {
+        if (!filteredPanelVirtualContent) return;
+        if (!window.App || !window.App.FilteredChunkCache) return;
+        if (!filteredPanelDomPool || !filteredPanelDomPool.activeElements) return;
+        // Only refresh loaded lines — don't iterate all active elements
+        var anyUpdated = false;
+        if (loadedIndices && loadedIndices.length > 0) {
+          for (var li = 0; li < loadedIndices.length; li++) {
+            var idx = loadedIndices[li];
+            var el = filteredPanelDomPool.activeElements.get(idx);
+            if (el && el.dataset.chunkPending === 'true') {
+              var content = window.App.FilteredChunkCache.get(idx);
+              if (content) {
+                el.textContent = content;
+                delete el.dataset.chunkPending;
+                // Update className for file headers (initially rendered as '...')
+                var isFH = content.startsWith('===');
+                var expectedClass = isFH ? 'file-header filtered-log-line' : 'filtered-log-line';
+                if (el.classList.contains('highlighted')) expectedClass += ' highlighted';
+                if (el.className !== expectedClass) el.className = expectedClass;
+                if (isFH) delete el.dataset.lineNumber;
+                anyUpdated = true;
+              }
+            }
+          }
+        }
+        // Re-apply CSS highlights for newly loaded content
+        if (anyUpdated && _fpHighlightKeywords.length > 0) {
+          applyCssHighlights();
+        }
+      }
+
+      // 设置分片缓存回调
+      if (window.App && window.App.FilteredChunkCache) {
+        window.App.FilteredChunkCache.onLoadComplete = filteredChunkRefreshVisibleText;
       }
 
       // 更新过滤面板可见行 - 虚拟滚动核心 - 🚀 恢复所有高亮功能
       // forceHighlight: 强制重新计算高亮（用于滚动停止后的更新）
       // forcePlainText: 强制使用纯文本模式（用于滚动期间的惰性高亮）
       function updateFilteredPanelVisibleLines(forceHighlight = false, forcePlainText = false, cacheOnlyMode = false) {
-        if (filteredPanelAllLines.length === 0) return;
+        var _isFilteredChunkMode = window._filteredChunkActive === true
+          && window.App && window.App.FilteredChunkCache
+          && window.App.FilteredChunkCache.isActive();
+        var effectiveTotal = _isFilteredChunkMode
+          ? window.App.FilteredChunkCache.getTotalLines()
+          : filteredPanelAllLines.length;
+        if (effectiveTotal === 0) return;
 
-        // 🔧 保存过滤面板的文本选区，避免滚动重绘时丢失
-        const savedFpSelection = _saveFilteredPanelSelection();
+        // 滚动期间（forcePlainText=true）跳过选区保存/恢复，避免每帧多次强制布局重排
+        const savedFpSelection = forcePlainText ? null : _saveFilteredPanelSelection();
 
-        // 🔧 修复：如果 clientHeight 为 0（面板尚未布局），延迟一帧再渲染
-        const currentClientHeight = filteredPanelContent.clientHeight;
+        // Use cached clientHeight during scrolling to avoid forced layout reflow
+        const currentClientHeight = forcePlainText && lastKnownClientHeight > 0
+          ? lastKnownClientHeight
+          : filteredPanelContent.clientHeight;
         if (currentClientHeight === 0) {
           requestAnimationFrame(() => updateFilteredPanelVisibleLines(forceHighlight));
           return;
         }
 
-        // 🚀 性能优化：fileHeaderIndices 已在 updateFilteredPanel() 中预计算
-        // 只在 updateFilteredPanelVisibleLines 被独立调用（如滚动事件）时才需要重新计算
-        let needsRecompute = false;
-        if (fileHeaderIndices.size === 0 && filteredPanelAllLines.length > 0) {
-          needsRecompute = true;
-        } else if (window.needsFileHeaderRecompute) {
-          needsRecompute = true;
-          window.needsFileHeaderRecompute = false;
-        }
+        // Skip heavy recomputation during fast scrolling
+        if (!_fpIsFastScrolling) {
+          let needsRecompute = false;
+          if (fileHeaderIndices.size === 0 && effectiveTotal > 0) {
+            needsRecompute = true;
+          } else if (window.needsFileHeaderRecompute) {
+            needsRecompute = true;
+            window.needsFileHeaderRecompute = false;
+          }
 
-        if (needsRecompute && filteredPanelAllLines.length > 0) {
-          fileHeaderIndices.clear();
-          for (let i = 0; i < filteredPanelAllLines.length; i++) {
-            if (filteredPanelAllLines[i] && filteredPanelAllLines[i].startsWith("=== 文件:")) {
-              fileHeaderIndices.add(i);
+          if (needsRecompute && effectiveTotal > 0 && !_isFilteredChunkMode) {
+            fileHeaderIndices.clear();
+            for (let i = 0; i < filteredPanelAllLines.length; i++) {
+              if (filteredPanelAllLines[i] && filteredPanelAllLines[i].startsWith("=== 文件:")) {
+                fileHeaderIndices.add(i);
+              }
             }
           }
         }
 
-        // 🚀 性能优化1：使用缓存的屏幕可见行数，只在窗口 resize 时重新计算
-        // 🚀 修复Layout Thrashing：批量读取布局属性，避免多次读取
-        // currentClientHeight 已在函数顶部读取（含 clientHeight===0 的早退出保护）
         if (cachedScreenVisibleLines === 0 || currentClientHeight !== lastKnownClientHeight) {
           cachedScreenVisibleLines = Math.ceil(currentClientHeight / filteredPanelLineHeight);
           lastKnownClientHeight = currentClientHeight;
         }
         const screenVisibleLines = cachedScreenVisibleLines;
-        const totalLines = filteredPanelAllLines.length;
+        const totalLines = effectiveTotal;
 
-        // 🚀 优化：增加缓冲区倍数，提升滚动流畅度（2025-02-22）
-        if (totalLines < 100) {
-          filteredPanelBuffer = Math.max(50, Math.floor(screenVisibleLines * 3));  // 小文件：3倍缓冲 (原2倍)
-        } else if (totalLines < 10000) {
-          filteredPanelBuffer = Math.max(80, Math.floor(screenVisibleLines * 2.5));  // 中等文件：2.5倍缓冲 (原1.5倍)
-        } else if (totalLines < 100000) {
-          filteredPanelBuffer = Math.max(100, Math.floor(screenVisibleLines * 2));  // 大文件：2倍缓冲 (原1.2倍)
-        } else {
-          filteredPanelBuffer = Math.max(150, Math.floor(screenVisibleLines * 1.5));  // 超大文件：1.5倍缓冲 (原1倍)
+        // 初始化或调整 DOM 池大小
+        if (!filteredPanelDomPool) {
+          var fpPoolSize = Math.max(100, screenVisibleLines + 150 * 2);
+          filteredPanelDomPool = new DOMPool(filteredPanelVirtualContent, fpPoolSize);
+          window._releaseFilteredPanelDomPool = function () {
+            if (filteredPanelDomPool) filteredPanelDomPool.releaseAll();
+          };
         }
 
-        // 🚀 修复Layout Thrashing：一次性读取所有布局属性
+        // Fast scroll: shrink buffer to reduce DOM work
+        if (_fpIsFastScrolling) {
+          filteredPanelBuffer = Math.min(20, Math.max(10, Math.floor(screenVisibleLines * 0.5)));
+        } else if (totalLines < 100) {
+          filteredPanelBuffer = Math.max(50, Math.floor(screenVisibleLines * 3));
+        } else if (totalLines < 10000) {
+          filteredPanelBuffer = Math.max(80, Math.floor(screenVisibleLines * 2.5));
+        } else if (totalLines < 100000) {
+          filteredPanelBuffer = Math.max(100, Math.floor(screenVisibleLines * 2));
+        } else {
+          filteredPanelBuffer = Math.max(150, Math.floor(screenVisibleLines * 1.5));
+        }
+
         const scrollTop = filteredPanelContent.scrollTop;
 
-        // 计算可见区域（含缓冲区）
         const newVisibleStart = Math.max(
           0,
           Math.floor(scrollTop / filteredPanelLineHeight) - filteredPanelBuffer
         );
         const newVisibleEnd = Math.min(
-          filteredPanelAllLines.length - 1,
+          effectiveTotal - 1,
           Math.ceil((scrollTop + currentClientHeight) / filteredPanelLineHeight) +
             filteredPanelBuffer
         );
 
-        // 🚀 性能优化3：懒加载高亮范围 - 只在有高亮需求时才计算 trulyVisible 区域
-        let trulyVisibleStart = newVisibleStart;  // 默认值，当不需要高亮时使用
-        let trulyVisibleEnd = newVisibleEnd;
-
-        // 🚀 性能优化：计算需要应用的高亮类型
-        const hasPrimaryKeywords = currentFilter.filterKeywords && currentFilter.filterKeywords.length > 0;
-        const hasSecondaryKeywords = secondaryFilter.isActive && secondaryFilter.filterKeywords.length > 0;
-        const hasSearchKeyword = filteredPanelSearchKeyword && filteredPanelTotalMatchCount > 0; // 保留变量用于搜索跳转逻辑
-        const hasCustomHighlights = customHighlights && customHighlights.length > 0;
-
-        // 🚀 全局高亮需求：任何行是否需要高亮
-        // 🔧 移除搜索关键词高亮需求（用户不希望搜索关键词被高亮）
-        const anyHighlightNeeded = hasPrimaryKeywords || hasSecondaryKeywords || hasCustomHighlights;
-
-        // 🚀 只在有高亮需求时才计算真正可见区域
-        // 🔧 修复：让高亮范围覆盖整个渲染缓冲区，解决快速滚动时高亮缺失问题
-        // 原来的懒加载高亮会导致缓冲区的行没有高亮，快速滚动时用户会看到无高亮的内容
-        if (anyHighlightNeeded) {
-          // 🔧 让 trulyVisible 覆盖整个渲染范围（newVisibleStart 到 newVisibleEnd）
-          // 这样所有被渲染的行都会正确高亮，不会出现"先无高亮、后有高亮"的问题
-          trulyVisibleStart = newVisibleStart;
-          trulyVisibleEnd = newVisibleEnd;
-        }
-
-        // 如果可见区域没有变化，且不是强制高亮，则跳过更新
+        // Early return if range hasn't changed
         if (
           !forceHighlight &&
           newVisibleStart === filteredPanelVisibleStart &&
@@ -2810,219 +2917,135 @@
           return;
         }
 
+        // 释放滚出可见范围的 DOM 池元素
+        if (filteredPanelDomPool) {
+          const oldStart = filteredPanelVisibleStart;
+          const oldEnd = filteredPanelVisibleEnd;
+          if (oldStart >= 0 && oldEnd >= 0) {
+            if (newVisibleStart > oldStart) {
+              for (var _r = oldStart; _r <= Math.min(newVisibleStart - 1, oldEnd); _r++) _fpHighlightedLines.delete(_r);
+              filteredPanelDomPool.releaseRange(oldStart, Math.min(newVisibleStart - 1, oldEnd));
+            }
+            if (newVisibleEnd < oldEnd) {
+              for (var _r2 = Math.max(newVisibleEnd + 1, oldStart); _r2 <= oldEnd; _r2++) _fpHighlightedLines.delete(_r2);
+              filteredPanelDomPool.releaseRange(Math.max(newVisibleEnd + 1, oldStart), oldEnd);
+            }
+          }
+        }
+
         filteredPanelVisibleStart = newVisibleStart;
         filteredPanelVisibleEnd = newVisibleEnd;
 
-        // 🚀 优化策略：如果二级过滤激活，优先显示二级过滤高亮，跳过一级过滤高亮
-        const skipPrimaryHighlight = hasSecondaryKeywords;
+        const usePool = !!filteredPanelDomPool;
 
-        // 🚀 优化：如果完全没有高亮需求，或强制纯文本模式，使用textContent（快50倍，避免HTML解析和转义）
-        if (!anyHighlightNeeded || forcePlainText) {
-          // 快速路径：使用纯文本模式，无需HTML转义
-          const fragment = document.createDocumentFragment();
+        // textContent-only path — highlights applied via CSS Custom Highlight API
+        const fragment = usePool ? null : document.createDocumentFragment();
 
-          for (let i = newVisibleStart; i <= newVisibleEnd; i++) {
-            const lineContent = filteredPanelAllLines[i];
-            // 🚀 性能优化2：使用预计算的文件头索引集合，而不是 startsWith 检查
-            const isFileHeader = fileHeaderIndices.has(i);
-            const originalIndex = filteredPanelAllOriginalIndices[i];
-            const className = isFileHeader ? "file-header filtered-log-line" : "filtered-log-line";
-            const highlighted = i === lastClickedFilteredIndex ? " highlighted" : "";
+        for (let i = newVisibleStart; i <= newVisibleEnd; i++) {
+          // Fast path: already-active element with real content only needs position update
+          if (usePool && filteredPanelDomPool.activeElements.has(i)) {
+            const el = filteredPanelDomPool.activeElements.get(i);
+            // Skip elements that still show "..." — they need content refresh when cache loads
+            if (el.textContent !== '...') {
+              el.style.transform = 'translateY(' + Math.floor(i * filteredPanelLineHeight) + 'px)';
+              continue;
+            }
+          }
 
-            // 创建行元素
-            const lineElement = document.createElement("div");
+          const lineContent = _isFilteredChunkMode
+            ? (window.App.FilteredChunkCache.get(i) || '...')
+            : filteredPanelAllLines[i];
+          if (!lineContent && lineContent !== '') continue;
+          const isFileHeader = _isFilteredChunkMode
+            ? lineContent.startsWith('===')
+            : fileHeaderIndices.has(i);
+          const originalIndex = filteredPanelAllOriginalIndices[i];
+          const className = isFileHeader ? "file-header filtered-log-line" : "filtered-log-line";
+          const highlighted = i === lastClickedFilteredIndex ? " highlighted" : "";
+
+          let lineElement;
+          if (usePool) {
+            lineElement = filteredPanelDomPool.acquire(i, className + highlighted);
+            lineElement.dataset.originalIndex = originalIndex;
+            lineElement.dataset.filteredIndex = i;
+            if (_isFilteredChunkMode && lineContent === '...') {
+              lineElement.dataset.chunkPending = 'true';
+            } else {
+              delete lineElement.dataset.chunkPending;
+            }
+            lineElement.style.transform = 'translateY(' + Math.floor(i * filteredPanelLineHeight) + 'px)';
+
+            if (!isFileHeader) {
+              lineElement.dataset.lineNumber = originalIndex + 1;
+            } else {
+              delete lineElement.dataset.lineNumber;
+            }
+            lineElement.textContent = lineContent;
+
+            if (!lineElement.parentElement) {
+              filteredPanelVirtualContent.appendChild(lineElement);
+            }
+          } else {
+            lineElement = document.createElement("div");
             lineElement.className = className + highlighted;
             lineElement.dataset.originalIndex = originalIndex;
             lineElement.dataset.filteredIndex = i;
-            // 🚀 使用 transform 替代 top，启用 GPU 合成层，避免 CPU Layout Reflow
+            if (!isFileHeader) {
+              lineElement.dataset.lineNumber = originalIndex + 1;
+            }
+            if (_isFilteredChunkMode && lineContent === '...') {
+              lineElement.dataset.chunkPending = 'true';
+            }
             lineElement.style.cssText = `transform:translateY(${Math.floor(i * filteredPanelLineHeight)}px);width:max-content;min-width:100%;position:absolute;left:0;`;
 
-            // 🚀 使用 innerHTML 渲染行号 span（保持样式一致），内容部分直接拼接
-            // 行号是纯数字无需转义，日志内容可能含 <>& 等，用 textContent 无法同时保持 span 结构
-            // 性能权衡：innerHTML 比 createElement+appendChild 快，且行号数字无需转义
-            if (!isFileHeader) {
-              const lineNumber = originalIndex + 1;
-              lineElement.innerHTML = '<span class="line-number">' + lineNumber + '</span>';
-              lineElement.appendChild(document.createTextNode(lineContent));
-            } else {
-              lineElement.textContent = lineContent;
-            }
-
+            lineElement.textContent = lineContent;
 
             fragment.appendChild(lineElement);
           }
+        }
 
-          // 🚀 一次性批量添加DOM（比innerHTML更快且更安全）
+        if (!usePool) {
           filteredPanelVirtualContent.innerHTML = '';
           filteredPanelVirtualContent.appendChild(fragment);
-
-          // 🔧 恢复过滤面板的文本选区
-          _restoreFilteredPanelSelection(savedFpSelection);
-          return;
         }
 
-        // 🚀 有高亮需求时：使用innerHTML批量更新（需要HTML转义）
-        const htmlArray = new Array(newVisibleEnd - newVisibleStart + 1);
-        let arrayIndex = 0;
-
-        for (let i = newVisibleStart; i <= newVisibleEnd; i++) {
-          const lineContent = filteredPanelAllLines[i];
-          // 🚀 性能优化2：使用预计算的文件头索引集合，而不是 startsWith 检查
-          const isFileHeader = fileHeaderIndices.has(i);
-          const originalIndex = filteredPanelAllOriginalIndices[i];
-
-          // 🚀 懒加载高亮：只对真正可见的行计算高亮，缓冲区只添加行号（减少40-60%高亮计算）
-          const isTrulyVisible = (i >= trulyVisibleStart && i <= trulyVisibleEnd);
-          const needsHighlight = isTrulyVisible || isFileHeader;
-
-          // 🚀 性能优化：检查缓存（避免重复计算高亮，每行最多12次safeHighlight调用）
-          // 注意：缓存键包含是否需要高亮的信息，确保缓存正确性
-          const cacheKey = getFilteredLineCacheKey(i, isFileHeader, originalIndex) + `|h:${needsHighlight}`;
-          let displayText = filteredLineHtmlCache.get(cacheKey);
-
-          if (displayText !== undefined) {
-            // LRU: 重新插入以提升到最近使用位置
-            filteredLineHtmlCache.delete(cacheKey);
-            filteredLineHtmlCache.set(cacheKey, displayText);
-          } else {
-            // 缓存写入时检查上限
-            if (filteredLineHtmlCache.size >= 5000) {
-              const firstKey = filteredLineHtmlCache.keys().next().value;
-              filteredLineHtmlCache.delete(firstKey);
-            }
-            // 缓存未命中，计算HTML并缓存
-            // 🚀 重要修复：先对原始内容进行HTML转义，防止特殊字符被误解析
-            // 例如：now<next=0 会被转义为 now&lt;next=0
-            displayText = escapeHtml(lineContent);
-
-            // 🚀 cacheOnlyMode（滚动中）：跳过高亮计算，直接渲染纯文本
-            // 滚停后 _applyFilteredPanelHighlight() 会补充高亮
-            if (!cacheOnlyMode && needsHighlight) {
-              // 应用自定义高亮（优先级最高）
-              if (hasCustomHighlights) {
-                for (let h = 0; h < customHighlights.length; h++) {
-                  const highlight = customHighlights[h];
-                  if (!highlight.keyword) continue;
-                  // 🚀 注意：由于文本已转义，关键词也需要转义才能匹配
-                  const escapedKeyword = escapeHtml(highlight.keyword);
-                  displayText = safeHighlight(
-                    displayText,
-                    escapedKeyword,
-                    (match) => `<span class="custom-highlight" style="background-color: ${highlight.color}80;">${match}</span>`
-                  );
-                }
-              }
-
-              // 🚀 性能优化：跳过过滤关键词高亮（文件头通过CSS类实现样式）
-              // 过滤关键词高亮会严重拖慢性能，已禁用
-              // if (!skipPrimaryHighlight && hasPrimaryKeywords) { ... }
-
-              // 应用二级过滤高亮
-              if (hasSecondaryKeywords) {
-                for (let k = 0; k < secondaryFilter.filterKeywords.length; k++) {
-                  const keyword = secondaryFilter.filterKeywords[k];
-                  if (!keyword) continue;
-                  const colorClass =
-                    secondaryFilterHighlightClasses[
-                      k % secondaryFilterHighlightClasses.length
-                    ];
-                  // 🚀 注意：由于文本已转义，关键词也需要转义才能匹配
-                  const escapedKeyword = escapeHtml(keyword);
-                  displayText = safeHighlight(
-                    displayText,
-                    escapedKeyword,
-                    (match) => `<span class="${colorClass}">${match}</span>`
-                  );
-                }
-              }
-
-              // 🔧 移除搜索关键词高亮（用户不希望搜索关键词被高亮）
-            }
-
-            // 添加行号
-            if (!isFileHeader) {
-              const lineNumber = originalIndex + 1;
-              displayText = `<span class="line-number">${lineNumber}</span>${displayText}`;
-            }
-
-            // 🚀 仅非cacheOnlyMode时缓存，避免缓存未高亮的纯文本版本
-            // 滚停后 _applyFilteredPanelHighlight 会通过下次非 cacheOnlyMode 调用更新缓存
-            if (!cacheOnlyMode) {
-              addToFilteredLineCache(cacheKey, displayText);
-            }
-          }
-
-          // 构建HTML字符串（动态的highlighted类不参与缓存）
-          const className = isFileHeader ? "file-header filtered-log-line" : "filtered-log-line";
-          const top = Math.floor(i * filteredPanelLineHeight);
-          const highlighted = i === lastClickedFilteredIndex ? " highlighted" : "";
-
-          // 🔧 修复：使用 max-content 让内容自然撑开，触发横向滚动条
-          htmlArray[arrayIndex++] = `<div class="${className}${highlighted}" data-original-index="${originalIndex}" data-filtered-index="${i}" style="top:${top}px;width:max-content;min-width:100%;position:absolute;">${displayText}</div>`;
-        }
-
-        // 🚀 一次性innerHTML批量更新
-        filteredPanelVirtualContent.innerHTML = htmlArray.join('');
-
-        // 🔧 恢复过滤面板的文本选区
         _restoreFilteredPanelSelection(savedFpSelection);
+
+        if (_isFilteredChunkMode && window.App.FilteredChunkCache) {
+          window.App.FilteredChunkCache.setScrollCenter(
+            Math.floor((newVisibleStart + newVisibleEnd) / 2)
+          );
+          window.App.FilteredChunkCache.ensureRange(newVisibleStart, Math.min(effectiveTotal - 1, newVisibleEnd));
+        }
+
+        // Apply CSS highlights after non-scroll renders (e.g. highlight keywords changed)
+        if (!forcePlainText) {
+          requestAnimationFrame(function() { applyCssHighlights(); });
+        }
       }
 
-      // 🚀 优化：简化版内容更新函数，去掉所有HTML操作（高亮、链接转换等）
-      // 只保留必要的样式，大幅提升性能
+      // 🚀 简化版内容更新 — 始终 textContent，高亮由 CSS Custom Highlight API 处理
       function updateFilteredLineElementContent(lineElement, index, lineContent, isFileHeader) {
-        // 存储原始行号
         lineElement.dataset.originalIndex = filteredPanelAllOriginalIndices[index];
         lineElement.dataset.filteredIndex = index;
 
-        // 🚀 优化：检查是否有任何高亮需求
-        const hasPrimaryKeywords = currentFilter.filterKeywords && currentFilter.filterKeywords.length > 0;
-        const hasSecondaryKeywords = secondaryFilter.isActive && secondaryFilter.filterKeywords.length > 0;
-        const hasSearchKeyword = filteredPanelSearchKeyword && filteredPanelTotalMatchCount > 0; // 保留变量用于搜索跳转逻辑
-        const hasCustomHighlights = customHighlights && customHighlights.length > 0;
-        // 🔧 移除搜索关键词高亮需求（用户不希望搜索关键词被高亮）
-        const anyHighlightNeeded = hasPrimaryKeywords || hasSecondaryKeywords || hasCustomHighlights;
-
-        if (!anyHighlightNeeded) {
-          // 🚀 快速路径：无高亮需求时使用textContent（快50倍，完全避免HTML解析）
-          if (!isFileHeader) {
-            const originalIndex = filteredPanelAllOriginalIndices
-              ? filteredPanelAllOriginalIndices[index]
-              : index;
-            const lineNumber = originalIndex + 1;
-            lineElement.textContent = `${lineNumber} ${lineContent}`;
-          } else {
-            lineElement.textContent = lineContent;
-          }
+        if (!isFileHeader) {
+          const originalIndex = filteredPanelAllOriginalIndices
+            ? filteredPanelAllOriginalIndices[index]
+            : index;
+          lineElement.dataset.lineNumber = originalIndex + 1;
         } else {
-          // 🚀 有高亮需求：使用innerHTML（需要HTML转义）
-          // 注意：这个函数不实际应用高亮，高亮由其他函数处理
-          // 这里只负责安全地显示原始内容
-          let displayText = escapeHtml(lineContent);
-
-          // 添加行号显示（使用原始日志行号）
-          if (!isFileHeader) {
-            const originalIndex = filteredPanelAllOriginalIndices
-              ? filteredPanelAllOriginalIndices[index]
-              : index;
-            const lineNumber = originalIndex + 1;
-            displayText = `<span class="line-number">${lineNumber}</span>${displayText}`;
-          }
-
-          // 更新内容
-          lineElement.innerHTML = displayText;
+          delete lineElement.dataset.lineNumber;
         }
+        lineElement.textContent = lineContent;
 
-        // 🚀 性能优化：使用transform替代top，启用GPU加速
         lineElement.style.transform = `translateY(${Math.floor(index * filteredPanelLineHeight)}px)`;
 
-        // 高亮当前点击的行
         if (index === lastClickedFilteredIndex) {
           lineElement.classList.add("highlighted");
         } else {
           lineElement.classList.remove("highlighted");
         }
-
 
         // 搜索匹配行高亮（仅当有搜索关键词时）
         if (
@@ -3045,61 +3068,23 @@
         }
       }
 
-      // 创建过滤行元素 - 🚀 优化：简化版，去掉所有HTML高亮操作
-      // 只保留基础功能，大幅提升性能
+      // 创建过滤行元素 - 始终使用 textContent，高亮由 CSS Custom Highlight API 处理
       function createFilteredLineElement(index) {
         const lineElement = document.createElement("div");
 
         const lineContent = filteredPanelAllLines[index];
 
-        // 🚀 检测文件头，为包含 "=== 文件:" 的行添加 file-header 类
         const isFileHeader = lineContent && lineContent.startsWith("=== 文件:");
         lineElement.className = isFileHeader ? "file-header filtered-log-line" : "filtered-log-line";
 
-        // 存储原始行号
         lineElement.dataset.originalIndex =
           filteredPanelAllOriginalIndices[index];
         lineElement.dataset.filteredIndex = index;
 
+        lineElement.textContent = lineContent;
 
-        // 🚀 优化：检查是否有任何高亮需求
-        const hasPrimaryKeywords = currentFilter.filterKeywords && currentFilter.filterKeywords.length > 0;
-        const hasSecondaryKeywords = secondaryFilter.isActive && secondaryFilter.filterKeywords.length > 0;
-        const hasSearchKeyword = filteredPanelSearchKeyword && filteredPanelTotalMatchCount > 0; // 保留变量用于搜索跳转逻辑
-        const hasCustomHighlights = customHighlights && customHighlights.length > 0;
-        // 🔧 移除搜索关键词高亮需求（用户不希望搜索关键词被高亮）
-        const anyHighlightNeeded = hasPrimaryKeywords || hasSecondaryKeywords || hasCustomHighlights;
-
-        if (!anyHighlightNeeded) {
-          // 🚀 快速路径：无高亮需求时使用textContent（快50倍，完全避免HTML解析）
-          if (!isFileHeader) {
-            const originalIndex = filteredPanelAllOriginalIndices
-              ? filteredPanelAllOriginalIndices[index]
-              : index;
-            const lineNumber = originalIndex + 1;
-            lineElement.textContent = `${lineNumber} ${lineContent}`;
-          } else {
-            lineElement.textContent = lineContent;
-          }
-        } else {
-          // 🚀 有高亮需求：使用innerHTML（需要HTML转义）
-          let displayText = escapeHtml(lineContent);
-
-          // 添加行号显示（使用原始日志行号）
-          if (!isFileHeader) {
-            const originalIndex = filteredPanelAllOriginalIndices
-              ? filteredPanelAllOriginalIndices[index]
-              : index;
-            const lineNumber = originalIndex + 1;
-            displayText = `<span class="line-number">${lineNumber}</span>${displayText}`;
-          }
-
-          lineElement.innerHTML = displayText;
-        }
-        // 🚀 性能优化：使用transform替代top，启用GPU加速
         lineElement.style.transform = `translateY(${Math.floor(index * filteredPanelLineHeight)}px)`;
 
-        // 高亮当前点击的行
         if (index === lastClickedFilteredIndex) {
           lineElement.classList.add("highlighted");
         }
@@ -3235,8 +3220,6 @@
           lastClickedFilteredTotalCount = -1;
         }
 
-        console.log(`[Click] 记录点击: filteredIndex=${filteredIndex}/${lastClickedFilteredTotalCount}, originalIndex=${originalIndex}`);
-
         // 跳转到原始日志的对应行
         jumpToOriginalLine(originalIndex);
 
@@ -3244,15 +3227,16 @@
         highlightFilteredLine(filteredIndex);
       }
 
+      // Cache last highlighted element to avoid querySelectorAll scan
+      var _lastHighlightedFilterEl = null;
+
       // 高亮过滤面板中的指定行
       function highlightFilteredLine(filteredIndex) {
-        // 移除之前的高亮
-        const existingHighlights = filteredPanelVirtualContent.querySelectorAll(
-          ".filtered-log-line.highlighted, .filtered-log-line.search-match-highlight"
-        );
-        existingHighlights.forEach((line) => {
-          line.classList.remove("highlighted", "search-match-highlight");
-        });
+        // O(1): remove highlight from cached previous element
+        if (_lastHighlightedFilterEl) {
+          _lastHighlightedFilterEl.classList.remove("highlighted");
+          _lastHighlightedFilterEl = null;
+        }
 
         // 如果目标行在可见区域内，直接高亮
         if (
@@ -3264,6 +3248,7 @@
           );
           if (lineElement) {
             lineElement.classList.add("highlighted");
+            _lastHighlightedFilterEl = lineElement;
           }
         } else {
           // 如果目标行不在可见区域内，先滚动到该行
@@ -3288,7 +3273,7 @@
             filteredPanelContent.__fastSmoothWheelCancel();
           }
         } catch (_) {}
-        // 用直接赋值避免“平滑滚动 + 虚拟列表刷新”的弹跳
+        // 用直接赋值避免"平滑滚动 + 虚拟列表刷新"的弹跳
         filteredPanelContent.scrollTop = targetTop;
       }
 
@@ -3391,13 +3376,20 @@
           return;
         }
 
-        // 更新当前永久高亮索引
         if (permanent) {
+          var oldIdx = currentPermanentHighlightIndex;
           currentPermanentHighlightIndex = originalIndex;
-        }
 
-        // 强制刷新可见行以更新高亮状态
-        forceUpdateVisibleLines();
+          // O(1) class swap: remove highlight from old element, add to new
+          if (domPool && domPool.activeElements) {
+            if (oldIdx >= 0) {
+              var oldEl = domPool.activeElements.get(oldIdx);
+              if (oldEl) oldEl.classList.remove("permanent-highlight");
+            }
+            var newEl = domPool.activeElements.get(originalIndex);
+            if (newEl) newEl.classList.add("permanent-highlight");
+          }
+        }
       }
 
       // 🔧 新增：头部高度保护器 - 使用 MutationObserver 持续监听并修复头部高度
@@ -3735,12 +3727,13 @@
           filteredPanelAllLines.length * filteredPanelLineHeight;
         filteredPanelPlaceholder.style.height = totalHeight + "px";
 
-        // 清空虚拟内容
+        // 清空容器
+        if (filteredPanelDomPool) {
+          filteredPanelDomPool.releaseAll();
+        }
         filteredPanelVirtualContent.innerHTML = "";
 
-        // ⚠️ 注意：智能跳转逻辑已移至 finishFiltering() 中处理
-        // 这里的 rememberedOriginalIndex 仅作保留，不在此处执行跳转
-        // 因为 finishFiltering() 会在更新数据后进行正确的跳转
+        // 智能跳转逻辑在 applyFilterWithRipgrepAsync() 中处理
 
         // 重置过滤结果框搜索
         filteredPanelResetSearch();

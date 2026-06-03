@@ -1,18 +1,13 @@
 /**
  * 过滤系统模块
  *
- * 集成了索引加速过滤 + 原有全局函数的兼容层。
- * 当 original-script.js 完全移除后，兼容层方法将被删除。
+ * 兼容层委托给全局函数，当 original-script.js 完全移除后删除。
  */
 
 window.App = window.App || {};
 
 window.App.Filter = (() => {
   'use strict';
-
-  // ── 索引器 ──────────────────────────────────────────────
-  let indexer = null;
-  let useIndex = true;
 
   const currentFilter = {
     keywords: [],
@@ -31,15 +26,7 @@ window.App.Filter = (() => {
     return div.textContent || div.innerText || '';
   }
 
-  function _setUnion(sets) {
-    const union = new Set();
-    for (const set of sets) {
-      for (const item of set) union.add(item);
-    }
-    return union;
-  }
-
-  // ── 线性过滤（降级方案）─────────────────────────────────
+  // ── 线性过滤 ──────────────────────────────────────────
   function linearFilter(filterOptions, lines) {
     const startTime = performance.now();
     const results = [];
@@ -85,75 +72,16 @@ window.App.Filter = (() => {
     return results;
   }
 
-  // ── 回调 ────────────────────────────────────────────────
-  function onIndexProgress(data) {
-    window.dispatchEvent(new CustomEvent('filterIndexProgress', { detail: data }));
-  }
-
-  function onIndexComplete(data) {
-    console.log(`[Filter] Index built: ${data.totalLines} lines in ${data.buildTime.toFixed(2)}ms`);
-    window.dispatchEvent(new CustomEvent('filterIndexComplete', { detail: data }));
-  }
-
   // ── 公共 API ────────────────────────────────────────────
   return {
-    // === 索引相关 ===
     init() {
-      if (window.LogIndexer) {
-        indexer = new LogIndexer({
-          batchSize: 10000, batchDelay: 5, maxCacheLines: 50000,
-          enablePersistence: true, storagePrefix: 'logFilter_',
-        });
-        indexer.on('progress', onIndexProgress);
-        indexer.on('complete', onIndexComplete);
-        indexer.on('error', (e) => console.error('[Filter] Index error:', e));
-        indexer.loadIndex().then(loaded => {
-          if (loaded) console.log('[Filter] Index loaded from storage');
-        });
-      }
       console.log('[Filter] Module ready');
       if (window.App.EventBus) window.App.EventBus.emit('filter:ready');
     },
 
-    buildIndex(lines, forceRebuild = false) {
-      if (!indexer || !useIndex) return;
-      if (!forceRebuild && indexer.state.indexedLines > 0) {
-        const start = indexer.state.totalLines;
-        if (start < lines.length) {
-          indexer.appendLines(lines.slice(start), start);
-          return;
-        }
-      }
-      indexer.buildIndex(lines).catch(e => console.error('[Filter] Build failed:', e));
-    },
-
     async applyFilter(filterOptions, lines = null) {
-      const startTime = performance.now();
       const { keywords = [], logLevels = [], startTime: st = null, endTime: et = null } = filterOptions;
       Object.assign(currentFilter, { keywords, logLevels, startTime: st, endTime: et });
-
-      if (indexer && useIndex) {
-        try {
-          const conditions = {};
-          if (keywords.length > 0) conditions.keyword = keywords.join('|');
-          if (logLevels.length > 0) conditions.level = logLevels[0];
-          if (st && et) { conditions.startTime = st; conditions.endTime = et; }
-
-          let results = await indexer.combineFilters(conditions);
-          if (logLevels.length > 1) {
-            const levelSets = logLevels.map(l => new Set(indexer.filterByLevel(l)));
-            results = results.filter(line => _setUnion(levelSets).has(line));
-          }
-
-          filteredToOriginalIndex = results;
-          filteredLines = results.map(i => lines ? lines[i] : `Line ${i}`);
-          console.log(`[Filter] Indexed: ${results.length} results in ${(performance.now() - startTime).toFixed(2)}ms`);
-          if (window.App.EventBus) window.App.EventBus.emit('filter:applied', { results });
-          return results;
-        } catch (e) {
-          console.warn('[Filter] Indexed filter failed, falling back:', e);
-        }
-      }
 
       if (lines) {
         const results = linearFilter(filterOptions, lines);
@@ -165,8 +93,6 @@ window.App.Filter = (() => {
       return [];
     },
 
-    filterByLevel(level) { return indexer ? indexer.filterByLevel(level) : []; },
-    filterByTimeRange(start, end) { return indexer ? indexer.filterByTimeRange(start, end) : []; },
     getFilterStats() { return { total: filteredToOriginalIndex.length, ...currentFilter }; },
 
     clear() {
@@ -174,10 +100,6 @@ window.App.Filter = (() => {
       filteredLines = [];
       filteredToOriginalIndex = [];
     },
-
-    toggleIndex() { useIndex = !useIndex; return useIndex; },
-    getIndexStats() { return indexer ? indexer.getStats() : null; },
-    clearIndex() { if (indexer) indexer.clear(); },
 
     // === 兼容旧 API（委托给全局函数，original-script.js 移除后删除） ===
     apply(keyword) {

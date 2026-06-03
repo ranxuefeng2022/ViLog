@@ -1009,7 +1009,9 @@
 
   function selectHighlighted() {
     if (highlightedIndex >= 0 && highlightedIndex < currentMatchedItems.length) {
-      toggleKeywordInTextarea(currentMatchedItems[highlightedIndex]);
+      var kw = currentMatchedItems[highlightedIndex];
+      var result = toggleKeywordInTextarea(kw);
+      if (result === 'added') addKeyword(kw);
       var searchInput = getEl('filterHistorySearchInput');
       if (searchInput) searchInput.value = '';
       currentQuery = '';
@@ -1068,6 +1070,16 @@
   function batchAppendToTextarea(kws) {
     var appended = 0;
     for (var i = 0; i < kws.length; i++) { if (appendToTextarea(kws[i])) appended++; }
+    return appended;
+  }
+
+  function batchAppendAndPersist(kws) {
+    var appended = batchAppendToTextarea(kws);
+    if (appended > 0) {
+      renderChips();
+      refreshInTextareaState();
+      addKeywordsFromInput(kws.join('|'));
+    }
     return appended;
   }
 
@@ -1165,12 +1177,13 @@
 
   function showChipMenuToast(msg) {
     var toast = document.createElement('div');
+    toast.className = 'app-toast';
     toast.textContent = msg;
-    toast.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:10002;'
-      + 'background:rgba(0,0,0,0.8);color:#fff;padding:8px 20px;border-radius:20px;font-size:13px;'
-      + 'pointer-events:none;animation:chipToastIn 0.3s ease,chipToastOut 0.3s 1.2s ease forwards;';
     document.body.appendChild(toast);
-    setTimeout(function() { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 1600);
+    setTimeout(function() {
+      toast.style.animation = 'toastOut 0.2s ease forwards';
+      setTimeout(function() { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 200);
+    }, 1200);
   }
 
   function fallbackCopy(text) {
@@ -1314,6 +1327,17 @@
   function doSearch() {
     var searchInput = getEl('filterHistorySearchInput');
     if (searchInput) currentQuery = searchInput.value.trim();
+
+    // 分组模式：使用 combo 搜索替换历史列表
+    if (groupMode) {
+      if (window.App && window.App.IDB && window.App.IDB.searchCombos) {
+        window.App.IDB.searchCombos(currentQuery).then(function(r) {
+          renderGroupList(r && r.success ? r.data : null);
+        });
+      }
+      return;
+    }
+
     var cached = getCachedSearch(currentQuery);
     if (cached) { currentMatchedItems = cached; updateSearchStatus('cache', currentMatchedItems.length, 0); renderSearchResults(); return; }
     initFuzzyMatchWorker();
@@ -1357,34 +1381,50 @@
 
   // ========== 分组模式 ==========
 
-  function renderGroupList() {
+  function renderGroupList(comboData) {
     var historyList = getEl('filterHistoryList');
     var suggestions = getEl('filterHistorySuggestions');
     if (!historyList) return;
     if (suggestions) { suggestions.style.display = ''; suggestions.classList.remove('hidden'); }
     historyList.style.overflowY = 'auto';
     historyList.style.height = getListHeight() + 'px';
+
+    // 当传入 comboData 时直接渲染，否则从 DB 加载全部
+    if (comboData !== undefined) {
+      renderGroupCards(comboData);
+      return;
+    }
     historyList.innerHTML = '<div class="group-empty">加载中...</div>';
     var comboPromise = (window.App && window.App.IDB && window.App.IDB.isReady())
       ? window.App.IDB.loadCombos()
       : Promise.resolve({ success: false });
     comboPromise.then(function(comboResult) {
-      var html = '';
-      if (comboResult && comboResult.success && comboResult.data && comboResult.data.length > 0) {
-        for (var ci = 0; ci < comboResult.data.length; ci++) {
-          var combo = comboResult.data[ci];
-          var cpreview = combo.keywords_original;
-          html += '<div class="group-card group-card-combo" data-keywords="' + escapeHtml(combo.keywords_original) + '" data-combo-sorted="' + escapeHtml(combo.keywords_sorted) + '">'
-            + '<div class="group-card-header">'
-            + '<span class="group-card-name" style="font-weight:400">' + escapeHtml(cpreview) + '</span>'
-            + '<span class="group-card-delete" data-combo-sorted="' + escapeHtml(combo.keywords_sorted) + '">&times;</span>'
-            + '</div></div>';
-        }
-      }
-      if (!html) html = '<div class="group-empty">暂无分组，使用多关键词过滤后自动保存</div>';
-      historyList.innerHTML = html;
-      bindGroupCardEvents();
+      var data = (comboResult && comboResult.success && comboResult.data) ? comboResult.data : [];
+      renderGroupCards(data);
     });
+  }
+
+  function renderGroupCards(data) {
+    var historyList = getEl('filterHistoryList');
+    if (!historyList) return;
+    var html = '';
+    if (data && data.length > 0) {
+      for (var ci = 0; ci < data.length; ci++) {
+        var combo = data[ci];
+        var cpreview = combo.keywords_original;
+        html += '<div class="group-card group-card-combo" data-keywords="' + escapeHtml(combo.keywords_original) + '" data-combo-sorted="' + escapeHtml(combo.keywords_sorted) + '">'
+          + '<div class="group-card-header">'
+          + '<span class="group-card-name" style="font-weight:400">' + escapeHtml(cpreview) + '</span>'
+          + '<span class="group-card-delete" data-combo-sorted="' + escapeHtml(combo.keywords_sorted) + '">&times;</span>'
+          + '</div></div>';
+      }
+    }
+    if (!html) {
+      var q = currentQuery || '';
+      html = q ? '<div class="group-empty">没有匹配的组合</div>' : '<div class="group-empty">暂无分组，使用多关键词过滤后自动保存</div>';
+    }
+    historyList.innerHTML = html;
+    bindGroupCardEvents();
   }
 
   function bindGroupCardEvents() {
@@ -1613,7 +1653,7 @@
         if (hasMulti) {
           var toAppend = [];
           for (var k in selectedIndices) { var ki = parseInt(k); if (ki < currentMatchedItems.length) toAppend.push(currentMatchedItems[ki]); }
-          batchAppendToTextarea(toAppend);
+          batchAppendAndPersist(toAppend);
           selectedIndices = {}; refreshInTextareaState(); refocusSearch();
         } else if (highlightedIndex >= 0) {
           selectHighlighted();
@@ -1621,8 +1661,7 @@
           var rawInput = searchInput.value.trim();
           if (rawInput) {
             var inputParts = rawInput.split(/(?<!\\)\|/).map(function(s) { return s.replace(/\\\|/g, '|').trim(); }).filter(Boolean);
-            var appended = batchAppendToTextarea(inputParts);
-            if (appended > 0) { renderChips(); refreshInTextareaState(); if (e.shiftKey) addKeywordsFromInput(rawInput); }
+            batchAppendAndPersist(inputParts);
             searchInput.value = ''; currentQuery = ''; doSearch(); refocusSearch();
           } else { applyAndClose(); }
         }

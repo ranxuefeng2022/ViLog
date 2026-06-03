@@ -6,9 +6,13 @@
 (function() {
   'use strict';
 
-  // 生产模式日志控制：localStorage 设置 debugMode=true 启用详细日志
+  // 生产模式日志控制：与 console-guard.js 保持一致的检测逻辑
   var isDebug = (function() {
-    try { return localStorage.getItem('debugMode') === 'true'; } catch (e) { return false; }
+    if (window.__isDev) return true;
+    try { if (localStorage.getItem('debugMode') === 'true') return true; } catch (e) {}
+    try { if (localStorage.getItem('enableDebugLog') === 'true') return true; } catch (e) {}
+    try { if (new URLSearchParams(window.location.search).has('debug')) return true; } catch (e) {}
+    return false;
   })();
 
   if (!isDebug) {
@@ -101,11 +105,17 @@ window.App.Constants = {
 
   // 存储键名
   STORAGE_KEYS: {
-    bookmarks: "logtool_bookmarks_v1",
     fileTreeDockedWidth: "aitool.fileTree.dockedWidthPx",
     fileTreeFloatingWidth: "aitool.fileTree.floatingWidthPx",
+    fileTreeFrequentDirs: "aitool.fileTree.frequentDirs",
+    fileTreeStarredDirs: "aitool.fileTree.starredDirs",
     filteredPanel: "filteredPanel.state",
     aiAssistantPanel: "aiAssistantPanel.state"
+  },
+
+  CONFIG_KEYS: {
+    fileTreeStarredDirs: "fileTree.starredDirs",
+    fileTreeFrequentDirs: "fileTree.frequentDirs"
   },
 
   // 文件限制

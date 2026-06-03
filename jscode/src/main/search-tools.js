@@ -263,7 +263,6 @@ ipcMain.handle('call-rg-batch', async (event, options) => {
      */
     function searchFileBatch(batchFiles) {
       return new Promise((resolve) => {
-        // 用 --with-filename 让 rg 输出文件路径前缀
         const args = [
           pattern,
           '--line-number',
@@ -272,10 +271,8 @@ ipcMain.handle('call-rg-batch', async (event, options) => {
           '--color', 'never',
           '-a',
         ];
-        // 🚀 大小写不敏感标志（与 Worker 路径的 toLowerCase 行为一致）
         if (caseInsensitive) args.push('-i');
         args.push('--');
-        // 追加所有文件路径
         for (const f of batchFiles) args.push(f);
 
         const rgProcess = spawn(execPath, args, {
@@ -283,88 +280,60 @@ ipcMain.handle('call-rg-batch', async (event, options) => {
           env: { ...process.env }
         });
 
-        const chunks = [];
-        rgProcess.stdout.on('data', (d) => chunks.push(d));
+        // 流式解析：逐行处理 stdout，避免 Buffer.concat OOM
+        const tempMap = new Map();
+        let tail = '';
+        const MAX_RESULTS = 2000000;
+
+        function parseLine(line) {
+          for (let j = 1; j < line.length - 1; j++) {
+            if (line.charCodeAt(j) !== 0x3A) continue;
+            let numEnd = j + 1;
+            while (numEnd < line.length) {
+              const c = line.charCodeAt(numEnd);
+              if (c >= 0x30 && c <= 0x39) numEnd++;
+              else break;
+            }
+            if (numEnd > j + 1 && (numEnd >= line.length || line.charCodeAt(numEnd) === 0x3A)) {
+              const filePath = line.substring(0, j);
+              let lineNum = 0;
+              for (let k = j + 1; k < numEnd; k++) {
+                lineNum = lineNum * 10 + (line.charCodeAt(k) - 0x30);
+              }
+              const content = includeContent ? line.substring(numEnd + 1) : '';
+              let arr = tempMap.get(filePath);
+              if (!arr) { arr = []; tempMap.set(filePath, arr); }
+              arr.push({ lineNum, content });
+              return;
+            }
+          }
+        }
+
+        let totalResults = 0;
+        rgProcess.stdout.on('data', (chunk) => {
+          const text = chunk.toString('utf8');
+          const lines = text.split('\n');
+          lines[0] = tail + lines[0];
+          tail = lines.pop();
+          for (let i = 0; i < lines.length; i++) {
+            if (totalResults >= MAX_RESULTS) break;
+            if (lines[i].length > 0) {
+              parseLine(lines[i]);
+              totalResults++;
+            }
+          }
+        });
 
         const timeoutHandle = setTimeout(() => {
           rgProcess.kill();
-          resolve([]);
+          finish();
         }, 60000);
 
-        rgProcess.on('close', (code) => {
-          clearTimeout(timeoutHandle);
-          if (code !== 0 && code !== 1) {
-            resolve([]);
-            return;
+        function finish() {
+          if (tail && tail.length > 0 && totalResults < MAX_RESULTS) {
+            parseLine(tail);
+            tail = '';
           }
-
-          const buf = Buffer.concat(chunks);
-
-          // 🚀 解析 "filepath:行号:内容" 格式，按 filepath 分组
-          // 注意：Windows 路径含冒号（如 E:\path\file:123:content）
-          // 需要找到 ":数字:" 模式来定位行号，而非找第一个冒号
-
-          if (buf.length === 0) {
-            resolve([]);
-            return;
-          }
-
-          const tempMap = new Map(); // filePath -> [{lineNum, content}]
-          let lineStart = 0;
-
-          /**
-           * 从一行输出中找到行号分隔符的位置
-           * 查找 ":数字:" 模式，返回 {colonPos, lineNum, nextColon}
-           */
-          function findLineNumSeparator(lineStart, lineEnd) {
-            for (let j = lineStart + 1; j < lineEnd - 1; j++) {
-              if (buf[j] !== 0x3A) continue;
-              let numEnd = j + 1;
-              while (numEnd < lineEnd && buf[numEnd] >= 0x30 && buf[numEnd] <= 0x39) {
-                numEnd++;
-              }
-              if (numEnd > j + 1 && (numEnd >= lineEnd || buf[numEnd] === 0x3A)) {
-                let lineNum = 0;
-                for (let k = j + 1; k < numEnd; k++) {
-                  lineNum = lineNum * 10 + (buf[k] - 0x30);
-                }
-                return { colonPos: j, lineNum: lineNum, nextColon: numEnd };
-              }
-            }
-            return null;
-          }
-
-          for (let i = 0; i < buf.length; i++) {
-            if (buf[i] === 0x0A) { // '\n'
-              const sep = findLineNumSeparator(lineStart, i);
-              if (sep) {
-                const filePath = buf.toString('utf8', lineStart, sep.colonPos);
-                // 🚀 仅在过滤模式下提取行内容，加载模式跳过以减少字符串分配
-                const content = includeContent
-                  ? buf.toString('utf8', sep.nextColon + 1 < i ? sep.nextColon + 1 : i, i)
-                  : '';
-                let arr = tempMap.get(filePath);
-                if (!arr) { arr = []; tempMap.set(filePath, arr); }
-                arr.push({ lineNum: sep.lineNum, content });
-              }
-              lineStart = i + 1;
-            }
-          }
-          // 处理最后一行（无换行符结尾）
-          if (lineStart < buf.length) {
-            const sep = findLineNumSeparator(lineStart, buf.length);
-            if (sep) {
-              const filePath = buf.toString('utf8', lineStart, sep.colonPos);
-              const content = includeContent
-                ? buf.toString('utf8', sep.nextColon + 1 < buf.length ? sep.nextColon + 1 : buf.length, buf.length)
-                : '';
-              let arr = tempMap.get(filePath);
-              if (!arr) { arr = []; tempMap.set(filePath, arr); }
-              arr.push({ lineNum: sep.lineNum, content });
-            }
-          }
-
-          // 转换为结果数组（同时包含行号和行内容）
           const results = [];
           for (const [filePath, entries] of tempMap) {
             const lineNums = new Int32Array(entries.length);
@@ -376,6 +345,15 @@ ipcMain.handle('call-rg-batch', async (event, options) => {
             results.push({ filePath, lineNums, lineContents });
           }
           resolve(results);
+        }
+
+        rgProcess.on('close', (code) => {
+          clearTimeout(timeoutHandle);
+          if (code !== 0 && code !== 1) {
+            resolve([]);
+            return;
+          }
+          finish();
         });
 
         rgProcess.on('error', () => {
@@ -390,16 +368,39 @@ ipcMain.handle('call-rg-batch', async (event, options) => {
     const MAX_ARGS_PER_BATCH = 64;
     const allResults = [];
 
-    // 🚀 并行执行所有批次，充分利用 CPU（rg 内部 mmap + 多线程）
+    // 🚀 P2: 并发限制器 — 最多 4 个 rg 进程同时运行，避免 CPU 颠簸和 I/O 争抢
+    const MAX_CONCURRENT = 4;
     const totalBatches = Math.ceil(files.length / MAX_ARGS_PER_BATCH);
-    const batchPromises = [];
-    for (let batch = 0; batch < totalBatches; batch++) {
-      const startIdx = batch * MAX_ARGS_PER_BATCH;
-      const endIdx = Math.min(startIdx + MAX_ARGS_PER_BATCH, files.length);
-      const batchFiles = files.slice(startIdx, endIdx);
-      batchPromises.push(searchFileBatch(batchFiles));
+
+    async function runWithConcurrencyLimit() {
+      const results = [];
+      let running = 0;
+      let nextBatch = 0;
+
+      return new Promise((resolve) => {
+        function startNext() {
+          while (running < MAX_CONCURRENT && nextBatch < totalBatches) {
+            const batchIdx = nextBatch++;
+            running++;
+            const startIdx = batchIdx * MAX_ARGS_PER_BATCH;
+            const endIdx = Math.min(startIdx + MAX_ARGS_PER_BATCH, files.length);
+            const batchFiles = files.slice(startIdx, endIdx);
+            searchFileBatch(batchFiles).then((batchResult) => {
+              results[batchIdx] = batchResult;
+              running--;
+              if (nextBatch < totalBatches || running > 0) {
+                startNext();
+              } else {
+                resolve(results);
+              }
+            });
+          }
+        }
+        startNext();
+      });
     }
-    const batchResultsArray = await Promise.all(batchPromises);
+
+    const batchResultsArray = await runWithConcurrencyLimit();
     for (const batchResults of batchResultsArray) {
       allResults.push(...batchResults);
     }

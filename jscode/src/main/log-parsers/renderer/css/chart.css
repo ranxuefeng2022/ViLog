@@ -1,0 +1,95 @@
+.chart-overlay {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+.chart-dialog {
+  background: #fff;
+  border-radius: 0;
+  box-shadow: none;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+}
+.chart-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.chart-header { display: flex; align-items: center; padding: 8px 16px; border-bottom: 1px solid rgba(0, 0, 0, 0.06); flex-shrink: 0; gap: 10px; }
+.chart-canvas-wrap { flex: 1; padding: 10px; overflow: hidden; position: relative; }
+.chart-canvas-wrap canvas { width: 100%; height: 100%; display: block; cursor: crosshair; }
+.chart-panel {
+  width: 280px;
+  border-left: 1px solid rgba(0, 0, 0, 0.06);
+  overflow-y: auto;
+  flex-shrink: 0;
+  padding: 8px 0;
+  display: flex;
+  flex-direction: column;
+  background: #FAFAFA;
+}
+.chart-panel::-webkit-scrollbar { width: 3px; }
+.chart-panel::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.08); border-radius: 2px; }
+.chart-p-section { padding: 6px 14px; font-size: 10px; color: #86868B; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; margin-top: 4px; }
+.chart-p-item { display: flex; align-items: center; padding: 6px 14px; gap: 6px; font-size: 12px; color: #1D1D1F; cursor: pointer; transition: background .1s; }
+.chart-p-item:hover { background: rgba(0, 0, 0, 0.03); }
+.chart-p-item input[type=checkbox] { accent-color: #007AFF; cursor: pointer; width: 15px; height: 15px; flex-shrink: 0; border-radius: 4px; }
+.chart-p-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chart-p-val { font-family: "SF Mono", Consolas, monospace; color: #007AFF; font-weight: 500; min-width: 40px; text-align: right; flex-shrink: 0; }
+.chart-p-color { width: 14px; height: 14px; border-radius: 4px; flex-shrink: 0; }
+.chart-color-pick {
+  width: 18px; height: 18px;
+  border: none;
+  border-radius: 50%;
+  padding: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+  background: none;
+  -webkit-appearance: none;
+  box-shadow: inset 0 0 0 1.5px rgba(0, 0, 0, 0.08);
+  transition: transform .15s, box-shadow .15s;
+}
+.chart-color-pick:hover { transform: scale(1.2); box-shadow: inset 0 0 0 1.5px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.12); }
+.chart-color-pick::-webkit-color-swatch-wrapper { padding: 0; }
+.chart-color-pick::-webkit-color-swatch { border: none; border-radius: 50%; }
+.chart-toolbar { display: flex; align-items: center; gap: 8px; }
+.chart-tool-btn {
+  padding: 5px 14px;
+  font-size: 12px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.03);
+  color: #86868B;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  transition: all .15s;
+  font-weight: 400;
+}
+.chart-tool-btn:hover { color: #007AFF; background: #EBF5FF; }
+.chart-close { cursor: pointer; font-size: 18px; color: #C7C7CC; padding: 0 4px; transition: color .15s; }
+.chart-close:hover { color: #FF3B30; }
+
+.range-stats {
+  position: absolute;
+  display: none;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  padding: 14px 18px;
+  font-size: 12px;
+  color: #1D1D1F;
+  z-index: 20;
+  min-width: 240px;
+  pointer-events: none;
+}
+.range-stats-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; color: #007AFF; border-bottom: 1px solid rgba(0, 0, 0, 0.06); padding-bottom: 6px; }
+.range-stats table { width: 100%; border-collapse: collapse; }
+.range-stats th { text-align: left; padding: 3px 8px; font-weight: 600; color: #86868B; white-space: nowrap; font-size: 11px; }
+.range-stats td { padding: 3px 8px; font-family: "SF Mono", Consolas, monospace; white-space: nowrap; }

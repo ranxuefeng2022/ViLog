@@ -4,19 +4,28 @@
  * Loaded as the very first script (Layer 0) to suppress verbose logging.
  * Mirrors the main process pattern in src/main/index.js.
  *
- * Default: production mode (console.log/debug suppressed, info rate-limited)
- * Enable debug: localStorage.setItem('enableDebugLog', 'true') then reload
- * Restore at runtime: window.__restoreConsole()
+ * Enable debug:
+ *   1. localStorage.setItem('enableDebugLog', 'true') then reload
+ *   2. set NODE_ENV=development before starting
+ *   3. Runtime: window.__restoreConsole()
  */
 
 (function() {
   var isDebug = (function() {
+    // 优先级1: preload 注入的开发标志
+    if (window.__isDev) return true;
+    // 优先级2: localStorage 手动设置
     var stored = localStorage.getItem('enableDebugLog');
-    if (stored !== null) return stored === 'true';
-    return new URLSearchParams(window.location.search).has('debug');
+    if (stored === 'true') return true;
+    // 优先级3: URL 参数
+    if (new URLSearchParams(window.location.search).has('debug')) return true;
+    return false;
   })();
 
-  if (isDebug) return;
+  if (isDebug) {
+    console.log('[ConsoleGuard] Debug mode ON — logging enabled');
+    return;
+  }
 
   var _orig = {
     log: console.log.bind(console),

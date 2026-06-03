@@ -13,11 +13,14 @@
 
 const { contextBridge, ipcRenderer } = require('electron');
 
+// Debug 模式：暴露标志给渲染进程
+contextBridge.exposeInMainWorld('__isDev', process.env.NODE_ENV === 'development');
+
 // Valid receive channels for on/removeListener whitelist
 const VALID_RECEIVE_CHANNELS = [
-  'import-file-from-taskbar', 'uart-log-data', 'directory-changed',
+  'import-file-from-taskbar', 'directory-changed',
   'archive-file-extracted', 'keyword-changed', 'extract-progress',
-  'csv-export-progress'
+  'csv-export-progress', 'chunk-index-progress', 'chunk-converted'
 ];
 
 // Invoke channel mapping: { apiMethod: 'ipc-channel-name' }
@@ -25,11 +28,9 @@ const VALID_RECEIVE_CHANNELS = [
 const INVOKE_CHANNELS = {
   // Window management
   createNewWindow: 'create-new-window',
-  openUartLogWindow: 'open-uart-log-window',
   focusWindow: 'focus-window',
   getWindowList: 'get-window-list',
   getWindowPreview: 'get-window-preview',
-  onlineUpdate: 'online-update',
   // File operations
   fileExists: 'file-exists',
   openFileWithDefaultApp: 'open-file-with-default-app',
@@ -38,7 +39,6 @@ const INVOKE_CHANNELS = {
   openWithApp: 'open-with-app',
   openTerminal: 'open-terminal',
   openHtmlWindow: 'open-html-window',
-  downloadRemoteFile: 'download-remote-file',
   readFile: 'read-file',
   readFileStreaming: 'read-file-streaming',
   readFiles: 'read-files',
@@ -80,28 +80,43 @@ const INVOKE_CHANNELS = {
   callRG: 'call-rg',
   callRGBatch: 'call-rg-batch',
   checkToolsStatus: 'check-tools-status',
+  // Chunk file reading (分片模式)
+  buildLineIndex: 'build-line-index',
+  readLinesRange: 'read-lines-range',
+  readFilterTempAsText: 'read-filter-temp-as-text',
+  buildIndexForFiles: 'build-index-for-files',
+  buildIndexFromContent: 'build-index-from-content',
+  extractToChunkTmp: 'extract-to-chunk-tmp',
+  extractToChunkTmpBatch: 'extract-to-chunk-tmp-batch',
+  convertKernelChunkFiles: 'convert-kernel-chunk-files',
+  cleanupChunkTemp: 'cleanup-chunk-temp',
+  writeLinesToFilterTemp: 'write-lines-to-filter-temp',
+  filterChunkStream: 'filter-chunk-stream',
+  readFilterIndices: 'read-filter-indices',
   exportArchiveFilesForRipgrep: 'export-archive-files-for-ripgrep',
+  // Chunk-tmp file listing (for time conversion etc.)
+  listChunkTmpFiles: 'list-chunk-tmp-files',
+  aiShellExec: 'ai-shell-exec',
+  aiSystemExec: 'ai-system-exec',
+  aiFileRead: 'ai-file-read',
+  aiFileWrite: 'ai-file-write',
+  aiGetConfig: 'ai-get-config',
+  aiCheckTools: 'ai-check-tools',
+  aiScanEnv: 'ai-scan-env',
+  // Filter cancellation
+  cancelFilter: 'cancel-filter',
   // Archive filter config
   getArchiveFilterConfig: 'get-archive-filter-config',
   saveArchiveFilterConfig: 'save-archive-filter-config',
   resetArchiveFilterConfig: 'reset-archive-filter-config',
+  // Android time conversion
+  convertAndroidTime: 'convert-android-time',
   // Debug helpers
   openExtractDir: 'open-extract-dir',
   listExtractDirs: 'list-extract-dirs',
   cleanupAllExtractDirs: 'cleanup-all-extract-dirs',
   getDebugLogFiles: 'get-debug-log-files',
   openDebugLogsDir: 'open-debug-logs-dir',
-  // Remote share
-  startLocalShare: 'start-local-share',
-  stopLocalShare: 'stop-local-share',
-  getLocalShareStatus: 'get-local-share-status',
-  connectRemote: 'connect-remote',
-  readRemoteFile: 'read-remote-file',
-  getRemoteTree: 'get-remote-tree',
-  listRemoteArchive: 'list-remote-archive',
-  // Update
-  updateCode: 'update-code',
-  checkUpdateServer: 'check-update-server',
   // Keyword persistence (SQLite)
   keywordLoadAll: 'keyword-load-all',
   keywordUpsertBatch: 'keyword-upsert-batch',
@@ -115,6 +130,12 @@ const INVOKE_CHANNELS = {
   keywordSaveCombo: 'keyword-save-combo',
   keywordLoadCombos: 'keyword-load-combos',
   keywordDeleteCombo: 'keyword-delete-combo',
+  keywordSearchCombos: 'keyword-search-combos',
+  // Config store (通用配置持久化)
+  configGet: 'config-get',
+  configSet: 'config-set',
+  configDelete: 'config-delete',
+  configGetAll: 'config-get-all',
 };
 
 // ===================================================================

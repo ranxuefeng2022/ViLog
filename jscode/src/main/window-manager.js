@@ -5,23 +5,22 @@
  *   - createWindow() — BrowserWindow factory with preload, icon, bounds
  *   - Window control IPC: minimize, maximize, close, resize, setBounds
  *   - Multi-window: createNewWindow, focusWindow, getWindowList, getWindowPreview
- *   - Special windows: vlog-chart, uart-log
+ *   - Special windows: vlog-chart
  *   - createTray() — system tray with window management menu
  *   - Export shared state: windows[], mainWindow, pendingFiles, appIsQuitting
  *
  * IPC channels: window-minimize, window-maximize, window-close, window-is-maximized,
  *   window-resize, window-set-bounds, window-get-bounds, create-new-window,
- *   open-vlog-chart-window, open-uart-log-window, focus-window, get-window-list (12)
+ *   open-vlog-chart-window, focus-window, get-window-list (11)
  *
- * Dependencies: utils (focusWindowSafe), engine (detectPythonCommand)
+ * Dependencies: utils (focusWindowSafe)
  * Used by: index.js (orchestrator), keyword-db (getWindows), file-operations (getWindows)
  */
 
 const path = require('path');
 const fs = require('fs');
-const { BrowserWindow, Menu, Tray, ipcMain, globalShortcut, app } = require('electron');
+const { BrowserWindow, Menu, Tray, ipcMain, app } = require('electron');
 const { focusWindowSafe } = require('./utils');
-const { detectPythonCommand } = require('./engine');
 const projectRoot = path.resolve(__dirname, '..', '..');
 
 // ===================================================================
@@ -34,9 +33,6 @@ let windows = [];
 let windowIdCounter = 0;
 let pendingFiles = [];
 let appIsQuitting = false;
-
-// UART 进程映射：windowId -> ChildProcess
-const uartProcessMap = new Map();
 
 // Delay import for temp-dir-manager to avoid circular deps
 let getRendererTempDirs = () => new Map();
@@ -63,7 +59,7 @@ function createWindow(options = {}) {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: true, // 🚀 启用沙箱模式（安全 + 内存优化）
+      sandbox: false, // 关闭沙箱以允许 --max-old-space-size 生效（已有 contextIsolation 保护）
       webSecurity: false, // 允许加载本地文件
       allowRunningInsecureContent: true,
       preload: path.join(projectRoot, 'preload.js'), // 添加 preload 脚本
@@ -97,7 +93,11 @@ function createWindow(options = {}) {
   // 检查文件是否存在
   if (fs.existsSync(htmlPath)) {
     // 加载 index.html 文件（拆分后的新版本）
-    win.loadFile(htmlPath);
+    if (process.env.NODE_ENV === 'development') {
+      win.loadFile(htmlPath, { query: { debug: '' } });
+    } else {
+      win.loadFile(htmlPath);
+    }
   } else {
     // 如果文件不存在，显示错误页面
     win.loadURL('data:text/html,<h1>错误：找不到 index.html 文件</h1>');
@@ -129,6 +129,31 @@ function createWindow(options = {}) {
         win.webContents.openDevTools();
       }
     }
+  });
+
+  // DevTools 独立窗口始终置顶
+  win.webContents.on('devtools-opened', () => {
+    const applyTop = () => {
+      const allWindows = BrowserWindow.getAllWindows();
+      for (const w of allWindows) {
+        if (!windows.includes(w)) {
+          w.setAlwaysOnTop(true, 'floating');
+          return w;
+        }
+      }
+      return null;
+    };
+    setTimeout(applyTop, 200);
+
+    // 主窗口获得焦点时重新提升 DevTools
+    const onFocus = () => {
+      const dtw = applyTop();
+      if (dtw) dtw.focus();
+    };
+    win.on('focus', onFocus);
+    win.webContents.once('devtools-closed', () => {
+      win.removeListener('focus', onFocus);
+    });
   });
 
   // 监听来自渲染进程的消息
@@ -165,6 +190,32 @@ function createWindow(options = {}) {
       }
     } catch (e) {
       console.error('[cleanup] 清理临时目录失败:', e);
+    }
+    // 清理该窗口关联的分片临时目录
+    try {
+      const rendererId = win.webContents?.id;
+      if (rendererId) {
+        const { cleanupForWindow } = require('./chunk-file-reader');
+        cleanupForWindow(rendererId);
+      }
+    } catch (e) {
+      console.error('[cleanup] 清理分片临时目录失败:', e);
+    }
+    // 清理该窗口关联的 copy-to-temp 临时目录
+    try {
+      const rendererId = win.webContents?.id;
+      if (rendererId) {
+        const { rendererCopyTempDirs } = require('./file-operations');
+        if (rendererCopyTempDirs.has(rendererId)) {
+          const copyTempDir = rendererCopyTempDirs.get(rendererId);
+          if (fs.existsSync(copyTempDir)) {
+            fs.rmSync(copyTempDir, { recursive: true, force: true });
+          }
+          rendererCopyTempDirs.delete(rendererId);
+        }
+      }
+    } catch (e) {
+      console.error('[cleanup] 清理 copy-to-temp 临时目录失败:', e);
     }
   });
 
@@ -426,157 +477,6 @@ function registerIpcHandlers() {
       return { success: true, windowId: win.windowId };
     } catch (error) {
       console.error('打开vlog图表窗口失败:', error);
-      return { success: false, error: error.message };
-    }
-  });
-
-  // 打开串口日志窗口
-  ipcMain.handle('open-uart-log-window', async (event) => {
-    let win;
-    let logWriteStream = null;
-
-    try {
-      win = createWindow({
-        title: '串口日志分析器',
-        width: 1200,
-        height: 800
-      });
-
-      const windowId = win.windowId;
-
-      // 创建日志保存目录和文件
-      const logDir = 'C:\\串口日志';
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').substring(0, 19).replace('T', '_');
-      const logFileName = `uart_log_${timestamp}.txt`;
-      const logFilePath = path.join(logDir, logFileName);
-
-      try {
-        // 确保目录存在
-        if (!fs.existsSync(logDir)) {
-          fs.mkdirSync(logDir, { recursive: true });
-        }
-
-        // 创建写入流
-        logWriteStream = fs.createWriteStream(logFilePath, { flags: 'a', encoding: 'utf8' });
-        console.log('串口日志文件:', logFilePath);
-      } catch (error) {
-        console.error('创建日志文件失败:', error);
-      }
-
-      // 窗口关闭时清理进程和文件流（立即绑定）
-      win.on('closed', () => {
-        // 关闭文件写入流
-        if (logWriteStream) {
-          try {
-            logWriteStream.end();
-            console.log('日志文件已保存:', logFilePath);
-          } catch (e) {
-            console.error('关闭日志文件失败:', e);
-          }
-        }
-
-        // 终止串口进程
-        if (uartProcessMap.has(windowId)) {
-          const process = uartProcessMap.get(windowId);
-          try {
-            process.kill();
-          } catch (e) {
-            console.error('终止串口进程失败:', e);
-          }
-          uartProcessMap.delete(windowId);
-        }
-      });
-
-      // 使用 Promise.race 设置超时，避免永久等待
-      const loadPromise = new Promise((resolve) => {
-        // 检查窗口是否已经加载完成
-        if (!win.webContents.isLoading()) {
-          resolve();
-          return;
-        }
-
-        // 如果还在加载，等待 did-finish-load 事件
-        win.once('did-finish-load', () => {
-          resolve();
-        });
-      });
-
-      // 设置超时保护（3秒）
-      const timeoutPromise = new Promise((resolve) => {
-        setTimeout(() => resolve(), 3000);
-      });
-
-      // 等待任意一个 Promise 完成
-      await Promise.race([loadPromise, timeoutPromise]);
-
-      // 再等待一小段时间确保 JS 初始化完成
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      // 自动启动串口日志接收
-      const { spawn } = require('child_process');
-      const uartScriptPath = 'uart.py'; // 使用相对路径
-
-      // 检查uart.py是否存在
-      const fullUartPath = path.join(projectRoot, uartScriptPath);
-      if (!fs.existsSync(fullUartPath)) {
-        return { windowId, success: false, error: 'uart.py脚本不存在' };
-      }
-
-      // 使用检测到的Python命令
-      const pythonCommand = detectPythonCommand();
-      if (!pythonCommand) {
-        return { windowId, success: false, error: '未找到Python命令' };
-      }
-
-      const uartProcess = spawn(pythonCommand, [uartScriptPath], {
-        cwd: projectRoot,
-        env: { ...process.env },
-        stdio: ['ignore', 'pipe', 'pipe'] // 确保标准输出和错误输出是管道
-      });
-
-      console.log('串口日志进程已启动，PID:', uartProcess.pid);
-
-      // 存储进程引用
-      uartProcessMap.set(windowId, uartProcess);
-
-      // 监听标准输出
-      uartProcess.stdout.on('data', (data) => {
-        const text = data.toString();
-        // 实时将新数据发送到窗口
-        if (!win.isDestroyed()) {
-          win.webContents.send('uart-log-data', text);
-        }
-        // 同时写入文件
-        if (logWriteStream) {
-          logWriteStream.write(text);
-        }
-      });
-
-      // 监听标准错误
-      uartProcess.stderr.on('data', (data) => {
-        const errorText = data.toString();
-        // 将 stderr 也当作日志数据发送
-        if (!win.isDestroyed()) {
-          win.webContents.send('uart-log-data', errorText);
-        }
-        // 同时写入文件
-        if (logWriteStream) {
-          logWriteStream.write(errorText);
-        }
-      });
-
-      uartProcess.on('close', (code) => {
-        console.log(`串口进程退出，代码: ${code}`);
-        uartProcessMap.delete(windowId);
-      });
-
-      uartProcess.on('error', (error) => {
-        console.error('串口进程错误:', error);
-      });
-
-      return { windowId, success: true, message: '串口日志接收已启动' };
-    } catch (error) {
-      console.error('启动串口失败:', error);
       return { success: false, error: error.message };
     }
   });

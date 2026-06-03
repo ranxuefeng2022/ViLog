@@ -46,8 +46,25 @@ function applyBatchHighlight(text, config, lineIndex) {
   // 收集所有需要高亮的范围
   const ranges = [];
 
-  // 1. 🔧 移除搜索关键词高亮（用户不希望搜索关键词被高亮）
-  // 搜索功能仍然正常工作，只是不显示高亮效果
+  // 1. 搜索关键词高亮（仅高亮当前匹配行中的关键词）
+  if (searchKeyword && lineIndex === currentMatchLine) {
+    const lowerText = text.toLowerCase();
+    const lowerKeyword = searchKeyword.toLowerCase();
+    const keywordLen = searchKeyword.length;
+    let pos = 0;
+    while (pos < text.length) {
+      const index = lowerText.indexOf(lowerKeyword, pos);
+      if (index === -1) break;
+      ranges.push({
+        start: index,
+        end: index + keywordLen,
+        type: 'search',
+        priority: 3,
+        isCurrent: true
+      });
+      pos = index + keywordLen;
+    }
+  }
 
   // 2. 自定义高亮范围
   for (let i = 0; i < customHighlights.length; i++) {

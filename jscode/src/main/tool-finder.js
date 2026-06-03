@@ -14,10 +14,12 @@ const projectRoot = path.resolve(__dirname, '..', '..');
  * @returns {string|null} 找到的完整路径，未找到返回 null
  */
 function findToolExecutable(toolName) {
-  const appDir = process.resourcesPath || projectRoot;
+  const resourcesDir = process.resourcesPath;
+  const appDir = (resourcesDir && fs.existsSync(path.join(resourcesDir, toolName))) ? resourcesDir : projectRoot;
   const cwd = process.cwd();
 
   const searchPaths = [
+    path.join(projectRoot, toolName),
     path.join(appDir, 'tools', toolName),
     path.join(appDir, toolName),
     path.join(cwd, 'tools', toolName),

@@ -86,42 +86,42 @@ window.App.Utils = {
    */
   showMessage(msg, duration = 3000) {
     const toast = document.createElement("div");
-    toast.className = "toast-message";
+    toast.className = "app-toast";
     toast.textContent = msg;
-    toast.style.cssText = `
-      position: fixed;
-      top: 80px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(0, 0, 0, 0.8);
-      color: white;
-      padding: 12px 24px;
-      border-radius: 8px;
-      z-index: 100000;
-      animation: fadeInOut 0.3s ease;
-    `;
     document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), duration);
+    setTimeout(() => {
+      toast.style.animation = 'toastOut 0.2s ease forwards';
+      setTimeout(() => toast.remove(), 200);
+    }, duration);
   },
 
   /**
    * 显示进度条
    */
   showProgressBar(percent) {
-    const bar = document.getElementById("progressBar");
-    const fill = document.getElementById("progressFill");
-    if (bar && fill) {
-      bar.style.display = "block";
-      fill.style.width = percent + "%";
+    const fill = document.getElementById("headerProgressFill");
+    if (fill) {
+      fill.classList.remove('complete');
+      var w = Math.min(100, Math.max(0, percent));
+      fill.style.width = w + "%";
+      fill.style.left = (50 - w / 2) + "%";
+      if (!fill.style.background || fill.style.background === '') {
+        var hue = Math.floor(Math.random() * 360);
+        fill.style.background = 'hsl(' + hue + ', 72%, 55%)';
+      }
     }
   },
 
-  /**
-   * 隐藏进度条
-   */
   hideProgressBar() {
-    const bar = document.getElementById("progressBar");
-    if (bar) bar.style.display = "none";
+    var fill = document.getElementById("headerProgressFill");
+    if (fill) {
+      fill.classList.add('complete');
+      fill.style.width = '100%';
+      fill.style.left = '0%';
+    }
+    setTimeout(function() {
+      if (fill) fill.style.background = '';
+    }, 800);
   },
 
   /**

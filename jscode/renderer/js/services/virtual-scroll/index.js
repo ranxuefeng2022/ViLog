@@ -182,6 +182,10 @@ window.App.VirtualScroll = {
     const originalBufferSize = this.config.bufferSize;
 
     this.scrollContainer.addEventListener('scroll', () => {
+      // When domPool is active, the legacy scroll handler manages everything.
+      // Skip all computation here to avoid duplicate work and forced layouts.
+      if (window.domPool) return;
+
       const now = performance.now();
       const currentScrollTop = this.scrollContainer.scrollTop;
 

@@ -4,11 +4,12 @@
 
 const path = require('path');
 const fs = require('fs');
-const { execSync } = require('child_process');
+const { execSync, spawn } = require('child_process');
 const { ipcMain } = require('electron');
 
 const { findFzfExecutable } = require('./tool-finder');
 const projectRoot = path.resolve(__dirname, '..', '..');
+const nativeBinding = path.join(projectRoot, 'better-sqlite3', 'build', 'Release', 'better_sqlite3.node');
 const Database = require(path.join(projectRoot, 'better-sqlite3'));
 
 // Delay import of windows to avoid circular deps
@@ -85,10 +86,30 @@ function getKeywordDB() {
     try { fs.mkdirSync(memDir, { recursive: true }); } catch(e) { console.warn('创建 mem 目录失败:', e); }
   }
 
-  keywordDB = new Database(dbPath);
-  initKeywordDB(keywordDB);
-  console.log('[KeywordDB] 数据库初始化完成（better-sqlite3 WAL 模式）');
-  return keywordDB;
+  try {
+    keywordDB = new Database(dbPath, { nativeBinding });
+    initKeywordDB(keywordDB);
+    console.log('[KeywordDB] 数据库初始化完成（better-sqlite3 WAL 模式）');
+    return keywordDB;
+  } catch (e) {
+    // 数据库文件损坏时，删除并重建
+    if (e.message && e.message.includes('disk image is malformed')) {
+      console.warn('[KeywordDB] 数据库文件损坏，删除重建:', dbPath);
+      try { keywordDB && keywordDB.close(); } catch (_) {}
+      keywordDB = null;
+      clearStmtCache();
+      // 删除损坏的数据库及 WAL/SHM 文件
+      try { fs.unlinkSync(dbPath); } catch (_) {}
+      try { fs.unlinkSync(dbPath + '-wal'); } catch (_) {}
+      try { fs.unlinkSync(dbPath + '-shm'); } catch (_) {}
+      // 重建
+      keywordDB = new Database(dbPath, { nativeBinding });
+      initKeywordDB(keywordDB);
+      console.log('[KeywordDB] 数据库已重建（损坏恢复）');
+      return keywordDB;
+    }
+    throw e;
+  }
 }
 
 // 预编译语句（只编译一次，重复使用，性能最优）
@@ -383,11 +404,11 @@ ipcMain.handle('keyword-save-combo', async (event, combo) => {
       ON CONFLICT(combo_hash) DO UPDATE SET count = count + 1, lastUsed = excluded.lastUsed, keywords_original = excluded.keywords_original`)
       .run(combo.comboHash, combo.keywordsSorted, combo.keywordsOriginal, Date.now());
 
-    // 超过 1000 条时清理最旧的
+    // 超过 10000 条时清理最旧的
     const total = db.prepare('SELECT COUNT(*) as c FROM filter_combos').get().c;
-    if (total > 1000) {
+    if (total > 10000) {
       db.prepare(`DELETE FROM filter_combos WHERE combo_hash NOT IN (
-        SELECT combo_hash FROM filter_combos ORDER BY lastUsed DESC LIMIT 1000
+        SELECT combo_hash FROM filter_combos ORDER BY lastUsed DESC LIMIT 10000
       )`).run();
     }
     return { success: true };
@@ -417,6 +438,33 @@ ipcMain.handle('keyword-delete-combo', async (event, keywordsSorted) => {
     return { success: true };
   } catch (e) {
     console.error('[KeywordDB] 删除关键词组合失败:', e);
+    return { success: false, error: e.message };
+  }
+});
+
+// 模糊搜索关键词组合（用于分组视图的搜索过滤）
+ipcMain.handle('keyword-search-combos', async (event, query) => {
+  try {
+    const db = getKeywordDB();
+    if (!query || !query.trim()) {
+      const combos = db.prepare('SELECT combo_hash, keywords_sorted, keywords_original, count, lastUsed FROM filter_combos ORDER BY lastUsed DESC LIMIT 200').all();
+      return { success: true, data: combos };
+    }
+    // 支持空格分隔的多 token AND 匹配
+    const tokens = query.trim().split(/\s+/).filter(Boolean);
+    const likeClauses = tokens.map(function(t, i) {
+      return '(keywords_sorted LIKE \'%\' || ? || \'%\' OR keywords_original LIKE \'%\' || ? || \'%\')';
+    });
+    const sql = 'SELECT combo_hash, keywords_sorted, keywords_original, count, lastUsed FROM filter_combos WHERE ' +
+      likeClauses.join(' AND ') + ' ORDER BY count DESC, lastUsed DESC LIMIT 200';
+    const params = [];
+    for (var i2 = 0; i2 < tokens.length; i2++) {
+      params.push(tokens[i2], tokens[i2]);
+    }
+    const combos = db.prepare(sql).all(...params);
+    return { success: true, data: combos };
+  } catch (e) {
+    console.error('[KeywordDB] 搜索关键词组合失败:', e);
     return { success: false, error: e.message };
   }
 });

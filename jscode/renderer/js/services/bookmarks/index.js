@@ -38,37 +38,27 @@
         /**
          * 获取一个元素用于显示指定行
          * @param {number} index - 行索引
-         * @param {string} className - CSS类名
+         * @param {string} className - CSS类名（传 null 跳过 className 设置）
          * @returns {HTMLElement} - 池元素
          */
         acquire(index, className) {
-          let element;
-
-          // 如果该索引已有元素，先回收
+          // 已在活跃集合中，直接复用
           if (this.activeElements.has(index)) {
-            return this.activeElements.get(index);
+            const el = this.activeElements.get(index);
+            if (className !== null && el.className !== className) {
+              el.className = className;
+            }
+            return el;
           }
 
           // 从池中获取或创建新元素
-          if (this.pool.length > 0) {
-            element = this.pool.pop();
-          } else {
-            // 池为空时，动态创建新元素
-            element = this._createPoolElement();
-          }
+          const element = this.pool.length > 0 ? this.pool.pop() : this._createPoolElement();
 
-          // 重置元素状态 - 只清除必要的样式
-          element.className = className;
+          if (className !== null) element.className = className;
           element.dataset.index = String(index);
           element.style.display = "block";
-          // 注意：left 和 top 会在 updateVisibleLines 中设置，这里不需要清除
-          // transform 通常不使用，只在特殊情况下（如超大文件占位符）
-          element.style.width = "max-content"; // 让内容宽度自由扩展
-          element.style.minWidth = "100%"; // 最小占满容器宽度
 
-          // 加入活跃集合
           this.activeElements.set(index, element);
-
           return element;
         }
 
@@ -96,14 +86,12 @@
               } catch (e) {}
             }
 
-            // 从 DOM 中移除，避免 display:none 元素无限累积
             if (element.parentElement) {
               element.parentElement.removeChild(element);
             }
 
-            // 清理元素状态
-            element.textContent = "";
-            element.className = "";
+            // acquire() 和 updateVisibleLines() 会覆盖 textContent/className
+            element.style.display = "none";
 
             this.activeElements.delete(index);
             this.pool.push(element);
@@ -301,7 +289,6 @@
       let filteredPanelLineHeight = 19; // 🚀 修复：与CSS .filtered-log-line height一致（CSS默认是19px）
       let filteredPanelBuffer = 20; // 🚀 性能优化：增大缓冲区到20行，流畅滚动，内存增量可忽略（约15KB）
       let filteredPanelScrollRafId = null; // 🚀 滚动事件节流：使用 rAF 避免重复渲染
-      let filteredPanelScrollDebounce = null;
 
       // 🚀 性能优化：缓存屏幕可见行数，避免每次滚动都重复计算
       let cachedScreenVisibleLines = 0;
@@ -334,18 +321,6 @@
 
       // 🚀 优化：为过滤框创建DOM池实例
       let filteredPanelDomPool = null;
-
-      // AI助手相关变量
-      let isAiAssistantVisible = false;
-      let isAiAssistantResizing = false;
-
-      // AI助手面板调整大小相关变量
-      let aiAssistantDragStartX = 0;
-      let aiAssistantDragStartY = 0;
-      let aiAssistantPanelStartX = 0;
-      let aiAssistantPanelStartY = 0;
-      let aiAssistantPanelStartWidth = 0;
-      let aiAssistantPanelStartHeight = 0;
 
       // 使用requestAnimationFrame实现流畅动画
       let animationFrameId = null;
@@ -384,9 +359,6 @@
       // 新增：过滤面板最大化状态
       let isFilterPanelMaximized = false;
 
-      // 新增：AI助手面板最大化状态
-      let isAiAssistantPanelMaximized = false;
-
       // 新增：保存过滤面板滚动位置
       let filteredPanelScrollPosition = 0;
 
@@ -400,12 +372,6 @@
 
       // 新增：过滤面板状态存储
       let filteredPanelState = {
-        isMaximized: false,
-        position: { left: "", top: "", width: "", height: "" },
-      };
-
-      // 新增：AI助手面板状态存储
-      let aiAssistantPanelState = {
         isMaximized: false,
         position: { left: "", top: "", width: "", height: "" },
       };
@@ -522,6 +488,7 @@
       function initQuickLinksPanel() {
         const panel = document.getElementById("quickLinksPanel");
         const contentArea = document.getElementById("quickLinksPanelContent");
+        if (!panel || !contentArea) return; // 面板已从 HTML 移除
         const searchInput = document.getElementById("quickLinksSearch");
 
         // 清空内容区域
@@ -691,6 +658,7 @@
         const panel = document.getElementById("quickLinksPanel");
         const toggleBtn = document.getElementById("toggleQuickLinksBtn");
 
+        if (!panel || !toggleBtn) return;
         if (!panel.contains(e.target) && !toggleBtn.contains(e.target)) {
           panel.classList.remove("visible");
           quickLinksPanelVisible = false;
@@ -792,48 +760,16 @@
         }
       }
 
-      // 打开串口日志窗口
-      function openUartLogWindow() {
-        if (typeof window.electronAPI === 'undefined') {
-          alert('无法打开串口日志窗口：electronAPI 不可用。');
-          return;
-        }
-
-        if (!window.electronAPI.openUartLogWindow) {
-          alert('无法打开串口日志窗口：openUartLogWindow 方法不可用。');
-          return;
-        }
-
-        try {
-          window.electronAPI.openUartLogWindow().then(result => {
-            if (result.success) {
-              showMessage(result.message || '串口日志窗口已打开');
-            } else {
-              showMessage('打开串口日志失败: ' + (result.error || '未知错误'));
-            }
-          }).catch(error => {
-            console.error('打开串口日志窗口失败:', error);
-            alert('打开串口日志窗口失败：' + error.message);
-          });
-        } catch (error) {
-          console.error('Error calling openUartLogWindow:', error);
-          alert('打开串口日志窗口时出错：' + error.message);
-        }
-      }
-
       // 暴露到全局作用域
       window.createNewWindow = createNewWindow;
 
-      // 🚀 暴露驱动器刷新函数到全局作用域
-      window.refreshDrivesIncludeAll = refreshDrivesIncludeAll;
-      window.refreshDrivesDataOnly = refreshDrivesDataOnly;
+      // 🚀 驱动器刷新函数由 08-file-tree.js 定义并暴露到 window
 
       // 虚拟滚动优化：暴露滚动相关函数到全局作用域
       window.jumpToLine = jumpToLine;
       window.scrollToTop = scrollToTop;
       window.scrollToBottom = scrollToBottom;
       window.scrollToSelectedLine = scrollToSelectedLine;
-      window.updateScrollProgress = updateScrollProgress;
 
       // 初始化复制事件处理器 - 智能处理单行和多行选择，保留换行
       function initCopyHandler() {
@@ -1461,8 +1397,25 @@
         // 收集所有需要高亮的范围
         const ranges = [];
 
-        // 1. 🔧 移除搜索关键词高亮（用户不希望搜索关键词被高亮）
-        // 搜索功能仍然正常工作，只是不显示高亮效果
+        // 1. 搜索关键词高亮（仅高亮当前匹配行中的关键词）
+        if (searchKeyword && lineIndex === currentMatchLine) {
+          const lowerText = text.toLowerCase();
+          const lowerKeyword = searchKeyword.toLowerCase();
+          const keywordLen = searchKeyword.length;
+          let pos = 0;
+          while (pos < text.length) {
+            const index = lowerText.indexOf(lowerKeyword, pos);
+            if (index === -1) break;
+            ranges.push({
+              start: index,
+              end: index + keywordLen,
+              type: 'search',
+              priority: 3,
+              isCurrent: true
+            });
+            pos = index + keywordLen;
+          }
+        }
 
         // 2. 自定义高亮范围
         for (let i = 0; i < customHighlights.length; i++) {
@@ -1748,6 +1701,5 @@ window.App.Bookmarks = {
   jumpToLine: window.jumpToLine,
   scrollToTop: window.scrollToTop,
   scrollToBottom: window.scrollToBottom,
-  scrollToSelectedLine: window.scrollToSelectedLine,
-  updateScrollProgress: window.updateScrollProgress
+  scrollToSelectedLine: window.scrollToSelectedLine
 };

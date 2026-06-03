@@ -1,0 +1,155 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "Segoe UI", Arial, sans-serif;
+  background: #F5F5F7;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+.tabs {
+  display: flex;
+  background: rgba(255, 255, 255, 0.72);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  padding: 0 12px;
+  flex-shrink: 0;
+  align-items: center;
+  height: 32px;
+  gap: 0;
+  overflow: visible;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+.toolbar-scroll {
+  display: flex;
+  align-items: center;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0 4px;
+  gap: 6px;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+  scrollbar-width: thin;
+  flex-shrink: 0;
+}
+.drag-spacer {
+  flex: 1;
+  min-width: 20px;
+  -webkit-app-region: drag;
+  app-region: drag;
+}
+.toolbar-scroll::-webkit-scrollbar { height: 2px; }
+.toolbar-scroll::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.12); border-radius: 1px; }
+.tb-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #86868B;
+  background: transparent;
+  transition: all .2s ease;
+  font-family: inherit;
+  white-space: nowrap;
+  flex-shrink: 0;
+  letter-spacing: 0.2px;
+}
+.tb-btn:hover { color: #1D1D1F; background: rgba(0, 0, 0, 0.04); }
+.tb-sep {
+  width: 1px;
+  height: 18px;
+  background: rgba(0, 0, 0, 0.08);
+  flex-shrink: 0;
+  align-self: center;
+  margin: 0 4px;
+}
+.tab-dd { position: relative; flex-shrink: 0; -webkit-app-region: no-drag; app-region: no-drag; }
+.tab-dd-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #86868B;
+  background: transparent;
+  font-family: inherit;
+  white-space: nowrap;
+  font-weight: 500;
+  transition: all .2s ease;
+  letter-spacing: 0.2px;
+}
+.tab-dd-btn:hover { color: #1D1D1F; background: rgba(0, 0, 0, 0.04); }
+.tab-dd-arrow { font-size: 9px; opacity: 0.8; transition: transform .2s ease; }
+.tab-dd.open .tab-dd-arrow { transform: rotate(180deg); }
+.tab-dd-menu {
+  display: none;
+  position: fixed;
+  background: #fff;
+  border: none;
+  border-radius: 10px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.1), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  min-width: 200px;
+  max-height: 320px;
+  overflow-y: auto;
+  z-index: 99999;
+}
+.tab-dd.open .tab-dd-menu { display: block; }
+.tab-dd-menu::-webkit-scrollbar { width: 3px; }
+.tab-dd-menu::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.1); border-radius: 2px; }
+.tab-dd-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 14px;
+  font-size: 13px;
+  color: #1D1D1F;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .15s ease;
+}
+.tab-dd-item:first-child { border-radius: 10px 10px 0 0; }
+.tab-dd-item:last-child { border-radius: 0 0 10px 10px; }
+.tab-dd-item:hover { background: #F5F5F7; }
+.tab-dd-item.active { color: #007AFF; font-weight: 500; background: #EBF5FF; }
+.tab-dd-item .tab-badge {
+  display: inline-block;
+  background: #F5F5F7;
+  color: #86868B;
+  border-radius: 8px;
+  padding: 1px 7px;
+  font-size: 10px;
+  margin-left: 6px;
+  font-weight: 500;
+}
+.tab-dd-item.active .tab-badge { background: #007AFF; color: #fff; }
+.win-ctrls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  padding-left: 4px;
+  padding-right: 8px;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+.win-ctrls button {
+  width: 12px;
+  height: 12px;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 0;
+  display: block;
+  padding: 0;
+  transition: opacity .15s ease;
+}
+.wc-close { background: #FF5F57; }
+.wc-close:hover { opacity: 0.8; }
+.wc-min { background: #FEBC2E; }
+.wc-min:hover { opacity: 0.8; }
+.wc-max { background: #28C840; }
+.wc-max:hover { opacity: 0.8; }

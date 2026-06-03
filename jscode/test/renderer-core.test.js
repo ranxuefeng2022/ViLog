@@ -211,7 +211,6 @@ describe('State', () => {
     assert.ok(Array.isArray(keys));
     assert.ok(keys.includes('originalLines'));
     assert.ok(keys.includes('searchKeyword'));
-    assert.ok(keys.includes('bookmarkedIndexSet'));
     assert.ok(keys.includes('customHighlights'));
   });
 });

@@ -67,7 +67,7 @@ vim.api.nvim_create_autocmd('FileType', {
 function _G.apply_highlight_overrides()
   -- 行号：当前行绿色背景高亮
   vim.api.nvim_set_hl(0, 'LineNr',       { fg = '#3b3f52' })
-  vim.api.nvim_set_hl(0, 'CursorLineNr', { fg = '#1a1b26', bg = '#9ece6a', bold = true })
+  vim.api.nvim_set_hl(0, 'CursorLineNr', { fg = '#e6c384', bold = true })
   vim.api.nvim_set_hl(0, 'CursorLine',   { bg = 'NONE' })
 
   -- 搜索高亮
@@ -81,8 +81,8 @@ function _G.apply_highlight_overrides()
   vim.api.nvim_set_hl(0, 'PmenuThumb',   { bg = '#565f89' })
 
   -- 配对符号高亮（括号/引号）- 与 match-hl.lua 同步
-  vim.api.nvim_set_hl(0, 'MatchPair',   { fg = '#1a1b26', bg = '#e6c384', bold = true })
-  vim.api.nvim_set_hl(0, 'MatchParen',  { fg = '#1a1b26', bg = '#e6c384', bold = true })
+  vim.api.nvim_set_hl(0, 'MatchPair',   { fg = '#e6c384', bold = true })
+  vim.api.nvim_set_hl(0, 'MatchParen',  { fg = '#e6c384', bold = true })
 
   -- 视觉选择区域
   vim.api.nvim_set_hl(0, 'Visual',       { bg = '#28304a' })
@@ -128,6 +128,18 @@ vim.api.nvim_create_autocmd('FileType', {
       end,
     })
     vim.fn.UpdateCurrentFunc()
+  end,
+})
+
+-- 自动修复 CRLF，避免 gitsigns 误标记
+-- gitsigns 用 git diff 对比磁盘文件，所以必须真正写盘
+vim.api.nvim_create_autocmd('BufReadPost', {
+  group = main,
+  callback = function()
+    if vim.bo.modifiable and vim.bo.fileformat == 'dos' then
+      vim.bo.fileformat = 'unix'
+      vim.cmd('silent! write')
+    end
   end,
 })
 

@@ -28,10 +28,9 @@ window.App.State = (() => {
     'selectedOriginalIndex', 'selectedLineIndex',
     'lastClickedOriginalIndex', 'lastClickedFilteredIndex',
     'currentFilter', 'secondaryFilter',
-    'bookmarkedIndexSet',
     'filteredPanelAllLines', 'filteredPanelAllOriginalIndices',
     'filteredPanelAllPrimaryIndices',
-    'filteredPanelVisibleStart', 'filteredPanelVisibleEnd',
+    'filteredPanelVisibleStart', 'filteredPanelVisibleEnd', 'filteredPanelLastHighlightSignature',
     'filteredPanelScrollPosition',
     'customHighlights',
   ];
@@ -77,7 +76,6 @@ window.App.State = (() => {
     isFiltering: false,
     isFirstFilter: true,
     isFilterPanelMaximized: false,
-    isAiAssistantPanelMaximized: false,
     wasFilterPanelVisibleBeforeFocus: false,
     selectedLineIndex: -1,
 
@@ -88,10 +86,6 @@ window.App.State = (() => {
     visibleFileTreeItems: [],
     visibleFileTreeItemsSet: new Set(),
     fileTreeSearchTerm: '',
-
-    // === 书签状态 ===
-    bookmarkedIndexSet: new Set(),
-    bookmarks: [],
 
     // === 其他 ===
     currentFile: null,
@@ -108,13 +102,10 @@ window.App.State = (() => {
     filteredPanelAllPrimaryIndices: [],
     filteredPanelVisibleStart: 0,
     filteredPanelVisibleEnd: 0,
+    filteredPanelLastHighlightSignature: '',
 
     // === 面板状态 ===
     filteredPanelState: {
-      isMaximized: false,
-      position: null,
-    },
-    aiAssistantPanelState: {
       isMaximized: false,
       position: null,
     },

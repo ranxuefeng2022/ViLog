@@ -241,6 +241,23 @@
     return Promise.resolve();
   }
 
+  /**
+   * 模糊搜索关键词组合
+   * @param {string} query - 搜索词（空格分隔多 token AND 匹配）
+   * @returns {Promise<{success: boolean, data: Array}>}
+   */
+  function searchCombos(query) {
+    if (ready && window.electronAPI && window.electronAPI.keywordSearchCombos) {
+      return window.electronAPI.keywordSearchCombos(query).then(function(result) {
+        return result || { success: false };
+      }).catch(function(e) {
+        console.warn('[KeywordStorage] 搜索组合异常:', e);
+        return { success: false };
+      });
+    }
+    return Promise.resolve({ success: false });
+  }
+
   window.App = window.App || {};
   window.App.IDB = {
     init: init,
@@ -258,7 +275,8 @@
     searchKeywordsFzf: searchKeywordsFzf,
     saveCombo: saveCombo,
     loadCombos: loadCombos,
-    deleteCombo: deleteCombo
+    deleteCombo: deleteCombo,
+    searchCombos: searchCombos
   };
 
   console.log('[KeywordStorage] 模块已加载（SQLite 模式）');

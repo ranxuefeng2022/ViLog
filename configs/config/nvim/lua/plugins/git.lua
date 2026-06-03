@@ -14,15 +14,14 @@ return {
           add          = { text = '+', texthl = 'GitSignsAdd' },
           change       = { text = '~', texthl = 'GitSignsChange' },
           delete       = { text = '-', texthl = 'GitSignsDelete' },
-          topdelete    = { text = '▔', texthl = 'GitSignsDelete' },
-          changedelete = { text = '~', texthl = 'GitSignsChange' },
-          untracked    = { text = '*', texthl = 'GitSignsAdd' },
+          topdelete    = { text = '',  texthl = 'GitSignsDelete' },
+          changedelete = { text = '',  texthl = 'GitSignsChange' },
+          untracked    = { text = '',  texthl = 'GitSignsAdd' },
         },
         signcolumn = true,
         numhl = false,
         linehl = false,
         word_diff = false,
-        watch_gitdir = { interval = 1000, follow_files = true },
         current_line_blame = false,
         current_line_blame_opts = {
           virt_text = true,
@@ -30,6 +29,7 @@ return {
           delay = 200,
         },
         preview_config = { border = 'rounded' },
+        watch_gitdir = { interval = 1000, follow_files = true },
         on_attach = function(bufnr)
           local gs = package.loaded.gitsigns
           local function map(mode, l, r, opts)

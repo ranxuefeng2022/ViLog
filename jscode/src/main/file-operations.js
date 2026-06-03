@@ -6,7 +6,7 @@
  *   - File ops: file-exists, open-file-with-default-app, open-path, delete-file, open-with-app
  *   - Directory: list-folder, read-folder, list-directory, get-data-drives
  *   - Search: search-folder (Everything + ripgrep), call-rg-batch
- *   - Special: open-html-window, download-remote-file, open-terminal (WezTerm)
+ *   - Special: open-html-window, open-terminal (WezTerm)
  *   - UI: show-folder-selection-dialog, copy-files-to-temp, resolve-winrar-path
  *   - Misc: get-cwd, get-system-stats, get-dropped-path, get-window-preview
  *   - setupIPC(mainWindow) — parse-large-file (Worker), watch-file/unwatch-file (chokidar)
@@ -26,12 +26,19 @@ const crypto = require('crypto');
 const { execSync, spawn, exec } = require('child_process');
 const { Worker } = require('worker_threads');
 const { ipcMain, app, BrowserWindow, shell, dialog } = require('electron');
-const { extractTextFromBuffer, copyDirRecursive, isArchiveFile, find7z } = require('./utils');
+const { extractTextFromBuffer, copyDirRecursive, copyDirRecursiveAsync, isArchiveFile, find7z } = require('./utils');
 const { find7zExecutable, findEsExecutable } = require('./tool-finder');
 const { MAX_RECENT_DIRS } = require('./constants');
 const { getWindows } = require('./window-manager');
+const { convertKernelFilesInDir } = require('./android-time-converter');
 const chokidar = (() => { try { return require('chokidar'); } catch(e) { return null; } })();
 const projectRoot = path.resolve(__dirname, '..', '..');
+var toolsRoot = projectRoot;
+if (process.resourcesPath && process.resourcesPath !== projectRoot) {
+  if (fs.existsSync(path.join(process.resourcesPath, 'rg.exe'))) {
+    toolsRoot = process.resourcesPath;
+  }
+}
 
 // ===================================================================
 // State
@@ -40,6 +47,7 @@ const projectRoot = path.resolve(__dirname, '..', '..');
 let droppedFilePath = '';
 let recentDirectories = [];
 const fileWatchers = new Map();
+const rendererCopyTempDirs = new Map();
 
 // 记录最近访问的目录
 function addRecentDirectory(dirPath) {
@@ -430,112 +438,6 @@ ipcMain.handle('open-html-window', async (event, filePath) => {
   }
 });
 
-ipcMain.handle('download-remote-file', async (event, remoteUrl, fileName) => {
-  const https = require('https');
-  const http = require('http');
-
-  // 🚀 内部函数：实际执行下载（支持递归重定向）
-  async function downloadFile(url, name, maxRedirects = 5) {
-    if (maxRedirects <= 0) {
-      throw new Error('重定向次数过多');
-    }
-
-    console.log('[下载远程文件] URL:', url);
-    console.log('[下载远程文件] 文件名:', name);
-
-    // 创建临时目录
-    const tempDir = path.join(os.tmpdir(), 'log-viewer-html');
-    if (!fs.existsSync(tempDir)) {
-      fs.mkdirSync(tempDir, { recursive: true });
-    }
-    console.log('[下载远程文件] 临时目录:', tempDir);
-
-    // 生成唯一的临时文件名
-    const timestamp = Date.now();
-    const ext = path.extname(name) || '.html';
-    const baseName = path.basename(name, ext);
-    const tempFileName = `${baseName}-${timestamp}${ext}`;
-    const tempFilePath = path.join(tempDir, tempFileName);
-    console.log('[下载远程文件] 临时文件路径:', tempFilePath);
-
-    return new Promise((resolve, reject) => {
-      const protocol = url.startsWith('https') ? https : http;
-
-      console.log('[下载远程文件] 开始下载...');
-      const request = protocol.get(url, (response) => {
-        // 处理HTTP重定向
-        if (response.statusCode === 301 || response.statusCode === 302 || response.statusCode === 307 || response.statusCode === 308) {
-          const redirectUrl = response.headers.location;
-          console.log('[下载远程文件] 重定向到:', redirectUrl, `(剩余重定向: ${maxRedirects - 1})`);
-
-          // 递归处理重定向
-          downloadFile(redirectUrl, name, maxRedirects - 1)
-            .then(resolve)
-            .catch(reject);
-          return;
-        }
-
-        if (response.statusCode !== 200) {
-          console.error('[下载远程文件] ✗ HTTP错误:', response.statusCode);
-          reject(new Error(`HTTP ${response.statusCode}: ${response.statusMessage}`));
-          return;
-        }
-
-        const fileStream = fs.createWriteStream(tempFilePath);
-        let downloadedBytes = 0;
-
-        response.on('data', (chunk) => {
-          downloadedBytes += chunk.length;
-        });
-
-        response.pipe(fileStream);
-
-        fileStream.on('finish', () => {
-          fileStream.close();
-          console.log('[下载远程文件] ✓ 下载完成, 大小:', downloadedBytes, '字节');
-          resolve({
-            success: true,
-            tempPath: tempFilePath,
-            size: downloadedBytes
-          });
-        });
-
-        fileStream.on('error', (error) => {
-          console.error('[下载远程文件] ✗ 写入文件失败:', error);
-          fs.unlink(tempFilePath, () => {}); // 删除不完整的文件
-          reject(error);
-        });
-      });
-
-      request.on('error', (error) => {
-        console.error('[下载远程文件] ✗ 下载失败:', error);
-        reject(error);
-      });
-
-      request.setTimeout(30000, () => {
-        console.error('[下载远程文件] ✗ 下载超时（30秒）');
-        request.destroy();
-        reject(new Error('下载超时（30秒）'));
-      });
-    });
-  }
-
-  try {
-    console.log('[下载远程文件] ========== 开始处理 ==========');
-    const result = await downloadFile(remoteUrl, fileName);
-    console.log('[下载远程文件] ========== 处理完成 ==========');
-    return result;
-  } catch (error) {
-    console.error('[下载远程文件] ========== 异常 ==========');
-    console.error('[下载远程文件] 错误类型:', error.name);
-    console.error('[下载远程文件] 错误消息:', error.message);
-    console.error('[下载远程文件] 错误堆栈:', error.stack);
-    return {
-      success: false,
-      error: `下载远程文件失败: ${error.message}`
-    };
-  }
-});
 
 ipcMain.handle('open-terminal', async (event, dirPath) => {
   try {
@@ -1216,44 +1118,87 @@ ipcMain.handle('get-data-drives', async (event, options = {}) => {
     const drives = [];
     const platform = process.platform;
 
+    // 获取系统盘符
+    const systemDrive = (process.env.SystemDrive || 'C:').toUpperCase();
+
+    // 检测网络驱动器：使用 PowerShell 获取 DriveType=4 的驱动器
+    const networkDrives = new Set();
+    if (platform === 'win32') {
+      try {
+        const { execSync } = require('child_process');
+        const psCmd = "Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=4' | Select-Object -ExpandProperty DeviceID";
+        const output = execSync(`powershell -NoProfile -Command "${psCmd}"`, { encoding: 'utf8', windowsHide: true });
+        const lines = output.split('\n').map(l => l.trim()).filter(l => l);
+        for (const line of lines) {
+          if (/^[A-Z]:$/i.test(line)) {
+            networkDrives.add(line.toUpperCase());
+          }
+        }
+        console.log('[get-data-drives] 网络驱动器:', [...networkDrives]);
+      } catch (e) {
+        console.log('[get-data-drives] 网络驱动器检测失败（可能无网络驱动器）:', e.message);
+      }
+    }
+
+    // 获取下载路径
+    let downloadsPath = null;
+    try {
+      const { app } = require('electron');
+      downloadsPath = app.getPath('downloads');
+      console.log('[get-data-drives] 下载路径:', downloadsPath);
+    } catch (e) {
+      console.log('[get-data-drives] 获取下载路径失败:', e.message);
+    }
+
     if (platform === 'win32') {
       // 🔧 Windows: 使用 PowerShell 命令获取所有逻辑驱动器
       try {
         const { execSync } = require('child_process');
-        // 使用 PowerShell Get-PSDrive 获取所有驱动器（兼容 Windows 11）
-        // 用单引号包裹正则，避免与外层双引号冲突
         const psCommand = "Get-PSDrive -PSProvider FileSystem | Where-Object {$_.Name -match '^[A-Z]$'} | Select-Object -ExpandProperty Name";
         const output = execSync(`powershell -NoProfile -Command "${psCommand}"`, { encoding: 'utf8', windowsHide: true });
         console.log('[get-data-drives] PowerShell 输出:', output);
 
-        // 解析输出，每行一个驱动器字母
         const lines = output.split('\n').map(line => line.trim()).filter(line => line);
         console.log('[get-data-drives] 解析后的驱动器列表:', lines);
 
         for (const line of lines) {
           const letter = line.toUpperCase();
 
-          // 检查是否是单个字母
           if (/^[A-Z]$/.test(letter)) {
-            // 如果不包含系统盘，跳过 C 盘
-            if (!includeSystemDrive && letter === 'C') {
+            if (!includeSystemDrive && letter === systemDrive.charAt(0)) {
               console.log(`[get-data-drives] 跳过系统盘: ${letter}`);
               continue;
             }
 
             const drivePath = letter + ':';
+
+            try {
+              fs.accessSync(drivePath + '\\', fs.constants.R_OK);
+            } catch (accessErr) {
+              console.log(`[get-data-drives] 跳过不可访问的驱动器: ${letter} (${accessErr.message})`);
+              continue;
+            }
+
+            const driveLetter = drivePath.toUpperCase();
+            let driveType = 'other';
+            if (driveLetter === systemDrive) {
+              driveType = 'system';
+            } else if (networkDrives.has(driveLetter)) {
+              driveType = 'network';
+            }
+
             drives.push({
               name: letter + ':',
               path: drivePath + '\\',
-              label: letter + ' 盘'
+              label: letter + ' 盘',
+              driveType
             });
-            console.log(`[get-data-drives] 添加驱动器: ${letter}`);
+            console.log(`[get-data-drives] 添加驱动器: ${letter} (type: ${driveType})`);
           }
         }
       } catch (e) {
         console.error('[get-data-drives] PowerShell 命令失败，使用回退方法:', e.message);
 
-        // 回退方法：枚举 A-Z 盘
         const possibleDrives = includeSystemDrive
           ? ['C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']
           : ['D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z'];
@@ -1262,17 +1207,24 @@ ipcMain.handle('get-data-drives', async (event, options = {}) => {
           const drivePath = letter + ':';
 
           try {
-            // 只检查驱动器是否存在，不尝试读取（避免权限问题）
             if (fs.existsSync(drivePath)) {
+              const driveLetter = drivePath.toUpperCase();
+              let driveType = 'other';
+              if (driveLetter === systemDrive) {
+                driveType = 'system';
+              } else if (networkDrives.has(driveLetter)) {
+                driveType = 'network';
+              }
+
               drives.push({
                 name: letter + ':',
                 path: drivePath + '\\',
-                label: letter + ' 盘'
+                label: letter + ' 盘',
+                driveType
               });
-              console.log(`[get-data-drives] 回退方法添加驱动器: ${letter}`);
+              console.log(`[get-data-drives] 回退方法添加驱动器: ${letter} (type: ${driveType})`);
             }
           } catch (e2) {
-            // 跳过不可访问的驱动器
             console.log(`[get-data-drives] 跳过不可访问的驱动器: ${letter} (${e2.message})`);
           }
         }
@@ -1292,7 +1244,8 @@ ipcMain.handle('get-data-drives', async (event, options = {}) => {
               drives.push({
                 name: entry.name,
                 path: fullPath,
-                label: entry.name
+                label: entry.name,
+                driveType: 'other'
               });
             }
           }
@@ -1305,11 +1258,11 @@ ipcMain.handle('get-data-drives', async (event, options = {}) => {
     // 按驱动器字母排序
     drives.sort((a, b) => a.name.localeCompare(b.name));
 
-    console.log(`[get-data-drives] 完成，发现 ${drives.length} 个驱动器:`, drives.map(d => d.name));
-    return { success: true, drives };
+    console.log(`[get-data-drives] 完成，发现 ${drives.length} 个驱动器:`, drives.map(d => `${d.name}(${d.driveType})`));
+    return { success: true, drives, downloadsPath };
   } catch (error) {
     console.error('[get-data-drives] 错误:', error);
-    return { success: false, error: error.message, drives: [] };
+    return { success: false, error: error.message, drives: [], downloadsPath: null };
   }
 });
 
@@ -1318,6 +1271,16 @@ ipcMain.handle('list-directory', async (event, dirPath) => {
   try {
     if (!fs.existsSync(dirPath)) {
       return { success: false, error: '目录不存在', items: [] };
+    }
+
+    // 排除压缩包等非目录路径
+    try {
+      const stat = fs.statSync(dirPath);
+      if (!stat.isDirectory()) {
+        return { success: false, error: '不是目录', items: [] };
+      }
+    } catch (_) {
+      return { success: false, error: '无法访问路径', items: [] };
     }
 
     const entries = fs.readdirSync(dirPath, { withFileTypes: true });
@@ -1424,56 +1387,54 @@ ipcMain.handle('show-folder-selection-dialog', async (event, options) => {
 
 
 ipcMain.handle('copy-files-to-temp', async (event, filePaths) => {
-  const os = require('os');
-  const path = require('path');
-  const crypto = require('crypto');
-  const fs = require('fs');
+  const fsp = fs.promises;
 
   try {
-    console.log('📦 开始复制文件到临时目录:', filePaths);
+    console.log('[copy-to-temp] 开始复制文件到临时目录:', filePaths);
 
-    // 创建临时目录
+    const rendererId = event.sender.id;
+
+    if (rendererCopyTempDirs.has(rendererId)) {
+      const oldDir = rendererCopyTempDirs.get(rendererId);
+      try {
+        await fsp.rm(oldDir, { recursive: true, force: true });
+        console.log('[copy-to-temp] 已清理旧临时目录:', oldDir);
+      } catch { /* 忽略清理失败 */ }
+    }
+
     const tempDir = os.tmpdir();
     const tempId = crypto.randomBytes(8).toString('hex');
     const tempSubDir = path.join(tempDir, `logview_winrar_${tempId}`);
 
-    // 确保临时目录存在
-    if (!fs.existsSync(tempSubDir)) {
-      fs.mkdirSync(tempSubDir, { recursive: true });
-    }
+    await fsp.mkdir(tempSubDir, { recursive: true });
 
-    console.log('✅ 临时目录创建成功:', tempSubDir);
+    console.log('[copy-to-temp] 临时目录创建成功:', tempSubDir);
 
-    // 复制文件
+    rendererCopyTempDirs.set(rendererId, tempSubDir);
+
+    // 异步复制文件，不阻塞主进程
     const copiedFiles = [];
     for (const sourcePath of filePaths) {
       try {
-        if (!fs.existsSync(sourcePath)) {
-          console.warn('⚠️ 源文件不存在:', sourcePath);
-          continue;
-        }
-
-        const stats = fs.statSync(sourcePath);
+        const stats = await fsp.stat(sourcePath);
         const fileName = path.basename(sourcePath);
         const targetPath = path.join(tempSubDir, fileName);
 
         if (stats.isFile()) {
-          // 复制文件
-          fs.copyFileSync(sourcePath, targetPath);
+          await fsp.copyFile(sourcePath, targetPath);
           copiedFiles.push(targetPath);
-          console.log(`✅ 已复制文件: ${fileName}`);
+          console.log(`[copy-to-temp] 已复制文件: ${fileName}`);
         } else if (stats.isDirectory()) {
-          // 递归复制目录
-          copyDirectorySync(sourcePath, targetPath);
+          await copyDirRecursiveAsync(sourcePath, targetPath);
           copiedFiles.push(targetPath);
-          console.log(`✅ 已复制目录: ${fileName}`);
+          console.log(`[copy-to-temp] 已复制目录: ${fileName}`);
         }
       } catch (error) {
-        console.error(`❌ 复制失败: ${sourcePath}`, error);
+        console.error(`[copy-to-temp] 复制失败: ${sourcePath}`, error.message);
       }
     }
 
-    console.log(`📦 复制完成: ${copiedFiles.length} 个文件/文件夹`);
+    console.log(`[copy-to-temp] 复制完成: ${copiedFiles.length} 个文件/文件夹`);
 
     return {
       success: true,
@@ -1481,7 +1442,7 @@ ipcMain.handle('copy-files-to-temp', async (event, filePaths) => {
       files: copiedFiles
     };
   } catch (error) {
-    console.error('复制文件到临时目录失败:', error);
+    console.error('[copy-to-temp] 复制文件到临时目录失败:', error);
     return {
       success: false,
       error: error.message
@@ -1912,6 +1873,65 @@ ipcMain.handle('get-dropped-path', async () => {
   }
 });
 
+// Android 时间转换 — Worker 线程并行处理多文件
+ipcMain.handle('convert-android-time', async (event, payload) => {
+  const isBatch = payload && typeof payload === 'object' && Array.isArray(payload.files);
+  const filePaths = isBatch ? payload.files : [payload];
+
+  if (!filePaths.length) return { success: false, error: '没有指定文件' };
+
+  const MAX_SIZE = 500 * 1024 * 1024;
+  const validPaths = [];
+  const failedFiles = [];
+
+  for (const filePath of filePaths) {
+    if (!filePath || typeof filePath !== 'string') continue;
+    if (!fs.existsSync(filePath)) { failedFiles.push({ path: filePath, error: '文件不存在' }); continue; }
+    const st = fs.statSync(filePath);
+    if (!st.isFile()) { failedFiles.push({ path: filePath, error: '路径不是文件' }); continue; }
+    if (st.size > MAX_SIZE) { failedFiles.push({ path: filePath, error: '文件过大' }); continue; }
+    validPaths.push(filePath);
+  }
+
+  if (!validPaths.length) {
+    return { success: true, isBatch, totalFiles: 0, totalConverted: 0, results: [], failedFiles };
+  }
+
+  // Worker 线程并行转换（每文件一个 Worker，全部并行启动）
+  const workerScriptPath = path.join(__dirname, 'android-time-worker.js');
+  const workerPromises = validPaths.map(function(filePath) {
+    return new Promise(function(resolve) {
+      var worker = new Worker(workerScriptPath, { workerData: { filePath: filePath } });
+      worker.on('message', function(result) { resolve({ path: filePath, result: result }); });
+      worker.on('error', function(err) { resolve({ path: filePath, result: { error: err.message } }); });
+    });
+  });
+
+  const workerResults = await Promise.all(workerPromises);
+  const results = [];
+  let totalConverted = 0;
+  let totalFiles = 0;
+
+  for (const wr of workerResults) {
+    if (wr.result.error) {
+      failedFiles.push({ path: wr.path, error: wr.result.error });
+      continue;
+    }
+    results.push({ path: wr.path, ...wr.result });
+    if (wr.result.convertedCount > 0) { totalConverted += wr.result.convertedCount; totalFiles++; }
+    console.log(`[convert-android-time] 转换完成: ${wr.path}, ${wr.result.convertedCount}/${wr.result.totalLines} 行, ${wr.result.anchorCount} 个锚点`);
+  }
+
+  return {
+    success: true,
+    isBatch,
+    totalFiles,
+    totalConverted,
+    results,
+    failedFiles: failedFiles.length ? failedFiles : undefined
+  };
+});
+
 // 获取窗口预览内容
 ipcMain.handle('get-window-preview', async (event, windowId) => {
   const win = getWindows().find(w => w.windowId === windowId);
@@ -1948,6 +1968,372 @@ ipcMain.handle('get-window-preview', async (event, windowId) => {
 // Module registration
 // ===================================================================
 
+// AI 工具调用 — 受限 shell 执行（仅允许操作 mem/ 目录下的临时文件）
+ipcMain.handle('ai-shell-exec', async (event, { tool, args, path: pathOverride }) => {
+  try {
+    var candidateDirs = [
+      path.join(projectRoot, 'mem', 'chunk-tmp', 'wc' + event.sender.id),
+      path.join(projectRoot, 'mem', 'filter-tmp', 'wc' + event.sender.id),
+      path.join(projectRoot, 'mem', 'chunk-tmp'),
+      path.join(projectRoot, 'mem', 'filter-tmp'),
+      path.join(projectRoot, 'mem'),
+    ];
+    if (pathOverride) {
+      var resolved = path.resolve(pathOverride);
+      if (fs.existsSync(resolved)) candidateDirs.unshift(resolved);
+    }
+    var allowedDirs = candidateDirs.filter(function(d) { return fs.existsSync(d); });
+    if (allowedDirs.length === 0) allowedDirs = [projectRoot];
+    const allowedTools = ['rg', 'fd', 'grep', 'awk', 'sed', 'head', 'tail', 'wc', 'cut', 'sort', 'uniq', 'cat', 'tr', 'nl'];
+
+    if (!tool || !allowedTools.includes(tool)) {
+      return { success: false, error: '不允许的工具: ' + tool };
+    }
+
+    var toolPath;
+    if (['rg', 'fd'].includes(tool)) {
+      toolPath = path.join(toolsRoot, tool + '.exe');
+    } else {
+      toolPath = path.join(toolsRoot, 'busybox64.exe');
+      args = [tool].concat(args || []);
+    }
+
+    if (!fs.existsSync(toolPath)) {
+      return { success: false, error: '工具未找到: ' + tool };
+    }
+
+    var finalArgs = (args || []).map(String);
+    // 注入允许的搜索目录（rg/fd/grep 需要路径参数）
+    if (['rg', 'fd', 'grep'].includes(tool)) {
+      var hasPath = finalArgs.some(function(a) {
+        return allowedDirs.some(function(d) { return a.indexOf(d) === 0; });
+      });
+      if (!hasPath) {
+        finalArgs = finalArgs.concat(allowedDirs);
+      }
+    }
+    // 给 head/tail/wc/cat 等添加文件路径前缀
+    if (['head', 'tail', 'wc', 'cat', 'nl', 'awk', 'sed', 'cut', 'sort', 'uniq', 'tr'].includes(tool)) {
+      finalArgs = finalArgs.map(function(a) {
+        if (a.indexOf('/') === 0 || a.indexOf('\\') === 0 || /^[A-Z]:/i.test(a)) {
+          return a; // 绝对路径直接使用
+        }
+        // 相对路径 → 在允许目录中查找
+        for (var di = 0; di < allowedDirs.length; di++) {
+          var candidate = path.join(allowedDirs[di], a);
+          if (fs.existsSync(candidate)) return candidate;
+        }
+        return a;
+      });
+    }
+
+    // 确保 cwd 存在，不存在则用 projectRoot
+    var cwd = allowedDirs[0];
+    if (!fs.existsSync(cwd)) { cwd = projectRoot; }
+    if (!fs.existsSync(cwd)) { cwd = process.cwd(); }
+
+    var result = await new Promise(function(resolve) {
+      var child = spawn(toolPath, finalArgs, {
+        cwd: cwd,
+        timeout: 30000,
+        maxBuffer: 10 * 1024 * 1024,
+        windowsHide: true,
+        shell: false
+      });
+      var stdout = '';
+      var stderr = '';
+      child.stdout.on('data', function(d) { stdout += d.toString(); });
+      child.stderr.on('data', function(d) { stderr += d.toString(); });
+      child.on('close', function(code) {
+        // 截断过长输出
+        var MAX = 50000;
+        if (stdout.length > MAX) stdout = stdout.slice(0, MAX) + '\n...(截断，共 ' + stdout.length + ' 字符)';
+        if (stderr.length > 2000) stderr = stderr.slice(0, 2000);
+        resolve({ success: code === 0 || stdout.length > 0, stdout: stdout, stderr: stderr, exitCode: code });
+      });
+      child.on('error', function(err) {
+        resolve({ success: false, stdout: '', stderr: err.message, exitCode: -1 });
+      });
+    });
+    return result;
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+/**
+ * ai-system-exec — AI Agent 系统级命令执行
+ * 允许在项目根目录及用户目录下执行命令，带危险等级评估
+ * dangerLevel: read(只读) | write(写入) | destructive(破坏性)
+ */
+ipcMain.handle('ai-system-exec', async (event, { tool, args, cwd, dangerLevel }) => {
+  try {
+    var allowedDirs = [
+      projectRoot,
+      path.join(projectRoot, 'mem'),
+      path.join(projectRoot, 'mem', 'chunk-tmp'),
+      path.join(projectRoot, 'mem', 'filter-tmp')
+    ];
+    if (cwd && fs.existsSync(cwd)) {
+      allowedDirs.unshift(cwd);
+      var cwdParent = path.dirname(cwd);
+      if (cwdParent && fs.existsSync(cwdParent) && allowedDirs.indexOf(cwdParent) === -1) {
+        allowedDirs.push(cwdParent);
+      }
+    }
+
+    var toolMap = {
+      ls: 'busybox64.exe', dir: 'busybox64.exe', cat: 'busybox64.exe',
+      powershell: 'powershell', findstr: 'findstr', clip: 'clip',
+      cp: 'busybox64.exe', mv: 'busybox64.exe', rm: 'busybox64.exe',
+      mkdir: 'busybox64.exe', touch: 'busybox64.exe',
+      ps: 'busybox64.exe', echo: 'busybox64.exe', sed: 'busybox64.exe',
+      diff: 'busybox64.exe', find: 'busybox64.exe', uniq: 'busybox64.exe',
+      sort: 'busybox64.exe', head: 'busybox64.exe', tail: 'busybox64.exe',
+      wc: 'busybox64.exe', grep: 'busybox64.exe', awk: 'busybox64.exe',
+      cut: 'busybox64.exe',
+      du: 'busybox64.exe', stat: 'busybox64.exe', tar: 'busybox64.exe',
+      tr: 'busybox64.exe', iconv: 'busybox64.exe', xxd: 'busybox64.exe',
+      sha256sum: 'busybox64.exe', rev: 'busybox64.exe', shuf: 'busybox64.exe',
+      git: 'git', node: 'node', npm: 'npm', code: 'code',
+      curl: 'busybox64.exe', wget: 'busybox64.exe',
+      python: 'python', py: 'python', python3: 'python',
+      open: 'busybox64.exe', tasklist: 'tasklist',
+      rg: path.join(toolsRoot, 'rg.exe'),
+      fd: path.join(toolsRoot, 'fd.exe'),
+      fzf: path.join(toolsRoot, 'fzf.exe'),
+      es: path.join(toolsRoot, 'es.exe'),
+      '7z': path.join(toolsRoot, '7z.exe')
+    };
+
+    var exe = toolMap[tool];
+    if (!exe) return { success: false, error: '不支持的系统工具: ' + tool };
+
+    var finalArgs = (args || []).map(String);
+    var useShell = false;
+    if (exe === 'busybox64.exe') {
+      exe = path.join(toolsRoot, 'busybox64.exe');
+      finalArgs = [tool].concat(finalArgs);
+    } else if (['git', 'node', 'npm', 'code', 'python', 'py', 'python3', 'powershell', 'findstr', 'tasklist', 'clip'].includes(tool)) {
+      useShell = true;
+    } else if (!path.isAbsolute(exe)) {
+      exe = path.join(projectRoot, exe);
+    }
+
+    if (!useShell && !fs.existsSync(exe)) return { success: false, error: '工具未找到: ' + tool };
+
+    var result = await new Promise(function(resolve) {
+      var opts = { cwd: cwd || projectRoot, timeout: 60000, maxBuffer: 20 * 1024 * 1024, windowsHide: true, shell: useShell };
+      var stdout = '', stderr = '';
+      try {
+        var child = spawn(exe, finalArgs, opts);
+        child.stdout.on('data', function(d) { stdout += d.toString(); });
+        child.stderr.on('data', function(d) { stderr += d.toString(); });
+        child.on('close', function(code) {
+          var MAX = 100000;
+          if (stdout.length > MAX) stdout = stdout.slice(0, MAX) + '\n...(截断)';
+          if (stderr.length > 2000) stderr = stderr.slice(0, 2000);
+          resolve({ success: code === 0, stdout: stdout, stderr: stderr, exitCode: code });
+        });
+        child.on('error', function(err) {
+          resolve({ success: false, stdout: '', stderr: err.message, exitCode: -1 });
+        });
+      } catch (e) {
+        resolve({ success: false, stdout: '', stderr: e.message, exitCode: -1 });
+      }
+    });
+    return result;
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+/**
+ * ai-file-read — AI Agent 读取任意文件
+ */
+ipcMain.handle('ai-file-read', async (event, filePath) => {
+  try {
+    if (!filePath || !fs.existsSync(filePath)) return { success: false, error: '文件不存在' };
+    var st = fs.statSync(filePath);
+    if (st.isDirectory()) return { success: false, error: '路径是目录' };
+    if (st.size > 10 * 1024 * 1024) return { success: false, error: '文件过大 (>10MB)' };
+    var content = fs.readFileSync(filePath, 'utf-8');
+    return { success: true, content: content, size: st.size, path: filePath };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+/**
+ * ai-file-write — AI Agent 写入文件（destructive, 需用户确认）
+ */
+ipcMain.handle('ai-file-write', async (event, { filePath, content, backup }) => {
+  try {
+    if (!filePath) return { success: false, error: '未指定文件路径' };
+    if (!path.isAbsolute(filePath)) filePath = path.join(projectRoot, filePath);
+    var dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    // 备份原文件
+    if (backup !== false && fs.existsSync(filePath)) {
+      var bak = filePath + '.ai-bak-' + Date.now();
+      fs.copyFileSync(filePath, bak);
+    }
+    fs.writeFileSync(filePath, content, 'utf-8');
+    console.log('[ai-file-write] 已写入:', filePath, '(' + content.length + ' 字符)');
+    return { success: true, path: filePath, size: content.length };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
+ipcMain.handle('ai-check-tools', async () => {
+  var hasBusybox = fs.existsSync(path.join(toolsRoot, 'busybox64.exe'));
+  var hasEs = fs.existsSync(path.join(toolsRoot, 'es.exe'));
+  var has7z = fs.existsSync(path.join(toolsRoot, '7z.exe'));
+  var available = {};
+  available.rg = fs.existsSync(path.join(toolsRoot, 'rg.exe'));
+  available.fd = fs.existsSync(path.join(toolsRoot, 'fd.exe'));
+  available.grep = hasBusybox;
+  available.awk = hasBusybox;
+  available.sed = hasBusybox;
+  available.head = hasBusybox;
+  available.tail = hasBusybox;
+  available.wc = hasBusybox;
+  available.cut = hasBusybox;
+  available.sort = hasBusybox;
+  available.uniq = hasBusybox;
+  available.cat = hasBusybox;
+  available.ls = hasBusybox;
+  available.cp = hasBusybox;
+  available.mv = hasBusybox;
+  available.rm = hasBusybox;
+  available.mkdir = hasBusybox;
+  available.diff = hasBusybox;
+  available.find = hasBusybox;
+  available.curl = hasBusybox;
+  available.du = hasBusybox;
+  available.stat = hasBusybox;
+  available.tar = hasBusybox;
+  available.tr = hasBusybox;
+  available.iconv = hasBusybox;
+  available.xxd = hasBusybox;
+  available.sha256sum = hasBusybox;
+  available.rev = hasBusybox;
+  available.shuf = hasBusybox;
+  available.es = hasEs;
+  available['7z'] = has7z;
+  available.read = true;
+  available.write = true;
+  available.node = false;
+  available.git = false;
+  try {
+    var nodeCheck = require('child_process').spawnSync('node', ['--version'], { timeout: 5000 });
+    available.node = nodeCheck.status === 0;
+  } catch (e) {}
+  try {
+    var gitCheck = require('child_process').spawnSync('git', ['--version'], { timeout: 5000 });
+    available.git = gitCheck.status === 0;
+  } catch (e) {}
+
+  var toolsPath = path.join(projectRoot, 'mem', 'ai-tools.json');
+  var discovered = {};
+  try {
+    if (fs.existsSync(toolsPath)) {
+      var saved = JSON.parse(fs.readFileSync(toolsPath, 'utf-8'));
+      if (saved.discovered) discovered = saved.discovered;
+    }
+  } catch (e) {}
+
+  available._discovered = discovered;
+  return available;
+});
+
+ipcMain.handle('ai-scan-env', async () => {
+  var cp = require('child_process');
+  var memDir = path.join(projectRoot, 'mem');
+  if (!fs.existsSync(memDir)) fs.mkdirSync(memDir, { recursive: true });
+
+  var SCAN_LIST = [
+    { name: 'node', test: ['--version'] },
+    { name: 'npm', test: ['--version'] },
+    { name: 'npx', test: ['--version'] },
+    { name: 'git', test: ['--version'] },
+    { name: 'python', test: ['--version'] },
+    { name: 'python3', test: ['--version'] },
+    { name: 'pip', test: ['--version'] },
+    { name: 'java', test: ['-version'] },
+    { name: 'go', test: ['version'] },
+    { name: 'rustc', test: ['--version'] },
+    { name: 'cargo', test: ['--version'] },
+    { name: 'dotnet', test: ['--version'] },
+    { name: 'code', test: ['--version'] },
+    { name: 'tasklist', test: ['/?'] },
+    { name: 'systeminfo', test: ['/?'] },
+    { name: 'wmic', test: ['/?'] },
+    { name: 'powershell', test: ['-Command', 'echo ok'] },
+    { name: 'cmd', test: ['/c', 'echo ok'] },
+    { name: 'where', test: ['where'] },
+    { name: 'certutil', test: ['-?'] },
+    { name: 'netstat', test: ['-?'] },
+    { name: 'ping', test: ['-?'] },
+    { name: 'tracert', test: ['-?'] },
+    { name: 'nslookup', test: ['-?'] },
+    { name: 'ipconfig', test: ['/all'] },
+    { name: 'docker', test: ['--version'] },
+    { name: 'wsl', test: ['--version'] },
+    { name: 'code.cmd', test: ['--version'] },
+    { name: 'yarn', test: ['--version'] },
+    { name: 'pnpm', test: ['--version'] },
+    { name: 'bun', test: ['--version'] },
+    { name: 'deno', test: ['--version'] }
+  ];
+
+  var found = {};
+  for (var i = 0; i < SCAN_LIST.length; i++) {
+    var item = SCAN_LIST[i];
+    try {
+      var r = cp.spawnSync(item.name, item.test, { timeout: 8000, windowsHide: true });
+      if (r.status === 0 || (r.stdout && r.stdout.length > 0) || (r.stderr && r.stderr.length > 0)) {
+        var ver = '';
+        if (r.stdout && r.stdout.toString().trim()) ver = r.stdout.toString().trim().split('\n')[0];
+        else if (r.stderr && r.stderr.toString().trim()) ver = r.stderr.toString().trim().split('\n')[0];
+        found[item.name] = { available: true, version: ver };
+      }
+    } catch (e) {}
+  }
+
+  var discovered = [];
+  for (var k in found) {
+    if (found[k].available) discovered.push({ name: k, version: found[k].version || '' });
+  }
+
+  var toolsPath = path.join(memDir, 'ai-tools.json');
+  var existing = {};
+  try {
+    if (fs.existsSync(toolsPath)) existing = JSON.parse(fs.readFileSync(toolsPath, 'utf-8'));
+  } catch (e) {}
+  var discoveredMap = {};
+  for (var d = 0; d < discovered.length; d++) {
+    discoveredMap[discovered[d].name] = discovered[d].version;
+  }
+  existing.discovered = discoveredMap;
+  existing.scanTime = new Date().toISOString();
+  fs.writeFileSync(toolsPath, JSON.stringify(existing, null, 2), 'utf-8');
+
+  return { discovered: discoveredMap, scanTime: existing.scanTime };
+});
+
+ipcMain.handle('ai-get-config', async () => {
+  var configPath = path.join(projectRoot, 'mem', 'ai-config.json');
+  try {
+    if (fs.existsSync(configPath)) {
+      var cfg = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      return cfg;
+    }
+  } catch (e) {}
+  return { baseUrl: 'https://api.deepseek.com/anthropic', authToken: '', model: 'deepseek-v4-flash' };
+});
+
 function registerIpcHandlers() {
   // All IPC handlers are registered at module load time above
 }
@@ -1958,5 +2344,6 @@ module.exports = {
   getRecentDirectories: () => recentDirectories,
   getFileWatchers: () => fileWatchers,
   setupIPC,
-  addRecentDirectory
+  addRecentDirectory,
+  rendererCopyTempDirs
 };

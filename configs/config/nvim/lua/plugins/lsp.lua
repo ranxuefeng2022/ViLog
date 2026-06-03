@@ -1,107 +1,81 @@
--- LSP + Completion: mason, lspconfig, blink.cmp, LuaSnip
+-- LSP + Completion: coc.nvim + LuaSnip
 
 return {
-  -- LSP 基础设施
   {
-    'neovim/nvim-lspconfig',
-    dependencies = { 'saghen/blink.cmp' },
+    'neoclide/coc.nvim',
+    branch = 'release',
     event = { 'BufReadPre', 'BufNewFile' },
     config = function()
-      local capabilities = require('blink.cmp').get_lsp_capabilities()
+      vim.g.coc_global_extensions = {
+        'coc-clangd',
+        'coc-sh',
+        'coc-git',
+      }
 
-      -- clangd
-      vim.lsp.config('clangd', {
-        capabilities = capabilities,
-        cmd = { 'clangd', '--compile-commands-dir=build' },
-        filetypes = { 'c', 'cpp', 'objc', 'objcpp' },
-        root_markers = { 'compile_commands.json', '.git' },
-        on_attach = function(client, _)
-          client.server_capabilities.semanticTokensProvider = nil
-        end,
-      })
+      -- GoTo / hover / rename / action / format / diagnostic
+      local function bufmap(mode, lhs, rhs, desc)
+        vim.keymap.set(mode, lhs, rhs, { silent = true, desc = desc })
+      end
+      bufmap('n', 'gd', '<Plug>(coc-definition)', 'Go to definition')
+      bufmap('n', 'gr', '<Plug>(coc-references)', 'Find references')
+      bufmap('n', 'K', ':call CocAction("doHover")<CR>', 'Hover documentation')
+      bufmap('n', '<leader>rn', '<Plug>(coc-rename)', 'Rename symbol')
+      bufmap('n', '<leader>la', '<Plug>(coc-codeaction-cursor)', 'Code action')
+      bufmap('n', '<leader>lf', ':call CocAction("format")<CR>', 'Format')
+      bufmap('n', '[d', '<Plug>(coc-diagnostic-prev)', 'Previous diagnostic')
+      bufmap('n', ']d', '<Plug>(coc-diagnostic-next)', 'Next diagnostic')
 
-      -- bashls
-      vim.lsp.config('bashls', {
-        capabilities = capabilities,
-        filetypes = { 'sh', 'bash' },
-      })
+      -- Tab / S-Tab / CR 补全导航
+      vim.keymap.set('i', '<Tab>', function()
+        if vim.fn['coc#pum#visible']() == 1 then
+          return vim.fn['coc#pum#next'](1)
+        end
+        return vim.api.nvim_replace_termcodes('<Tab>', true, true, true)
+      end, { expr = true, silent = true })
 
-      vim.lsp.enable('clangd')
-      vim.lsp.enable('bashls')
+      vim.keymap.set('i', '<S-Tab>', function()
+        if vim.fn['coc#pum#visible']() == 1 then
+          return vim.fn['coc#pum#prev'](1)
+        end
+        return vim.api.nvim_replace_termcodes('<S-Tab>', true, true, true)
+      end, { expr = true, silent = true })
 
-      -- LSP keymaps (on LspAttach)
-      vim.api.nvim_create_autocmd('LspAttach', {
-        group = vim.api.nvim_create_augroup('LspKeymaps', { clear = true }),
-        callback = function(ev)
-          local bufmap = function(mode, lhs, rhs, desc)
-            vim.keymap.set(mode, lhs, rhs, { buffer = ev.buf, desc = desc })
-          end
-          bufmap('n', 'gd', vim.lsp.buf.definition, 'Go to definition')
-          bufmap('n', 'gr', vim.lsp.buf.references, 'Find references')
-          bufmap('n', 'K', vim.lsp.buf.hover, 'Hover documentation')
-          bufmap('n', '<leader>rn', vim.lsp.buf.rename, 'Rename symbol')
-          bufmap('n', '<leader>la', vim.lsp.buf.code_action, 'Code action')
-          bufmap('n', '<leader>lf', function() vim.lsp.buf.format({ async = true }) end, 'Format')
-          bufmap('n', '[d', vim.diagnostic.goto_prev, 'Previous diagnostic')
-          bufmap('n', ']d', vim.diagnostic.goto_next, 'Next diagnostic')
-        end,
-      })
+      vim.keymap.set('i', '<CR>', function()
+        if vim.fn['coc#pum#visible']() == 1 then
+          return vim.fn['coc#pum#confirm']()
+        end
+        return vim.api.nvim_replace_termcodes('<CR>', true, true, true)
+      end, { expr = true, silent = true })
+
+      -- C-j / C-k 补全列表上下移动
+      vim.keymap.set('i', '<C-j>', function()
+        if vim.fn['coc#pum#visible']() == 1 then
+          return vim.fn['coc#pum#next'](1)
+        end
+        return vim.api.nvim_replace_termcodes('<C-j>', true, true, true)
+      end, { expr = true, silent = true })
+
+      vim.keymap.set('i', '<C-k>', function()
+        if vim.fn['coc#pum#visible']() == 1 then
+          return vim.fn['coc#pum#prev'](1)
+        end
+        return vim.api.nvim_replace_termcodes('<C-k>', true, true, true)
+      end, { expr = true, silent = true })
+
+      -- C-Space 唤出补全列表
+      vim.keymap.set('i', '<C-Space>', 'coc#refresh()', { expr = true, silent = true })
     end,
   },
-  {
-    'williamboman/mason.nvim',
-    event = { 'BufReadPre', 'BufNewFile' },
-    config = function()
-      require('mason').setup()
-    end,
-  },
-  {
-    'williamboman/mason-lspconfig.nvim',
-    event = { 'BufReadPre', 'BufNewFile' },
-    config = function()
-      require('mason-lspconfig').setup({
-        ensure_installed = { 'clangd', 'bashls' },
-      })
-    end,
-  },
 
-  -- 补全引擎
+  -- Snippets (LuaSnip，自定义片段)
   {
-    'saghen/blink.cmp',
-    version = '1.*',
+    'L3MON4D3/LuaSnip',
+    version = 'v2.*',
     event = 'InsertEnter',
-    dependencies = {
-      { 'L3MON4D3/LuaSnip', version = 'v2.*' },
-      'rafamadriz/friendly-snippets',
-    },
-    opts = {
-      keymap = {
-        ['<Tab>']     = { 'accept', 'snippet_forward', 'fallback' },
-        ['<S-Tab>']   = { 'select_prev', 'snippet_backward', 'fallback' },
-        ['<C-j>']     = { 'select_next', 'fallback' },
-        ['<C-k>']     = { 'select_prev', 'fallback' },
-        ['<CR>']      = { 'accept', 'fallback' },
-        ['<C-Space>'] = { 'show', 'fallback' },
-      },
-      appearance = {
-        use_nvim_cmp_as_default = true,
-        nerd_font_variant = 'mono',
-      },
-      completion = {
-        accept = { auto_brackets = { enabled = false } },
-        documentation = { auto_show = false },
-      },
-      sources = {
-        default = { 'lsp', 'path', 'snippets', 'buffer' },
-      },
-      snippets = { preset = 'luasnip' },
-      fuzzy = { implementation = 'prefer_rust_with_warning' },
-      signature = { enabled = true },
-    },
-    config = function(_, opts)
-      require('luasnip.loaders.from_vscode').lazy_load()
+    config = function()
+      local ls = require('luasnip')
+      ls.setup({})
       require('luasnip.loaders.from_lua').load({ paths = { '~/.config/nvim/lua/snippets' } })
-      require('blink.cmp').setup(opts)
     end,
   },
 }

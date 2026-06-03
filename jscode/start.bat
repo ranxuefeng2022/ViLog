@@ -71,10 +71,10 @@ echo.
 REM === Step 2: Check node_modules ===
 echo [2/3] Checking dependencies...
 
-if exist "%~dp0node_modules\" (
+if exist "%~dp0node_modules\.bin\electron.cmd" (
     echo       node_modules found.
 ) else (
-    echo       node_modules NOT found, running npm install...
+    echo       Dependencies incomplete or missing, running npm install...
     echo.
     cd /d "%~dp0"
     call npm install
@@ -93,6 +93,7 @@ REM === Step 3: Launch app ===
 echo [3/3] Starting LogView...
 echo.
 cd /d "%~dp0"
+set NODE_ENV=development
 call npm start
 if %errorlevel% neq 0 (
     echo.

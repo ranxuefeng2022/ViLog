@@ -34,8 +34,6 @@ window.App = window.App || {};
     fileTree:     () => window.App.FileTree,
     loader:       () => window.App.LogLoader,
     ui:           () => window.App.UI,
-    quickLinks:   () => window.App.QuickLinks,
-    remoteShare:  () => window.App.RemoteShare,
     contextMenu:  () => window.App.ContextMenu,
     keywordHistory: () => window.App.FilterKeywordHistory,
   };
@@ -71,7 +69,7 @@ window.App = window.App || {};
     // 3. 初始化服务模块
     const modules = [
       'Filter', 'Search', 'LogRenderer', 'FileTree',
-      'LogLoader', 'UI', 'ContextMenu', 'QuickLinks', 'RemoteShare'
+      'LogLoader', 'UI', 'ContextMenu', 'DynamicIsland'
     ];
 
     for (const name of modules) {

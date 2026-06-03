@@ -11,10 +11,7 @@ const BINARY_EXTENSIONS = [
 ];
 
 /** 压缩包扩展名（用于判断是否是归档文件） */
-const ARCHIVE_EXTENSIONS = ['.zip', '.7z', '.tar', '.gz', '.tgz', '.rar', '.bz2', '.xz'];
-
-/** 服务端端口 */
-const ENGINE_PORT = 8082;
+const ARCHIVE_EXTENSIONS = ['.zip', '.7z', '.tar', '.gz', '.tgz', '.rar', '.bz2', '.xz', '.muxz'];
 
 /** 日志文件最大大小 (10MB) */
 const LOG_MAX_SIZE = 10 * 1024 * 1024;
@@ -31,7 +28,6 @@ const MAX_EXTRACT_SIZE = 50 * 1024 * 1024;
 module.exports = {
   BINARY_EXTENSIONS,
   ARCHIVE_EXTENSIONS,
-  ENGINE_PORT,
   LOG_MAX_SIZE,
   LOG_STAT_CHECK_INTERVAL,
   MAX_RECENT_DIRS,

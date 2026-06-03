@@ -1,18 +1,13 @@
 /**
  * 搜索系统模块
  *
- * 集成了索引加速搜索 + 原有全局函数的兼容层。
- * 当 original-script.js 完全移除后，兼容层方法将被删除。
+ * 兼容层委托给全局函数，当 original-script.js 完全移除后删除。
  */
 
 window.App = window.App || {};
 
 window.App.Search = (() => {
   'use strict';
-
-  // ── 索引器 ──────────────────────────────────────────────
-  let indexer = null;
-  let useIndex = true;
 
   let currentKeyword = '';
   let searchResults = [];
@@ -48,45 +43,11 @@ window.App.Search = (() => {
     return results;
   }
 
-  // ── 回调 ────────────────────────────────────────────────
-  function onIndexProgress(data) {
-    window.dispatchEvent(new CustomEvent('searchIndexProgress', { detail: data }));
-  }
-  function onIndexComplete(data) {
-    console.log(`[Search] Index built: ${data.totalLines} lines in ${data.buildTime.toFixed(2)}ms`);
-    window.dispatchEvent(new CustomEvent('searchIndexComplete', { detail: data }));
-  }
-
   // ── 公共 API ────────────────────────────────────────────
   return {
-    // === 索引相关 ===
     init() {
-      if (window.LogIndexer) {
-        indexer = new LogIndexer({
-          batchSize: 10000, batchDelay: 5, maxCacheLines: 50000,
-          enablePersistence: true, storagePrefix: 'logSearch_',
-        });
-        indexer.on('progress', onIndexProgress);
-        indexer.on('complete', onIndexComplete);
-        indexer.on('error', (e) => console.error('[Search] Index error:', e));
-        indexer.loadIndex().then(loaded => {
-          if (loaded) console.log('[Search] Index loaded from storage');
-        });
-      }
       console.log('[Search] Module ready');
       if (window.App.EventBus) window.App.EventBus.emit('search:ready');
-    },
-
-    buildIndex(lines, forceRebuild = false) {
-      if (!indexer || !useIndex) return;
-      if (!forceRebuild && indexer.state.indexedLines > 0) {
-        const start = indexer.state.totalLines;
-        if (start < lines.length) {
-          indexer.appendLines(lines.slice(start), start);
-          return;
-        }
-      }
-      indexer.buildIndex(lines).catch(e => console.error('[Search] Build failed:', e));
     },
 
     async search(keyword, lines = null) {
@@ -96,29 +57,18 @@ window.App.Search = (() => {
       }
       currentKeyword = keyword;
 
-      if (indexer && useIndex) {
-        try {
-          const results = await indexer.search(keyword);
-          searchResults = results;
-          currentMatchIndex = results.length > 0 ? 0 : -1;
-          if (window.App.EventBus) window.App.EventBus.emit('search:performed', { keyword, results });
-          return results;
-        } catch (e) {
-          console.warn('[Search] Indexed search failed, falling back:', e);
-        }
-      }
       if (lines) return linearSearch(keyword, lines);
       return [];
     },
 
     nextMatch() {
       if (searchResults.length === 0) return -1;
-      currentMatchIndex = (currentMatchIndex + 1) % searchResults.length;
+      if (currentMatchIndex < searchResults.length - 1) currentMatchIndex++;
       return searchResults[currentMatchIndex];
     },
     prevMatch() {
       if (searchResults.length === 0) return -1;
-      currentMatchIndex = (currentMatchIndex - 1 + searchResults.length) % searchResults.length;
+      if (currentMatchIndex > 0) currentMatchIndex--;
       return searchResults[currentMatchIndex];
     },
     jumpToMatch(idx) {
@@ -131,9 +81,6 @@ window.App.Search = (() => {
       return { index: currentMatchIndex, total: searchResults.length, lineNumber: searchResults[currentMatchIndex] };
     },
     clear() { currentKeyword = ''; searchResults = []; currentMatchIndex = -1; },
-    toggleIndex() { useIndex = !useIndex; return useIndex; },
-    getIndexStats() { return indexer ? indexer.getStats() : null; },
-    clearIndex() { if (indexer) indexer.clear(); },
 
     // === 兼容旧 API（委托给全局函数） ===
     perform(keyword) { if (typeof window.performSearch === 'function') window.performSearch(keyword); },

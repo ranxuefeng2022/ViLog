@@ -43,6 +43,28 @@
       }
 
       /** 为指定 hierarchy index 创建完整的 DOM 元素 */
+
+      // 文件树简约 SVG 图标（14×14，纯色几何形状，告别 emoji 混乱）
+      var _FT_SVG = {
+        folder: '<svg width="14" height="14" viewBox="0 0 16 16"><path d="M2 5h5l2-2h5v10H2z" fill="#82AFCB"/></svg>',
+        folderOpen: '<svg width="14" height="14" viewBox="0 0 16 16"><path d="M2 5h5l2-2h5v10H2z" fill="#5D9ABF"/></svg>',
+        drive: '<svg width="14" height="14" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="2" fill="#7B8FA3"/></svg>',
+        frequentDir: '<svg width="14" height="14" viewBox="0 0 16 16"><path d="M8 1l2.2 4.5 4.8.7-3.5 3.4.8 4.9L8 12l-4.3 2.5.8-4.9L1 6.2l4.8-.7z" fill="#E8A838"/></svg>',
+        starredDir: '<svg width="14" height="14" viewBox="0 0 16 16"><path d="M8 1l2.2 4.5 4.8.7-3.5 3.4.8 4.9L8 12l-4.3 2.5.8-4.9L1 6.2l4.8-.7z" fill="#0071E3"/></svg>',
+        archive: '<svg width="14" height="14" viewBox="0 0 16 16"><rect x="3" y="2" width="10" height="12" rx="1.5" fill="#9B7EC8"/><rect x="6.5" y="6" width="3" height="2" rx=".5" fill="#BDAEE0"/></svg>',
+        file: '<svg width="14" height="14" viewBox="0 0 16 16"><path d="M4 2h5l3 3v9H4z" fill="#B8C2CC"/><path d="M9 2v3h3" fill="#A0AAB4"/></svg>',
+        fileDoc: '<svg width="14" height="14" viewBox="0 0 16 16"><path d="M4 2h5l3 3v9H4z" fill="#7BAED0"/><path d="M9 2v3h3" fill="#6898B8"/></svg>',
+        fileCode: '<svg width="14" height="14" viewBox="0 0 16 16"><path d="M4 2h5l3 3v9H4z" fill="#8BBF9E"/><path d="M9 2v3h3" fill="#78A88A"/></svg>',
+        fileData: '<svg width="14" height="14" viewBox="0 0 16 16"><path d="M4 2h5l3 3v9H4z" fill="#C4B87A"/><path d="M9 2v3h3" fill="#ADA46A"/></svg>',
+      };
+      // 文件扩展名 → 图标映射（同一文档形状，不同颜色区分类型）
+      var _FT_FILE_ICON_MAP = new Map([
+        ['.log', 'fileDoc'], ['.txt', 'fileDoc'], ['.md', 'fileDoc'],
+        ['.json', 'fileData'], ['.csv', 'fileData'], ['.xml', 'fileData'], ['.db', 'fileData'],
+        ['.js', 'fileCode'], ['.py', 'fileCode'], ['.java', 'fileCode'],
+        ['.c', 'fileCode'], ['.cpp', 'fileCode'], ['.h', 'fileCode'],
+        ['.html', 'fileCode'], ['.css', 'fileCode'], ['.sh', 'fileCode'], ['.bat', 'fileCode'],
+      ]);
       function _fileTreeCreateElement(index, selectedIndexSet, matchedIndexSet) {
         const item = fileTreeHierarchy[index];
         if (!item) return null;
@@ -97,13 +119,16 @@
           const showToggle = item.lazyLoad ? (item.hasChildren || item.childrenLoaded) : true;
           const toggleClass = item.expanded ? "expanded" : "";
           const toggleStyle = !showToggle ? 'style="visibility:hidden"' : "";
+          const folderIcon = item.expanded ? _FT_SVG.folderOpen : _FT_SVG.folder;
           const loadingMark = item.loadingChildren
             ? '<span style="margin-left:6px;opacity:.6;">加载中…</span>' : "";
           element.innerHTML =
             indentGuidesHtml +
-            `<span class="file-tree-toggle ${toggleClass}" ${toggleStyle} aria-hidden="true"></span>` +
-            `<span class="icon"></span><span class="file-tree-name">${escapeHtml(item.name)}</span>` +
+            `<span class="file-tree-toggle ${toggleClass}" ${toggleStyle}></span>` +
+            `<span class="icon">${folderIcon}</span><span class="file-tree-name">${escapeHtml(item.name)}</span>` +
             loadingMark;
+        } else if (item.type === "drive-category") {
+          element.classList.add("file-tree-category");
         } else if (item.type === "drive") {
           element.classList.add(
             item.expanded ? "file-tree-folder-expanded" : "file-tree-folder-collapsed"
@@ -111,10 +136,11 @@
           const toggleClass = item.expanded ? "expanded" : "";
           const loadingMark = item.loadingChildren
             ? '<span style="margin-left:6px;opacity:.6;">加载中…</span>' : "";
+          const driveIcon = item.isStarredDir ? _FT_SVG.starredDir : item.isFrequentDir ? _FT_SVG.frequentDir : item.isDownloads ? _FT_SVG.folder : _FT_SVG.drive;
           element.innerHTML =
             indentGuidesHtml +
-            `<span class="file-tree-toggle ${toggleClass}" aria-hidden="true"></span>` +
-            `<span class="icon">💽</span><span class="file-tree-name">${escapeHtml(item.name)}</span>` +
+            `<span class="file-tree-toggle ${toggleClass}"></span>` +
+            `<span class="icon">${driveIcon}</span><span class="file-tree-name">${escapeHtml(item.name)}</span>` +
             loadingMark;
         } else if (item.isArchive) {
           let isExpanded;
@@ -127,16 +153,19 @@
             ? '<span style="margin-left:6px;opacity:.6;">加载中…</span>' : "";
           element.innerHTML =
             indentGuidesHtml +
-            `<span class="file-tree-toggle ${isExpanded ? "expanded" : ""}" aria-hidden="true"></span>` +
-            `<span class="icon">📦</span><span class="file-tree-name">${escapeHtml(item.name)}</span>` +
+            `<span class="file-tree-toggle ${isExpanded ? "expanded" : ""}"></span>` +
+            `<span class="icon">${_FT_SVG.archive}</span><span class="file-tree-name">${escapeHtml(item.name)}</span>` +
             (item.fileCount ? `<span class="file-count">(${item.fileCount} 个文件)</span>` : "") +
             loadingMark;
         } else {
-          // 普通文件
           const nameLower = item.name.toLowerCase();
           const dotIdx = nameLower.lastIndexOf('.');
-          const icon = dotIdx > -1 ? (FILE_TREE_ICON_MAP.get(nameLower.slice(dotIdx)) || "📄") : "📄";
-          element.innerHTML = indentGuidesHtml + `<span class="icon">${icon}</span><span class="file-tree-name">${escapeHtml(item.name)}</span>`;
+          const ext = dotIdx > -1 ? nameLower.slice(dotIdx) : '';
+          const iconKey = ext ? (_FT_FILE_ICON_MAP.get(ext) || 'file') : 'file';
+          element.innerHTML =
+            indentGuidesHtml +
+            '<span class="file-tree-spacer"></span>' +
+            `<span class="icon">${_FT_SVG[iconKey]}</span><span class="file-tree-name">${escapeHtml(item.name)}</span>`;
         }
 
         _ftActive.set(index, element);
@@ -183,6 +212,22 @@
           rebuildFileTreeVisibleCache();
           renderFileTreeViewport(true);
         });
+      }
+
+      // 选中索引偏移：当 fileTreeHierarchy 插入/删除节点时，同步更新 selectedFiles 的 index
+      function shiftSelectedIndices(fromIndex, delta) {
+        if (!Array.isArray(selectedFiles) || selectedFiles.length === 0) return;
+        for (var i = 0; i < selectedFiles.length; i++) {
+          var f = selectedFiles[i];
+          var idx = (typeof f === 'object' && f !== null) ? f.index : f;
+          if (typeof idx === 'number' && idx >= fromIndex) {
+            if (typeof f === 'object' && f !== null) {
+              f.index = idx + delta;
+            } else {
+              selectedFiles[i] = idx + delta;
+            }
+          }
+        }
       }
 
       // 开始调整文件树宽度 - 优化：使用requestAnimationFrame实现流畅调整
@@ -234,6 +279,8 @@
         fileTreeResizeAnimationFrame = requestAnimationFrame(() => {
           outer.style.left = newWidth + "px";
           hScroll.style.left = newWidth + "px";
+          var _cpbResize = document.getElementById('chunkProgressBar');
+          if (_cpbResize) _cpbResize.style.left = newWidth + "px";
 
           // 文件树可见时：确保日志框左外边距为 0，避免边沿露缝
           document.documentElement.style.setProperty(
@@ -289,6 +336,8 @@
 
       // 文件树鼠标按下事件 - 优化：减少残影
       async function handleFileTreeMouseDown(e) {
+        // Ctrl+左键用于多选文件（不拦截，交由下方选择逻辑处理）
+
         const item = e.target.closest(".file-tree-item");
         if (!item) {
           console.log(`[mousedown] 未找到 file-tree-item，target=`, e.target);
@@ -307,47 +356,36 @@
           return;
         }
 
-        console.log(`[mousedown] index=${index}, type=${treeItem.type}, button=${e.button}, ctrlKey=${e.ctrlKey}, isArchive=${treeItem.isArchive}, isLocalDrive=${treeItem.isLocalDrive}`);
-
-        // 🔍 调试：输出 treeItem 的属性
-        if (treeItem.type === 'folder') {
-          console.log(`[mousedown] 文件夹点击: name=${treeItem.name}, type=${treeItem.type}, isArchive=${treeItem.isArchive}, isArchiveChild=${treeItem.isArchiveChild}, isLocalDrive=${treeItem.isLocalDrive}, isRemote=${treeItem.isRemote}`);
-        }
-
-        // 🚀 处理服务端压缩包/拖拽压缩包展开/折叠（右键点击时不处理）
-        // 🔧 优先处理：已在 archiveData 中的压缩包（拖拽的）或服务端压缩包
-        // 条件：是压缩包 AND (是服务端 OR 已在内存中 OR 新远程目录功能中的压缩包)
-        console.log(`[mousedown] 检查 isArchive && button!==2: isArchive=${treeItem.isArchive}, type=${treeItem.type}, button=${e.button}`);
         const isArchive = treeItem.isArchive || treeItem.type === 'archive';
         const isInArchiveData = treeItem.archiveName && archiveData.has(treeItem.archiveName);
         const isDirectRemoteArchive = treeItem.type === 'archive' && treeItem.remoteId && treeItem.isRemote;
 
+        // 🔍 统一诊断日志：输出所有关键属性
+        console.log(`[mousedown] 🖱️ name="${treeItem.name}", type=${treeItem.type}, idx=${index}, btn=${e.button}, ` +
+          `isArchive=${treeItem.isArchive}, isArchiveChild=${!!treeItem.isArchiveChild}, ` +
+          `isLocalDrive=${treeItem.isLocalDrive}, isRemote=${!!treeItem.isRemote}, ` +
+          `isNestedArchive=${!!treeItem.isNestedArchive}, expanded=${treeItem.expanded}, ` +
+          `childrenLoaded=${treeItem.childrenLoaded}, loadingChildren=${treeItem.loadingChildren}, ` +
+          `isInArchiveData=${!!isInArchiveData}`);
+
+        // 🚀 处理服务端压缩包/拖拽压缩包展开/折叠
         if (isArchive && e.button !== 2) {
           const shouldUseRemoteHandler = treeItem.isRemote || isInArchiveData || isDirectRemoteArchive;
 
           if (shouldUseRemoteHandler) {
             e.preventDefault();
             e.stopPropagation();
-            const handlerType = isDirectRemoteArchive ? '新远程目录' : (treeItem.isRemote ? '服务端' : (isInArchiveData ? '拖拽' : '未知'));
-            console.log(`[mousedown] 处理${handlerType}压缩包点击: ${treeItem.name}, isInArchiveData=${isInArchiveData}, isRemote=${treeItem.isRemote}, isNestedArchive=${treeItem.isNestedArchive}`);
-
-            // 🚀 新远程目录功能中的压缩包
+            console.log(`[mousedown] ✅ 远程/拖拽压缩包: ${treeItem.name}`);
             if (isDirectRemoteArchive) {
-              // 先切换展开状态
               treeItem.expanded = !treeItem.expanded;
-
-              // 如果展开且未加载子项，则加载
               if (treeItem.expanded && !treeItem.childrenLoaded) {
                 await loadRemoteArchiveChildren(index);
               } else {
-                // 只是切换展开/折叠状态，重新渲染
                 rebuildFileTreeVisibleCache();
                 renderFileTreeViewport(true);
               }
               return;
             }
-
-            // 🚀 检查是否是嵌套压缩包
             if (treeItem.isNestedArchive) {
               await loadNestedArchiveChildren(index);
             } else {
@@ -357,79 +395,70 @@
           }
         }
 
-        // 🚀 处理本地压缩包展开/折叠（右键点击时不处理）
-        // 🔧 本地磁盘上的压缩包（不在 archiveData 中，需要从磁盘读取）
-        if (treeItem.isArchive && treeItem.isLocalDrive && !treeItem.isRemote && !treeItem.isArchiveChild && e.button !== 2) {
+        // 🚀 处理本地磁盘上的压缩包（不在 archiveData 中，含嵌套压缩包）
+        if (isArchive && treeItem.isLocalDrive && !treeItem.isRemote && e.button !== 2) {
           e.preventDefault();
           e.stopPropagation();
-          console.log(`[mousedown] 处理本地磁盘压缩包点击: ${treeItem.name}, isNestedArchive=${treeItem.isNestedArchive}`);
+          console.log(`[mousedown] ✅ 本地压缩包: ${treeItem.name}, isArchiveChild=${!!treeItem.isArchiveChild}, isNestedArchive=${!!treeItem.isNestedArchive}`);
 
-          // 🚀 检查是否是嵌套压缩包
-          if (treeItem.isNestedArchive) {
-            await loadNestedArchiveChildren(index);
+          if (treeItem.isNestedArchive || treeItem.isArchiveChild) {
+            // 嵌套压缩包或压缩包内的嵌套压缩包
+            if (treeItem.expanded && treeItem.childrenLoaded) {
+              console.log(`[mousedown] 折叠嵌套压缩包: ${treeItem.name}`);
+              treeItem.expanded = false;
+              unloadArchiveChildren(index);
+              treeItem.childrenLoaded = false;
+            } else {
+              console.log(`[mousedown] 展开嵌套压缩包: ${treeItem.name}`);
+              treeItem.expanded = true;
+              await loadNestedArchiveChildren(index);
+            }
+            rebuildFileTreeVisibleCache();
+            renderFileTreeViewport(true);
           } else {
+            // 顶层本地压缩包
             await toggleLocalArchive(treeItem, index);
           }
           return;
         }
 
-        // 🚀 处理嵌套压缩包展开/折叠（右键点击时不处理）
-        // 🔧 嵌套压缩包的特征：type='archive' AND isArchiveChild=true AND isNestedArchive=true
-        if (treeItem.isNestedArchive && treeItem.type === 'archive' && e.button !== 2) {
-          e.preventDefault();
-          e.stopPropagation();
-          console.log(`[mousedown] 处理嵌套压缩包点击: ${treeItem.name}, level=${treeItem.level}`);
-
-          // 检查是否已展开
-          if (treeItem.expanded && treeItem.childrenLoaded) {
-            // 折叠
-            console.log(`[嵌套压缩包] 折叠: ${treeItem.name}`);
-            treeItem.expanded = false;
-            // 删除子项
-            unloadArchiveChildren(index);
-            treeItem.childrenLoaded = false;
-          } else {
-            // 展开
-            console.log(`[嵌套压缩包] 展开: ${treeItem.name}`);
-            treeItem.expanded = true;
-            await loadNestedArchiveChildren(index);
-          }
-
-          rebuildFileTreeVisibleCache();
-          renderFileTreeViewport(true);
-          return;
-        }
-
-        // 🚀 处理远程服务器上的文件夹展开/折叠（右键点击时不处理）
+        // 🚀 处理远程服务器上的文件夹展开/折叠
         if (treeItem.type === 'folder' && treeItem.isRemote && !treeItem.isArchiveChild && e.button !== 2) {
           e.preventDefault();
           e.stopPropagation();
-          console.log(`[mousedown] 处理远程文件夹点击: ${treeItem.name}, isRemote=${treeItem.isRemote}`);
+          console.log(`[mousedown] ✅ 远程文件夹: ${treeItem.name}`);
           await toggleRemoteFolder(treeItem, index);
           return;
         }
 
-        // 🚀 处理本地驱动器/本地文件夹展开/折叠（右键点击时不处理，排除压缩包内的内容）
-        if ((treeItem.type === 'drive' || (treeItem.type === 'folder' && treeItem.isLocalDrive && !treeItem.isArchiveChild)) && e.button !== 2) {
+        // 🚀 驱动器分类标题由 tab bar 控制，列表中不处理点击
+        if (treeItem.type === 'drive-category' && e.button !== 2) {
           e.preventDefault();
-          e.stopPropagation(); // 阻止事件冒泡
-          console.log(`[mousedown] 处理本地文件夹点击: ${treeItem.name}, type=${treeItem.type}, isLocalDrive=${treeItem.isLocalDrive}`);
+          e.stopPropagation();
+          if (typeof switchFileTreeTab === 'function') {
+            switchFileTreeTab(treeItem.path);
+          }
+          return;
+        }
+
+        // 🚀 处理本地驱动器/本地文件夹展开/折叠
+        if ((treeItem.type === 'drive' || treeItem.type === 'folder') && e.button !== 2) {
+          e.preventDefault();
+          e.stopPropagation();
+          console.log(`[mousedown] ✅ 本地驱动器/文件夹: ${treeItem.name}, isArchiveChild=${!!treeItem.isArchiveChild}`);
           await toggleLocalFolder(treeItem, index);
           return;
         }
 
-        // 处理压缩包内的文件夹展开/折叠（包括本地压缩包，右键点击时不处理）
-        if (treeItem.type === 'folder' && treeItem.isArchiveChild && e.button !== 2) {
-          e.preventDefault();
-          e.stopPropagation(); // 阻止事件冒泡
-          console.log(`[mousedown] 处理压缩包内文件夹点击: ${treeItem.name}, isArchiveChild=${treeItem.isArchiveChild}, isLocalDrive=${treeItem.isLocalDrive}`);
-          // 使用 toggleLocalFolder 处理压缩包内文件夹
-          await toggleLocalFolder(treeItem, index);
-          return;
+        // ⚠️ 只有文件夹/压缩包/驱动器未匹配才警告（普通文件不展开是正常的）
+        if (treeItem.type !== 'file') {
+          console.warn(`[mousedown] ⚠️ 未匹配展开处理器! name="${treeItem.name}", type=${treeItem.type}, ` +
+            `isArchive=${isArchive}, isLocalDrive=${treeItem.isLocalDrive}, isArchiveChild=${!!treeItem.isArchiveChild}, ` +
+            `isRemote=${!!treeItem.isRemote}, button=${e.button}`);
         }
 
-        // 记录拖拽开始位置（右键点击时不记录）
-        if (e.button !== 2) {
+        // 记录拖拽开始位置（Ctrl+点击时不记录，避免mouseup误触发加载）
+        if (e.button !== 2 && !e.ctrlKey && !e.metaKey) {
           isDragging = true;
           dragStartIndex = index;
         }
@@ -441,31 +470,39 @@
         // 🔧 重新设计拖选逻辑：mousedown时不设置防抖定时器，mouseup时根据是否拖动决定加载行为
         if (e.button !== 2) {
           if (e.ctrlKey || e.metaKey) {
-            // 🔧 Ctrl+点击：切换选择状态，并立即加载该文件
-            toggleFileSelection(index);
-            console.log(`[Ctrl+点击] 文件 ${index} 已选中，立即加载`);
+            // Ctrl+点击：切换文件选择状态（文件夹/压缩包不处理，正常展开折叠）
+            if (treeItem.type === 'file') {
+              toggleFileSelection(index);
+              // 只更新当前元素的 CSS 选中态
+              const el = fileTreeVirtualContent.querySelector('[data-index="' + index + '"]');
+              if (el) el.classList.toggle('selected', selectedFiles.some(f => f.index === index));
 
-            // 🔧 立即加载所有选中的文件（包括刚刚选中的）
-            // 使用防抖避免快速点击时重复加载
-            if (fileLoadDebounceTimer) {
-              clearTimeout(fileLoadDebounceTimer);
+              console.log('[Ctrl+点击] 文件 ' + index + ' 选择已切换');
+
+              if (fileLoadDebounceTimer) {
+                clearTimeout(fileLoadDebounceTimer);
+              }
+              fileLoadDebounceTimer = setTimeout(function() {
+                fileLoadDebounceTimer = null;
+                console.log('[Ctrl+点击] 加载 ' + selectedFiles.length + ' 个选中的文件');
+                loadSelectedFiles();
+              }, 100);
             }
-            fileLoadDebounceTimer = setTimeout(() => {
-              fileLoadDebounceTimer = null;
-              console.log(`[Ctrl+点击] 加载 ${selectedFiles.length} 个选中的文件`);
-              loadSelectedFiles();
-            }, 100);
           } else {
-            // 🔧 普通点击/拖选：清除之前的选择和所有内容，选择当前文件
-            // 不设置防抖定时器，等待 mouseup 时决定加载行为
+            // 普通点击/拖选：清除之前的选择和所有内容，选择当前文件
             clearFileSelectionAndTracking();
             selectFile(index);
 
             console.log(`[mousedown] 已选择文件 ${index}，等待 mouseup 决定加载行为`);
           }
 
-          // 选择不改变展开/过滤：只刷新视口渲染即可
-          renderFileTreeViewport(true);
+          // 只更新 CSS 选中态，不触发虚拟滚动全量重建（避免深层嵌套时 DOM 销毁导致元素跳动）
+          if (!(e.ctrlKey || e.metaKey)) {
+            const allSel = fileTreeVirtualContent.querySelectorAll('.file-tree-item.selected');
+            for (let s = 0; s < allSel.length; s++) allSel[s].classList.remove('selected');
+            const curEl = fileTreeVirtualContent.querySelector('[data-index="' + index + '"]');
+            if (curEl) curEl.classList.add('selected');
+          }
         }
       }
 
@@ -473,6 +510,7 @@
       async function loadLocalFile(treeItem) {
         try {
           let content = null;
+          let filePath = null;
 
           // 🔧 优先使用 _fileContent（粘贴的文件已读取的内容）
           if (treeItem._fileContent) {
@@ -483,7 +521,7 @@
             return;
           } else {
             // 🔧 使用 _originalPath（完整文件系统路径），回退到 path
-            const filePath = treeItem._originalPath || treeItem.path;
+            filePath = treeItem._originalPath || treeItem.path;
             console.log(`[loadLocalFile] 开始加载: ${treeItem.name}`);
 
             // 清理旧数据
@@ -499,6 +537,53 @@
               }
             } catch (e) { /* 使用常规方式 */ }
 
+
+            // 分片模式（磁盘文件）：直接对原文件建索引，不复制
+            if (fileLoadMode === 'chunk') {
+              cleanLogData();
+              try {
+                showLoading(true);
+                if (window.App && window.App.ChunkCache) window.App.ChunkCache.beginProgress();
+                const result = await window.electronAPI.buildLineIndex({ filePath: filePath, direct: true });
+                showLoading(false);
+                if (window.App && window.App.ChunkCache) window.App.ChunkCache.hideProgress();
+
+                if (!result || !result.success) {
+                  showMessage('构建索引失败: ' + (result ? result.error : '未知错误'));
+                  return;
+                }
+
+                var finalTotalLines = result.totalLines;
+
+                fileHeaders = [{
+                  fileName: treeItem.name,
+                  filePath: result.tempPath || filePath,
+                  lineCount: finalTotalLines,
+                  startIndex: 0,
+                }];
+
+                originalLines = [];
+                chunkTotalLines = 1 + finalTotalLines;
+                window.chunkTotalLines = chunkTotalLines;
+
+                if (window.App && window.App.ChunkCache) {
+                  window.App.ChunkCache.init(fileHeaders, chunkTotalLines);
+                  await window.App.ChunkCache.ensureRangeImmediate(0, Math.min(100, chunkTotalLines - 1));
+                }
+
+                resetFilter(false);
+                renderLogLines();
+
+                if (outer) outer.scrollTop = 0;
+                console.log('[loadLocalFile/分片] 直接索引完成: ' + finalTotalLines + ' 行');
+              } catch (error) {
+                showLoading(false);
+                if (window.App && window.App.ChunkCache) window.App.ChunkCache.hideProgress();
+                console.error('[loadLocalFile/分片] 失败:', error);
+                showMessage('分片模式加载失败: ' + error.message);
+              }
+              return;
+            }
             if (useStreaming) {
               originalLines = [];
               fileHeaders = [];
@@ -532,6 +617,58 @@
             throw new Error('文件内容为空');
           }
 
+          // 🚀 分片模式（内存内容）：写入 mem/ 临时文件，构建索引
+          if (fileLoadMode === 'chunk') {
+            cleanLogData();
+            try {
+              showLoading(true);
+              if (window.App && window.App.ChunkCache) window.App.ChunkCache.beginProgress();
+              var contentKey = 'content:' + (treeItem._originalPath || treeItem.path || treeItem.name);
+              var memResult = await window.electronAPI.buildIndexFromContent({
+                contents: [{ key: contentKey, content: content, fileName: treeItem.name }]
+              });
+              showLoading(false);
+              if (window.App && window.App.ChunkCache) window.App.ChunkCache.hideProgress();
+
+              if (!memResult || !memResult.success || !memResult.files || memResult.files.length === 0) {
+                showMessage('分片模式构建索引失败');
+                return;
+              }
+
+              var fileInfo = memResult.files[0];
+
+              var memFinalLines = fileInfo.totalLines;
+
+              fileHeaders = [{
+                fileName: fileInfo.fileName,
+                filePath: fileInfo.tempPath,
+                lineCount: memFinalLines,
+                startIndex: 0,
+              }];
+
+              originalLines = [];
+              chunkTotalLines = 1 + memFinalLines;
+              window.chunkTotalLines = chunkTotalLines;
+
+              if (window.App && window.App.ChunkCache) {
+                window.App.ChunkCache.init(fileHeaders, chunkTotalLines);
+                await window.App.ChunkCache.ensureRangeImmediate(0, Math.min(100, chunkTotalLines - 1));
+              }
+
+              resetFilter(false);
+              renderLogLines();
+
+              if (outer) outer.scrollTop = 0;
+              console.log('[loadLocalFile/分片-内存] 索引完成: ' + memFinalLines + ' 行');
+            } catch (error) {
+              showLoading(false);
+              if (window.App && window.App.ChunkCache) window.App.ChunkCache.hideProgress();
+              console.error('[loadLocalFile/分片-内存] 失败:', error);
+              showMessage('分片模式加载失败: ' + error.message);
+            }
+            return;
+          }
+
           // 清理旧数据（如果还没有清理）
           if (treeItem._fileContent) {
             cleanLogData();
@@ -559,11 +696,7 @@
 
           // 重置过滤并渲染
           resetFilter(false);
-          if (fileLoadMode === 'memory') {
-            showMemoryModeStats();
-          } else {
-            renderLogLines();
-          }
+          renderLogLines();
           selectedOriginalIndex = -1;
 
           // 滚动到顶部
@@ -954,6 +1087,7 @@
               // 插入到文件树
               const insertIndex = archiveIndex + 1;
               fileTreeHierarchy.splice(insertIndex, 0, ...childNodes);
+              shiftSelectedIndices(insertIndex, childNodes.length);
 
               archive.childrenLoaded = true;
               archive.loadingChildren = false;
@@ -987,6 +1121,7 @@
                       archive._archiveFiles = nativeResult.files;
                       const insertIndex = archiveIndex + 1;
                       fileTreeHierarchy.splice(insertIndex, 0, ...childNodes);
+                      shiftSelectedIndices(insertIndex, childNodes.length);
                       archive.childrenLoaded = true;
                       archive.loadingChildren = false;
                       console.log(`[loadLocalArchiveChildren] 原生 ZIP 解析成功，${childNodes.length} 个子项`);
@@ -1393,7 +1528,13 @@
                                   lowerName.endsWith('.7z') ||
                                   lowerName.endsWith('.rar') ||
                                   lowerName.endsWith('.tar') ||
-                                  lowerName.endsWith('.gz');
+                                  lowerName.endsWith('.tar.gz') ||
+                                  lowerName.endsWith('.tar.bz2') ||
+                                  lowerName.endsWith('.tgz') ||
+                                  lowerName.endsWith('.gz') ||
+                                  lowerName.endsWith('.bz2') ||
+                                  lowerName.endsWith('.xz') ||
+                                  lowerName.endsWith('.muxz');
 
             const node = {
               name: name,
@@ -1543,6 +1684,7 @@
           // 插入到文件树
           const insertIndex = archiveIndex + 1;
           fileTreeHierarchy.splice(insertIndex, 0, ...childNodes);
+          shiftSelectedIndices(insertIndex, childNodes.length);
 
           // 🔍 验证插入后的结果
           console.log(`[loadLocalZipWithJSZip] 插入位置: ${insertIndex}, 插入后的数组长度: ${fileTreeHierarchy.length}`);
@@ -1588,7 +1730,13 @@
             lowerName.endsWith('.7z') ||
             lowerName.endsWith('.rar') ||
             lowerName.endsWith('.tar') ||
-            lowerName.endsWith('.gz')
+            lowerName.endsWith('.tar.gz') ||
+            lowerName.endsWith('.tar.bz2') ||
+            lowerName.endsWith('.tgz') ||
+            lowerName.endsWith('.gz') ||
+            lowerName.endsWith('.bz2') ||
+            lowerName.endsWith('.xz') ||
+            lowerName.endsWith('.muxz')
           );
 
           const node = {
@@ -1659,10 +1807,11 @@
           if (parts.length === 0) continue;
 
           const firstName = parts[0];
+          const mapKey = firstName.toLowerCase();
 
-          // 🔧 如果已经处理过，更新目录标志（只要有一个是目录，就是目录）
-          if (firstLevelItems.has(firstName)) {
-            const existing = firstLevelItems.get(firstName);
+          // 如果已经处理过，更新目录标志（只要有一个是目录，就是目录）
+          if (firstLevelItems.has(mapKey)) {
+            const existing = firstLevelItems.get(mapKey);
             // 如果当前是目录或路径有多层，更新为目录
             if (file.isDirectory || parts.length > 1) {
               existing.isDirectory = true;
@@ -1676,7 +1825,7 @@
           // 3. 后续遍历可能会更新这个标志
           const isDirectory = file.isDirectory || parts.length > 1;
 
-          firstLevelItems.set(firstName, {
+          firstLevelItems.set(mapKey, {
             name: firstName,
             path: file.path,
             isDirectory: isDirectory,
@@ -1685,43 +1834,50 @@
         }
 
         // 🔧 第二步：根据收集的信息创建节点
-        for (const [name, info] of firstLevelItems) {
+        for (const [mapKey, info] of firstLevelItems) {
+          // 🚀 使用原始大小写的名称（info.name），而非 Map key（小写）
+          const originalName = info.name;
           // 🚀 检测是否是嵌套的压缩包
-          const lowerName = name.toLowerCase();
+          const lowerName = originalName.toLowerCase();
           const isNestedArchive = !info.isDirectory && (
             lowerName.endsWith('.zip') ||
             lowerName.endsWith('.7z') ||
             lowerName.endsWith('.rar') ||
             lowerName.endsWith('.tar') ||
-            lowerName.endsWith('.gz')
+            lowerName.endsWith('.tar.gz') ||
+            lowerName.endsWith('.tar.bz2') ||
+            lowerName.endsWith('.tgz') ||
+            lowerName.endsWith('.gz') ||
+            lowerName.endsWith('.bz2') ||
+            lowerName.endsWith('.xz') ||
+            lowerName.endsWith('.muxz')
           );
 
           const node = {
-            name: name,
-            path: `${parentArchive.path}/${name}`,
-            type: info.isDirectory ? 'folder' : (isNestedArchive ? 'archive' : 'file'),  // 🚀 嵌套压缩包标记为 archive
-            subType: isNestedArchive ? getArchiveSubType(name) : undefined,
+            name: originalName,
+            path: `${parentArchive.path}/${originalName}`,
+            type: info.isDirectory ? 'folder' : (isNestedArchive ? 'archive' : 'file'),
+            subType: isNestedArchive ? getArchiveSubType(originalName) : undefined,
             expanded: false,
             level: parentArchive.level + 1,
             file: null,
-            childrenLoaded: info.isDirectory ? false : !isNestedArchive,  // 🚀 嵌套压缩包标记为未加载
+            childrenLoaded: info.isDirectory ? false : !isNestedArchive,
             loadingChildren: false,
-            lazyLoad: info.isDirectory || isNestedArchive,  // 🚀 目录和嵌套压缩包都需要懒加载
+            lazyLoad: info.isDirectory || isNestedArchive,
             isArchiveChild: true,
             isLocalDrive: true,
-            isNestedArchive: isNestedArchive,  // 🚀 标记为嵌套压缩包
-            isArchive: isNestedArchive, // 只有嵌套压缩包才标记为 archive（普通文件/文件夹用 isArchiveChild 标识归属）
+            isNestedArchive: isNestedArchive,
+            isArchive: isNestedArchive,
             archiveName: parentArchive.path,
-            archivePath: name,
-            // 保存完整路径用于懒加载子项
-            _fullArchivePath: name
+            archivePath: originalName,
+            _fullArchivePath: originalName
           };
 
           if (!info.isDirectory) {
             node.size = info.size;
-            console.log(`[buildFirstLevelNodes] ${isNestedArchive ? '嵌套压缩包' : '文件'}: ${name}, size: ${node.size} (来自路径: ${info.path})`);
+            console.log(`[buildFirstLevelNodes] ${isNestedArchive ? '嵌套压缩包' : '文件'}: ${originalName}, size: ${node.size} (来自路径: ${info.path})`);
           } else {
-            console.log(`[buildFirstLevelNodes] 目录: ${name} (来自路径: ${info.path})`);
+            console.log(`[buildFirstLevelNodes] 目录: ${originalName} (来自路径: ${info.path})`);
           }
 
           nodes.push(node);
@@ -1941,6 +2097,14 @@
 
       // 文件树点击事件 - 处理驱动器展开/文件夹展开
       function handleFileTreeClick(e) {
+        // Ctrl+左键用于多选文件（不拦截，交由下方逻辑处理）
+
+        // 拖选之后跳过 click 处理，避免 RAF 渲染导致 target 落在 spacer 上误清除选择
+        if (hasFileTreeDragged) return;
+
+        // Ctrl+点击空白区域不清除选择（避免误操作丢失多选）
+        if (e.ctrlKey || e.metaKey) return;
+
         const item = e.target.closest(".file-tree-item");
 
         // 🔧 点击空白区域时清除文件选择，释放内存
@@ -1963,31 +2127,20 @@
 
         console.log(`[文件树点击] index=${index}, type=${treeItem.type}, name=${treeItem.name}, isLocalDrive=${treeItem.isLocalDrive}`);
 
-        // 🚀 处理本地驱动器/文件夹的展开
-        if (treeItem.type === 'drive' || (treeItem.type === 'folder' && treeItem.isLocalDrive)) {
-          console.log(`[文件树点击] 触发本地文件夹展开: ${treeItem.name}`);
-          toggleLocalFolder(treeItem, index);
-          return;
-        }
-
-        // 🚀 处理远程文件夹的展开
-        if (treeItem.isRemote && treeItem.type === 'folder') {
-          console.log(`[文件树点击] 触发远程文件夹展开: ${treeItem.name}`);
-          toggleRemoteFolder(treeItem, index);
-          return;
-        }
-
-        // 注意：不再处理压缩包展开/折叠，避免与 mousedown 事件冲突
-        // 压缩包的展开/折叠已在 handleFileTreeMouseDown 中处理
+        // 注意：不再在 click 中处理文件夹/驱动器/压缩包的展开折叠
+        // 所有展开折叠逻辑已在 handleFileTreeMouseDown 中处理
+        // 若在此处重复调用 toggle* 会产生双重切换 bug：
+        //   mousedown.toggle(expanded=true) → click.toggle(expanded=false) = 无变化
+        // e.stopPropagation()/preventDefault() 在 mousedown 上不会阻止 click 事件
       }
 
       // 🚀 切换本地文件夹/驱动器的展开状态
       async function toggleLocalFolder(folderItem, index, forceRefresh = false) {
-        console.log(`[toggleLocalFolder] 开始: ${folderItem.name}, expanded=${folderItem.expanded}, childrenLoaded=${folderItem.childrenLoaded}, forceRefresh=${forceRefresh}`);
+        console.log(`[toggleLocalFolder] ▶ 开始: name=${folderItem.name}, path=${folderItem.path}, index=${index}, expanded=${folderItem.expanded}, childrenLoaded=${folderItem.childrenLoaded}, loadingChildren=${folderItem.loadingChildren}, forceRefresh=${forceRefresh}`);
 
         // 防止快速重复点击
         if (folderItem.loadingChildren) {
-          console.log('[文件树] 正在加载子项，跳过');
+          console.warn(`[toggleLocalFolder] ⛔ 被loadingChildren拦截! name=${folderItem.name}, loadingChildren=${folderItem.loadingChildren}`);
           return;
         }
 
@@ -2098,11 +2251,10 @@
         }
 
         // 重新渲染
+        console.log(`[toggleLocalFolder] ✅ 完成: name=${folderItem.name}, expanded=${folderItem.expanded}, childrenLoaded=${folderItem.childrenLoaded}, loadingChildren=${folderItem.loadingChildren}`);
         rebuildFileTreeVisibleCache();
         renderFileTreeViewport(true);
       }
-
-      // 🚀 处理远程文件夹展开/折叠
       async function toggleRemoteFolder(folderItem, index) {
         console.log(`[toggleRemoteFolder] 开始: ${folderItem.name}, expanded=${folderItem.expanded}, childrenLoaded=${folderItem.childrenLoaded}, loadingChildren=${folderItem.loadingChildren}`);
 
@@ -2208,13 +2360,13 @@
       async function loadLocalFolderChildren(folderIndex) {
         const folder = fileTreeHierarchy[folderIndex];
         if (!folder) {
-          console.error(`[loadLocalFolderChildren] 文件夹不存在，index=${folderIndex}`);
+          console.error(`[loadLocalFolderChildren] ⛔ 文件夹不存在，index=${folderIndex}`);
           return;
         }
 
         // 🔧 优先使用 _originalPath（真实路径），否则使用 path（相对路径）
         const folderPath = folder._originalPath || folder.path;
-        console.log(`[loadLocalFolderChildren] 开始加载: ${folder.path}，真实路径: ${folderPath}`);
+        console.log(`[loadLocalFolderChildren] ▶ 开始加载: ${folder.path}，真实路径: ${folderPath}, index=${folderIndex}`);
 
         folder.loadingChildren = true;
         rebuildFileTreeVisibleCache();
@@ -2225,14 +2377,15 @@
             throw new Error('listDirectory API 不可用');
           }
 
+          console.log(`[loadLocalFolderChildren] 调用 listDirectory: ${folderPath}`);
           const result = await window.electronAPI.listDirectory(folderPath);
-          console.log(`[loadLocalFolderChildren] API返回:`, result);
+          console.log(`[loadLocalFolderChildren] API返回: success=${result.success}, items=${result.items?.length}`);
 
           if (!result.success) {
             throw new Error(result.error || '加载失败');
           }
 
-          console.log(`[loadLocalFolderChildren] ${folder.path} 包含 ${result.items.length} 个项`, result.items);
+          console.log(`[loadLocalFolderChildren] ${folder.path} 包含 ${result.items.length} 个项`);
 
           // 计算插入位置（当前文件夹后面）
           const insertIndex = folderIndex + 1;
@@ -2260,33 +2413,44 @@
           }
 
           // 插入到文件树
+          console.log(`[loadLocalFolderChildren] 插入 ${childNodes.length} 个子项到 index=${insertIndex}`);
           fileTreeHierarchy.splice(insertIndex, 0, ...childNodes);
+          shiftSelectedIndices(insertIndex, childNodes.length);
 
           folder.childrenLoaded = true;
-          folder.loadingChildren = false;
+
+          // 🚀 记录常用目录（排除常用访问栏和星标目录）
+          if (!folder.isFrequentDir && !folder.isStarredDir && typeof addFrequentDirectory === 'function') {
+            addFrequentDirectory(folder.path, folder.name);
+          }
 
           // 启动目录监听
           startWatchingDirectory(folder.path);
 
-          console.log(`[loadLocalFolderChildren] 已加载 ${childNodes.length} 个子项`);
+          console.log(`[loadLocalFolderChildren] ✅ 完成: name=${folder.name}, 已加载 ${childNodes.length} 个子项`);
 
           // 🔧 修复：如果在过滤模式下展开文件夹，将新加载的子项添加到临时包含列表
           if (fileTreeSearchShowOnlyMatches && fileTreeSearchTerm) {
-            console.log(`[loadLocalFolderChildren] 在过滤模式下展开文件夹，将 ${childNodes.length} 个子项添加到临时包含列表`);
             const insertIndex = folderIndex + 1;
             for (let i = 0; i < childNodes.length; i++) {
               temporarilyIncludedNodes.add(insertIndex + i);
             }
           }
         } catch (error) {
-          console.error('[loadLocalFolderChildren] 加载子项失败:', error);
-          folder.loadingChildren = false;
+          console.error(`[loadLocalFolderChildren] ❌ 加载子项失败: name=${folder.name}, error=${error.message}`);
           folder.expanded = false;
+          // 🚀 常用访问节点加载失败时，从列表中移除
+          if (folder.isFrequentDir && typeof removeFrequentDirectory === 'function') {
+            removeFrequentDirectory(folder.path);
+            console.log(`[loadLocalFolderChildren] 已从常用访问中移除: ${folder.path}`);
+          }
           showMessage('加载失败: ' + error.message);
+        } finally {
+          folder.loadingChildren = false;
+          console.log(`[loadLocalFolderChildren] finally: name=${folder.name}, loadingChildren=${folder.loadingChildren}, expanded=${folder.expanded}, childrenLoaded=${folder.childrenLoaded}`);
+          rebuildFileTreeVisibleCache();
+          renderFileTreeViewport(true);
         }
-
-        rebuildFileTreeVisibleCache();
-        renderFileTreeViewport(true);
       }
 
       // 🚀 卸载压缩包的子项（折叠时）
@@ -2756,6 +2920,7 @@
 
           // 移除已加载的占位符，插入实际子项
           fileTreeHierarchy.splice(folderIndex + 1, 0, ...childHierarchy);
+          shiftSelectedIndices(folderIndex + 1, childHierarchy.length);
 
           // 标记为已加载
           folder.childrenLoaded = true;
@@ -2765,9 +2930,10 @@
           console.log(`[懒加载] 文件夹 "${folder.name}" 子项加载完成，新增 ${childHierarchy.length} 个节点`);
         } catch (error) {
           console.error(`[懒加载] 加载文件夹 "${folder.name}" 子项失败:`, error);
-          folder.loadingChildren = false;
           folder.childrenLoaded = false;
           showMessage(`加载文件夹 "${folder.name}" 失败: ${error.message}`);
+        } finally {
+          folder.loadingChildren = false;
         }
       }
 
@@ -2942,11 +3108,7 @@
 
           // 重新渲染日志
           resetFilter(false);
-          if (fileLoadMode === 'memory') {
-            showMemoryModeStats();
-          } else {
-            renderLogLines();
-          }
+          renderLogLines();
           selectedOriginalIndex = -1;
 
           if (selectedFiles.length > 0) {
@@ -3361,13 +3523,13 @@
           rebuildFileTreeVisibleCache();
         } catch (error) {
           console.error('[本地压缩包懒加载] 失败:', error);
-          folder.loadingChildren = false;
           folder.expanded = false;
           showMessage('加载失败: ' + error.message);
           rebuildFileTreeVisibleCache();
+        } finally {
+          folder.loadingChildren = false;
+          renderFileTreeViewport(true);
         }
-
-        renderFileTreeViewport(true);
       }
 
       // 🚀 使用 JSZip 加载 ZIP 内的子文件夹
@@ -3395,18 +3557,29 @@
               // 只添加直接子项（避免重复）
               if (!childItems.has(childName)) {
                 const isDirectory = zipEntry.dir || (parts.length > 1);
+                const lowerChildName = childName.toLowerCase();
+                const isNestedArchiveFile = !isDirectory && (
+                  lowerChildName.endsWith('.zip') || lowerChildName.endsWith('.7z') ||
+                  lowerChildName.endsWith('.rar') || lowerChildName.endsWith('.tar') ||
+                  lowerChildName.endsWith('.tar.gz') || lowerChildName.endsWith('.tar.bz2') ||
+                  lowerChildName.endsWith('.tgz') || lowerChildName.endsWith('.gz') ||
+                  lowerChildName.endsWith('.bz2') || lowerChildName.endsWith('.xz') ||
+                  lowerChildName.endsWith('.muxz')
+                );
 
                 const node = {
                   name: childName,
                   path: `${folder.path}/${childName}`,
-                  type: isDirectory ? 'folder' : 'file',
+                  type: isDirectory ? 'folder' : (isNestedArchiveFile ? 'archive' : 'file'),
                   expanded: false,
                   level: folder.level + 1,
                   file: null,
-                  childrenLoaded: false,
+                  childrenLoaded: !isDirectory && !isNestedArchiveFile,
                   loadingChildren: false,
-                  lazyLoad: isDirectory,
+                  lazyLoad: isDirectory || isNestedArchiveFile,
                   isArchiveChild: true,
+                  isNestedArchive: isNestedArchiveFile,
+                  isArchive: isNestedArchiveFile,
                   isLocalDrive: true,
                   archiveName: folder.archiveName,
                   archivePath: `${folder.archivePath}/${childName}`,
@@ -3438,6 +3611,7 @@
         // 插入到文件树
         const insertIndex = fileTreeHierarchy.indexOf(folder) + 1;
         fileTreeHierarchy.splice(insertIndex, 0, ...childNodes);
+        shiftSelectedIndices(insertIndex, childNodes.length);
 
         folder.childrenLoaded = true;
         folder.loadingChildren = false;
@@ -3475,8 +3649,6 @@
 
               if (!childItems.has(childName)) {
                 // 🔧 优先使用主进程提供的 isDirectory 信息，同时考虑路径深度
-                // 如果路径只有一层（直接子项），使用主进程的 isDirectory
-                // 如果路径有多层，说明子项是目录（因为包含更深层的文件）
                 let isDirectory = parts.length > 1;
 
                 // 对于直接子项（parts.length === 1），使用主进程提供的 isDirectory 信息
@@ -3484,24 +3656,36 @@
                   isDirectory = true;
                 }
 
+                const lowerChildName = childName.toLowerCase();
+                const isNestedArchiveFile = !isDirectory && (
+                  lowerChildName.endsWith('.zip') || lowerChildName.endsWith('.7z') ||
+                  lowerChildName.endsWith('.rar') || lowerChildName.endsWith('.tar') ||
+                  lowerChildName.endsWith('.tar.gz') || lowerChildName.endsWith('.tar.bz2') ||
+                  lowerChildName.endsWith('.tgz') || lowerChildName.endsWith('.gz') ||
+                  lowerChildName.endsWith('.bz2') || lowerChildName.endsWith('.xz') ||
+                  lowerChildName.endsWith('.muxz')
+                );
+
                 const node = {
                   name: childName,
                   path: `${folder.path}/${childName}`,
-                  type: isDirectory ? 'folder' : 'file',
+                  type: isDirectory ? 'folder' : (isNestedArchiveFile ? 'archive' : 'file'),
                   expanded: false,
                   level: folder.level + 1,
                   file: null,
-                  childrenLoaded: false,
+                  childrenLoaded: !isDirectory && !isNestedArchiveFile,
                   loadingChildren: false,
-                  lazyLoad: isDirectory,
+                  lazyLoad: isDirectory || isNestedArchiveFile,
                   isArchiveChild: true,
+                  isNestedArchive: isNestedArchiveFile,
+                  isArchive: isNestedArchiveFile,
                   isLocalDrive: true,
                   archiveName: folder.archiveName,
                   archivePath: `${folder.archivePath}/${childName}`,
                   _fullArchivePath: `${folderPath}/${childName}`
                 };
 
-                if (!isDirectory) {
+                if (!isDirectory && !isNestedArchiveFile) {
                   node.size = file.size || 0;
                 }
 
@@ -3521,6 +3705,7 @@
 
         const insertIndex = fileTreeHierarchy.indexOf(folder) + 1;
         fileTreeHierarchy.splice(insertIndex, 0, ...childNodes);
+        shiftSelectedIndices(insertIndex, childNodes.length);
 
         folder.childrenLoaded = true;
         folder.loadingChildren = false;
@@ -3692,6 +3877,7 @@
 
           // 插入到层次结构中
           fileTreeHierarchy.splice(folderIndex + 1, 0, ...newNodes);
+          shiftSelectedIndices(folderIndex + 1, newNodes.length);
 
           console.log(`[压缩包懒加载] 已加载 ${newNodes.length} 个子项`);
         } catch (error) {
@@ -4069,57 +4255,195 @@
         // 🚀 性能优化：记录本次加载的选中快照（供 handleFileTreeMouseUp 比较使用）
         lastLoadedSelectionKeys = selectedFiles.map(f => f.index + ':' + f.order).join(',');
 
-        // 🚀 新增：过滤模式检测（仅 filter 模式不加载文件内容）
-        // memory 模式下 isFileLoadMode=true，会正常加载到 originalLines
-        if (fileLoadMode === 'filter') {
-          // 过滤模式：不加载文件内容，只记录文件路径
-          console.log(`[过滤模式] 检测到过滤模式，不加载文件内容，只记录文件路径`);
+        // 🚀 分片模式：构建索引，不加载内容到内存
+        if (fileLoadMode === 'chunk') {
+          console.log('[分片模式] 检测到分片模式，逐文件构建索引');
 
-          // 清空之前的文件列表
-          filterModeFileList = [];
-          const skippedArchives = []; // 记录跳过的压缩包文件
+          cleanLogData();
 
-          // 收集选中文件的完整路径
+          // 分类文件：磁盘文件 vs 压缩包文件 vs 内存内容
+          const diskFiles = [];    // { filePath, fileName }
+          const archiveFiles = []; // { archivePath, innerPath, fileName }
+          const memFiles = [];     // { key, content, fileName } — 粘贴/预加载
+          const processedKeys = new Set();
+
           for (const fileObj of selectedFiles) {
             const item = fileTreeHierarchy[fileObj.index];
-            if (item && item.type === 'file') {
-              const fullPath = getFullPath(item);
-              if (fullPath) {
-                // 🔧 过滤模式不支持压缩包内的文件，跳过
-                if (fullPath.match(/\.(zip|tar|gz|7z|rar)\//i)) {
-                  skippedArchives.push(item.name);
-                  continue;
-                }
-                filterModeFileList.push(fullPath);
+            if (!item || item.type !== 'file') continue;
+
+            // 1) 压缩包内文件 → 主进程直接解压到 mem/chunk-tmp/，不经过内存
+            if (item.isArchiveChild && item.archivePath) {
+              const key = item.archiveName + '!' + item.archivePath;
+              if (!processedKeys.has(key)) {
+                processedKeys.add(key);
+                archiveFiles.push({
+                  archivePath: item.archiveName,
+                  innerPath: item.archivePath,
+                  fileName: item.archivePath || item.name,
+                });
+              }
+              continue;
+            }
+
+            // 2) 粘贴的文件 → 写入 mem/ 临时文件
+            if (item._fileContent) {
+              const key = 'paste:' + item.name + ':' + fileObj.index;
+              if (!processedKeys.has(key)) {
+                processedKeys.add(key);
+                memFiles.push({ key: key, content: item._fileContent, fileName: item.name });
+              }
+              continue;
+            }
+
+            // 3) 预读取文件 → 写入 mem/ 临时文件
+            if (item.file && item.file._hasContent && item.file.content) {
+              const key = 'preload:' + item.file.name + ':' + fileObj.index;
+              if (!processedKeys.has(key)) {
+                processedKeys.add(key);
+                memFiles.push({ key: key, content: item.file.content, fileName: item.file.name });
+              }
+              continue;
+            }
+
+            // 4) 本地磁盘文件 → 直接对原文件建索引，不复制
+            if (item.isLocalDrive && item.path) {
+              const fullPath = getFullPath(item) || item._originalPath || item.path;
+              if (fullPath && !processedKeys.has(fullPath)) {
+                processedKeys.add(fullPath);
+                diskFiles.push({ filePath: fullPath, fileName: item.name });
+              }
+              continue;
+            }
+
+            // 5) 普通拖入文件
+            if (item.file && item.file.path) {
+              const fullPath = item.file.path;
+              if (!processedKeys.has(fullPath)) {
+                processedKeys.add(fullPath);
+                diskFiles.push({ filePath: fullPath, fileName: item.file.name });
               }
             }
           }
 
-          console.log(`[过滤模式] 已记录 ${filterModeFileList.length} 个选中文件`);
-          if (skippedArchives.length > 0) {
-            console.warn(`[过滤模式] 跳过 ${skippedArchives.length} 个压缩包内文件（过滤模式不支持压缩包）`);
+          if (diskFiles.length === 0 && archiveFiles.length === 0 && memFiles.length === 0) {
+            showMessage('没有选中可用的文件');
+            return;
           }
 
-          if (filterModeFileList.length > 0) {
-            console.log(`[过滤模式] 第一个文件: ${filterModeFileList[0]}`);
-            if (skippedArchives.length > 0) {
-              showMessage(`🔍 已选中 ${filterModeFileList.length} 个文件（跳过 ${skippedArchives.length} 个压缩包文件），现在在过滤框输入关键词即可开始过滤`);
-            } else {
-              showMessage(`🔍 已选中 ${filterModeFileList.length} 个文件，现在在过滤框输入关键词即可开始过滤`);
-            }
-          } else {
-            if (skippedArchives.length > 0) {
-              showMessage('⚠️ 过滤模式不支持压缩包内的文件，请选择普通磁盘文件');
-            } else {
-              showMessage(`⚠️ 没有选中任何文件，请先选择要过滤的文件`);
-            }
-          }
+          try {
+            showLoading(true);
+            if (window.App && window.App.ChunkCache) window.App.ChunkCache.beginProgress();
 
-          // 清空主日志框（因为过滤模式不需要加载）
-          if (originalLines.length > 0) {
-            cleanFilterData();
+            var allIndexedFiles = []; // { filePath, fileName, totalLines }
+
+            // 磁盘文件：并行建索引
+            if (diskFiles.length > 0) {
+              var diskPromises = diskFiles.map(function(df) {
+                return window.electronAPI.buildLineIndex({ filePath: df.filePath, direct: true })
+                  .then(function(diskResult) {
+                    if (diskResult && diskResult.success) {
+                      return { filePath: diskResult.tempPath || df.filePath, fileName: df.fileName, totalLines: diskResult.totalLines, isKernel: !!diskResult.isKernel };
+                    }
+                    console.error('[分片模式] 索引磁盘文件失败:', df.filePath, diskResult ? diskResult.error : '无返回');
+                    return null;
+                  })
+                  .catch(function(err) {
+                    console.error('[分片模式] 索引磁盘文件异常:', df.filePath, err);
+                    return null;
+                  });
+              });
+              var diskResults = await Promise.all(diskPromises);
+              for (var di = 0; di < diskResults.length; di++) {
+                if (diskResults[di]) allIndexedFiles.push(diskResults[di]);
+              }
+            }
+
+            // 压缩包文件：批量解压 + 建索引（同一压缩包单次 7z 调用）
+            if (archiveFiles.length > 0) {
+              try {
+                var batchResult = await window.electronAPI.extractToChunkTmpBatch({ files: archiveFiles });
+                if (batchResult && batchResult.results) {
+                  for (var ai = 0; ai < batchResult.results.length; ai++) {
+                    var r = batchResult.results[ai];
+                    if (r && r.success) {
+                      allIndexedFiles.push({
+                        filePath: r.tempPath,
+                        fileName: r.fileName,
+                        totalLines: r.totalLines,
+                        isArchive: true,
+                        isKernel: !!r.isKernel,
+                      });
+                    } else if (r) {
+                      console.error('[分片模式] 解压压缩包文件失败:', archiveFiles[ai].fileName, r.error);
+                    }
+                  }
+                }
+              } catch (batchErr) {
+                console.error('[分片模式] 批量解压异常:', batchErr);
+              }
+            }
+
+            // 内存内容：写入 mem/ 临时文件再建索引
+            if (memFiles.length > 0) {
+              var memResult = await window.electronAPI.buildIndexFromContent({ contents: memFiles });
+              if (memResult && memResult.success && memResult.files) {
+                for (var mi = 0; mi < memResult.files.length; mi++) {
+                  var mf = memResult.files[mi];
+                  allIndexedFiles.push({
+                    filePath: mf.tempPath,  // 实际磁盘路径，ripgrep 可搜索
+                    fileName: mf.fileName || 'unknown',
+                    totalLines: mf.totalLines,
+                    isKernel: !!mf.isKernel,
+                  });
+                }
+              } else {
+                console.error('[分片模式] 内存内容索引失败:', memResult ? memResult.error : '无返回');
+              }
+            }
+
+            showLoading(false);
+            if (window.App && window.App.ChunkCache) window.App.ChunkCache.hideProgress();
+
+
+            // 构建 fileHeaders
+            fileHeaders = [];
+            globalIndex = 0;
+            for (var fi = 0; fi < allIndexedFiles.length; fi++) {
+              var info = allIndexedFiles[fi];
+              fileHeaders.push({
+                fileName: info.fileName,
+                filePath: info.filePath,
+                lineCount: info.totalLines,
+                startIndex: globalIndex,
+              });
+              globalIndex += 1 + info.totalLines;
+            }
+
             originalLines = [];
+            chunkTotalLines = globalIndex;
+            window.chunkTotalLines = globalIndex;
+
+            if (window.App && window.App.ChunkCache) {
+              window.App.ChunkCache.init(fileHeaders, globalIndex);
+            }
+
+            var firstScreenEnd = Math.min(100, globalIndex - 1);
+            if (window.App && window.App.ChunkCache) {
+              await window.App.ChunkCache.ensureRangeImmediate(0, firstScreenEnd);
+            }
+
+            resetFilter(false);
             renderLogLines();
+
+            if (outer) outer.scrollTop = 0;
+            var totalLinesAll = allIndexedFiles.reduce(function(sum, f) { return sum + f.totalLines; }, 0);
+            console.log('[分片模式] 索引完成，总行数:', globalIndex);
+
+          } catch (error) {
+            showLoading(false);
+            if (window.App && window.App.ChunkCache) window.App.ChunkCache.hideProgress();
+            console.error('[分片模式] 构建索引失败:', error);
+            showMessage('分片模式加载失败: ' + error.message);
           }
 
           return;
@@ -4352,11 +4676,7 @@
 
             // 重新渲染日志
             resetFilter(false);
-            if (fileLoadMode === 'memory') {
-              showMemoryModeStats();
-            } else {
-              renderLogLines();
-            }
+            renderLogLines();
             selectedOriginalIndex = -1;
 
             console.log(`[loadSelectedFiles] ✓ 渲染完成`);
@@ -4378,15 +4698,13 @@
         }
 
         // 多个文件：显示进度条
-        const progressBar = DOMCache.get('progressBar');
-        const progressFill = DOMCache.get('progressFill');
-
-        if (progressBar) {
-          progressBar.style.display = 'block';
-          if (progressFill) progressFill.style.width = '0%';
-          console.log('[Progress] 进度条已显示');
-        } else {
-          console.log('[Progress] 进度条元素未找到');
+        var _hpf = document.getElementById('headerProgressFill');
+        if (_hpf) {
+          _hpf.classList.remove('complete');
+          _hpf.style.width = '0%';
+          _hpf.style.left = '50%';
+          var _hue = Math.floor(Math.random() * 360);
+          _hpf.style.background = 'hsl(' + _hue + ', 72%, 55%)';
         }
 
         // 开启新的加载会话
@@ -4400,9 +4718,8 @@
           loadedCount++;
           const filePercent = Math.round((loadedCount / totalFiles) * 100);
 
-          if (progressFill) {
-            progressFill.style.width = `${filePercent}%`;
-          }
+          var _hpf = document.getElementById('headerProgressFill');
+          if (_hpf) { _hpf.style.width = filePercent + '%'; _hpf.style.left = (50 - filePercent / 2) + '%'; }
         };
 
         // 🔧 try-finish 确保进度条在任何情况下都会隐藏
@@ -4464,7 +4781,8 @@
                   archiveOrderedResults.push({ allFilesIndex, result, orderIndex });
                   archiveFilesReceived++;
                   const percent = Math.round((archiveFilesReceived / archiveFilesTotal) * 100);
-                  if (progressFill) progressFill.style.width = `${percent}%`;
+                  var __hpf = document.getElementById('headerProgressFill');
+                  if (__hpf) { __hpf.style.width = percent + '%'; __hpf.style.left = (50 - percent / 2) + '%'; }
                 }
 
                 if (archiveFilesReceived >= archiveFilesTotal) {
@@ -4698,11 +5016,7 @@
 
             // 重新渲染日志
             resetFilter(false);
-            if (fileLoadMode === 'memory') {
-              showMemoryModeStats();
-            } else {
-              renderLogLines();
-            }
+            renderLogLines();
             selectedOriginalIndex = -1;
 
             console.log(`[loadSelectedFiles] ✓ 渲染完成`);
@@ -4732,6 +5046,20 @@
     // 清空主日志框内容（同时清空文件树除了盘符）
     function clearMainLogContent() {
       console.log('[clearMainLogContent] 清空主日志框内容和文件树');
+
+      // 停止正在进行的过滤：kill 后端 rg 进程 + 递增 generation 丢弃残留结果
+      if (typeof window.rgFilterGeneration !== 'undefined') {
+        window.rgFilterGeneration++;
+      }
+      if (typeof window._filteredChunkActive !== 'undefined') {
+        window._filteredChunkActive = false;
+      }
+      if (window.App && window.App.FilteredChunkCache) {
+        window.App.FilteredChunkCache.invalidate();
+      }
+      if (window.electronAPI && window.electronAPI.cancelFilter) {
+        window.electronAPI.cancelFilter();
+      }
 
       // 清空日志数据
       originalLines = [];
@@ -4774,14 +5102,17 @@
       isServerMode = false;
       serverCurrentPath = "";
 
-      // 清空文件树（保留盘符及其展开状态）
+      // 清空文件树（保留盘符、分类标题及其展开状态）
       fileTreeHierarchy = fileTreeHierarchy.filter((item) => {
-        // 只保留盘符节点，其他节点全部移除
-        return item.type === 'drive';
+        // 保留盘符节点和分类标题节点，其他节点全部移除
+        return item.type === 'drive' || item.type === 'drive-category';
       }).map((item) => {
         // 🚀 保留展开状态，但重置childrenLoaded以便重新加载子项
         // 同时清理压缩包相关的大对象引用，避免内存泄漏
         const { _archiveFiles, _zipObject, ...rest } = item;
+        if (item.type === 'drive-category') {
+          return { ...rest, expanded: item.expanded };
+        }
         return {
           ...rest,
           expanded: item.expanded,  // 保持展开/折叠状态
@@ -4876,6 +5207,16 @@
       lastVisibleEnd = -1;
       visibleStart = 0;
       visibleEnd = 0;
+
+      // 清理分片模式状态
+      window.chunkTotalLines = 0;
+      window.virtualScrollScale = 1;
+      if (window.App && window.App.ChunkCache) {
+        window.App.ChunkCache.invalidate();
+      }
+      if (window.electronAPI && window.electronAPI.cleanupChunkTemp) {
+        window.electronAPI.cleanupChunkTemp();
+      }
 
       // 显示空状态占位符
       const placeholder = DOMCache.get('placeholder');
@@ -5009,27 +5350,12 @@
         filteredPanelAllOriginalIndices = [];
         filteredPanelAllPrimaryIndices = [];
 
-        // 🚀 进程清理修复：重置 Worker 会话但保留 Worker 池供下次快速复用
-        if (typeof parallelFilterManager !== 'undefined' && parallelFilterManager) {
-          parallelFilterManager.cancel();
-          // 🚀 优化：使用 resetSession 保留 Worker 池，避免下次过滤时重新创建（节省 50-200ms）
-          parallelFilterManager.resetSession();
-          console.log('[Memory] 已重置 parallelFilterManager 会话（Worker 池保留）');
+        // 清理分片缓存
+        if (window.App && window.App.FilteredChunkCache) {
+          window.App.FilteredChunkCache.invalidate();
         }
-        if (typeof sharedFilterManager !== 'undefined' && sharedFilterManager) {
-          sharedFilterManager.cancel();
-          sharedFilterManager.results = [];
-          // 🚀 关键：清理SharedWorker连接
-          sharedFilterManager.cleanup();
-          console.log('[Memory] 已清理 sharedFilterManager 连接');
-        }
+        window._filteredChunkActive = false;
 
-        // 🚀 终止单个过滤Worker（如果存在）
-        if (typeof filterWorker !== 'undefined' && filterWorker) {
-          filterWorker.terminate();
-          filterWorker = null;
-          console.log('[Memory] 已终止单Worker进程');
-        }
 
         // 重置UI状态
         resetFilter(false);
@@ -5058,6 +5384,7 @@
         // 🚀 性能优化：使用 DOM 缓存
         const filteredPanelVirtualContent = DOMCache.get('filteredPanelVirtualContent');
         if (filteredPanelVirtualContent) {
+          if (window._releaseFilteredPanelDomPool) window._releaseFilteredPanelDomPool();
           filteredPanelVirtualContent.innerHTML = "";
         }
         const filteredPanelPlaceholder = DOMCache.get('filteredPanelPlaceholder');
@@ -5235,33 +5562,6 @@
         return getName(fileHeaders[ans]);
       }
 
-      function handleLogLineClick(e) {
-        // 查找点击的日志行
-        const line = e.target.closest(".log-line, .file-header");
-        if (!line) return;
-
-        const index = getLineIndexFromElement(line);
-        if (index < 0 || index >= originalLines.length) return;
-
-        // 记录当前选中行（用于书签/快捷操作）
-        if (line.classList.contains("log-line")) {
-          selectedOriginalIndex = index;
-          // 立即更新DOM选中态（不必等待下一次虚拟渲染）
-          try {
-            outer.querySelectorAll(".log-line.selected").forEach((el) => {
-              if (el !== line) el.classList.remove("selected");
-            });
-            line.classList.add("selected");
-          } catch (_) {}
-        }
-
-        const filePath = getFileNameForLineIndex(index);
-        if (filePath) {
-          // 移除高亮文件树功能，改为在过滤结果框头部显示
-          updateFilteredPanelHeaderWithFile(filePath);
-        }
-      }
-
       function hideLineFileHoverTip() {
         if (!lineFileHoverTip) return;
         lineFileHoverTip.classList.remove("visible");
@@ -5359,9 +5659,6 @@
 
       // 重构搜索事件：Enter向下搜索，Shift+Enter向上搜索
       function initSearchEvents() {
-        // 监听日志行点击
-        outer.addEventListener("click", handleLogLineClick);
-
         // 监听日志行悬停：已移除实时显示文件名功能，改为右键菜单显示
         // outer.addEventListener("mousemove", handleLogLineHoverMove);
         // outer.addEventListener("mouseleave", hideLineFileHoverTip);
@@ -5370,9 +5667,38 @@
         // 关键优化：用 keydown 替代 keypress，避免滚动/IME/浏览器差异导致 Enter 丢失
         searchBox.addEventListener("keydown", (e) => {
           if (e.isComposing) return;
+
+          // Keyboard navigation in search suggestions
+          if (searchSuggestionsVisible) {
+            const items = searchSuggestions.querySelectorAll('.filter-suggestion-item');
+            if (e.key === 'ArrowDown' && items.length > 0) {
+              e.preventDefault();
+              selectedSearchSuggestionIndex = Math.min(selectedSearchSuggestionIndex + 1, items.length - 1);
+              updateSelectedSearchSuggestion(items);
+              return;
+            } else if (e.key === 'ArrowUp' && items.length > 0) {
+              e.preventDefault();
+              selectedSearchSuggestionIndex = Math.max(selectedSearchSuggestionIndex - 1, -1);
+              updateSelectedSearchSuggestion(items);
+              return;
+            } else if (e.key === 'Escape') {
+              hideSearchSuggestions();
+              return;
+            } else if (e.key === 'Enter' && selectedSearchSuggestionIndex >= 0 && items[selectedSearchSuggestionIndex]) {
+              e.preventDefault();
+              e.stopPropagation();
+              searchBox.value = items[selectedSearchSuggestionIndex].textContent;
+              searchKeyword = searchBox.value;
+              hideSearchSuggestions();
+              performSearch();
+              return;
+            }
+          }
+
           if (e.key === "Enter") {
             e.preventDefault();
             e.stopPropagation();
+            hideSearchSuggestions();
             const currentValue = searchBox.value; // 不trim，保留空格
 
             // 搜索框为空时重置搜索（使用trim检查是否为空）
@@ -5387,27 +5713,13 @@
               searchKeyword = currentValue;
               performSearch();
             } else {
-              // 关键词未变：在已有结果中导航
+              // 关键词未变：在已有结果中导航，到边界停止不循环
               if (e.shiftKey) {
-                // Shift+Enter：向上导航（如果已在第一个，循环到最后）
-                if (currentMatchIndex > 0) {
-                  prevMatch();
-                } else if (totalMatchCount > 0) {
-                  // 已在第一个，循环到最后一个
-                  currentMatchIndex = totalMatchCount - 1;
-                  jumpToMatch(currentMatchIndex);
-                  updateSearchUI();
-                }
+                if (currentMatchIndex > 0) prevMatch();
+                else showMessage('已到顶部');
               } else {
-                // Enter：向下导航（如果已在最后一个，循环到第一个）
-                if (currentMatchIndex < totalMatchCount - 1) {
-                  nextMatch();
-                } else if (totalMatchCount > 0) {
-                  // 已在最后一个，循环到第一个
-                  currentMatchIndex = 0;
-                  jumpToMatch(currentMatchIndex);
-                  updateSearchUI();
-                }
+                if (currentMatchIndex < totalMatchCount - 1) nextMatch();
+                else showMessage('已到底部');
               }
             }
           }
@@ -5474,6 +5786,7 @@
           // 🚀 性能优化：使用 DOM 缓存
           const filteredPanelVirtualContent = DOMCache.get('filteredPanelVirtualContent');
           if (filteredPanelVirtualContent) {
+            if (window._releaseFilteredPanelDomPool) window._releaseFilteredPanelDomPool();
             filteredPanelVirtualContent.innerHTML = '';
           }
 
@@ -5631,7 +5944,24 @@
               return false;
             }
 
-            return true; // 让事件继续传播给其他处理器
+            // 超大文件压缩模式：拦截滚轮事件，按比例缩小 delta 避免一滚翻多页
+            var vscale = (typeof virtualScrollScale !== 'undefined' && virtualScrollScale > 1) ? virtualScrollScale : 0;
+            if (vscale > 1 && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+              e.preventDefault();
+              e.stopPropagation();
+
+              var wheelDelta = e.deltaY;
+              if (e.deltaMode === 1) wheelDelta *= 16;
+              else if (e.deltaMode === 2) wheelDelta *= window.innerHeight;
+
+              var maxScrollTop = Math.max(0, outer.scrollHeight - outer.clientHeight);
+              var newScrollTop = outer.scrollTop + wheelDelta / vscale;
+              newScrollTop = Math.max(0, Math.min(maxScrollTop, newScrollTop));
+              outer.scrollTop = newScrollTop;
+              return false;
+            }
+
+            return true; // 非压缩模式：让事件继续传播（原生滚动或平滑滚轮接管）
           }, { passive: false, capture: true });
         } else {
           console.warn('⚠️ outer 容器未找到！');
@@ -5676,51 +6006,39 @@
           console.warn('⚠️ filterBox 未找到！');
         }
 
-        // 监听过滤结果框的 Ctrl + 滚轮事件
+        // 监听过滤结果框的滚轮事件（仅处理 Ctrl/Alt，正常滚动交给浏览器原生处理）
         // 🚀 性能优化：使用 DOM 缓存
         const filteredPanelContent = DOMCache.get('filteredPanelContent');
         if (filteredPanelContent) {
-          console.log('✅ 绑定过滤结果框滚轮事件监听器');
+          // 与主日志框一致：正常滚轮不拦截，浏览器原生滚动最流畅
           filteredPanelContent.addEventListener('wheel', (e) => {
-            if (e.ctrlKey) {
-              console.log('🖱️ 检测到过滤结果框 Ctrl + 滚轮，deltaY:', e.deltaY);
-              e.preventDefault();
-              e.stopPropagation();
-              e.stopImmediatePropagation();
+            if (!e.ctrlKey && !e.altKey) return; // 正常滚动：浏览器直接处理
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
 
+            if (e.ctrlKey) {
               // 向上滚动放大，向下滚动缩小
               if (e.deltaY < 0) {
                 filteredLogFontSize = Math.min(filteredLogFontSize + FONT_SIZE_STEP, MAX_FONT_SIZE);
-                console.log(`⬆️ 放大过滤结果框字体到: ${filteredLogFontSize}px`);
               } else {
                 filteredLogFontSize = Math.max(filteredLogFontSize - FONT_SIZE_STEP, MIN_FONT_SIZE);
-                console.log(`⬇️ 缩小过滤结果框字体到: ${filteredLogFontSize}px`);
               }
 
-              // 应用字体大小和行高（已包含重新渲染逻辑）
               applyFilteredLogFontSize();
 
-              // 保存到 localStorage
               try {
                 localStorage.setItem('filteredLogFontSize', filteredLogFontSize.toString());
               } catch (e) {
                 console.warn('保存字体大小失败:', e);
               }
 
-              // 显示提示
               if (typeof showMessage === 'function') {
                 showMessage(`过滤结果框字体大小: ${filteredLogFontSize}px`);
               }
             } else if (e.altKey) {
               // Alt + 滚轮：左右平移
-              e.preventDefault();
-              e.stopPropagation();
-              e.stopImmediatePropagation();
-
-              // deltaY 为负向上滚动，向左平移
-              // deltaY 为正向下滚动，向右平移
-              const scrollAmount = e.deltaY;
-              filteredPanelContent.scrollLeft += scrollAmount;
+              filteredPanelContent.scrollLeft += e.deltaY;
             }
           }, { passive: false, capture: true });
         } else {
@@ -5901,160 +6219,14 @@
         }
       }
 
-      // ========== 跳转到指定行功能 ==========
-      let gotoLineModal = null;
-      let gotoLineInput = null;
-      let gotoLineTotalLines = null;
-
-      function initGotoLineModal() {
-        gotoLineModal = document.getElementById('gotoLineModal');
-        gotoLineInput = document.getElementById('gotoLineInput');
-        gotoLineTotalLines = document.getElementById('gotoLineTotalLines');
-
-        // 关闭按钮
-        document.getElementById('gotoLineClose').addEventListener('click', hideGotoLineModal);
-        document.getElementById('gotoLineCancel').addEventListener('click', hideGotoLineModal);
-
-        // 确定按钮
-        document.getElementById('gotoLineOk').addEventListener('click', performGotoLine);
-
-        // 点击背景关闭
-        gotoLineModal.addEventListener('click', (e) => {
-          if (e.target === gotoLineModal) {
-            hideGotoLineModal();
-          }
-        });
-
-        // ESC键关闭
-        gotoLineModal.addEventListener('keydown', (e) => {
-          if (e.key === 'Escape') {
-            hideGotoLineModal();
-          } else if (e.key === 'Enter') {
-            performGotoLine();
-          }
-        });
-      }
-
-      function showGotoLineModal() {
-        if (!gotoLineModal) {
-          initGotoLineModal();
-        }
-
-        // 更新总行数
-        gotoLineTotalLines.textContent = originalLines.length;
-
-        // 清空输入框
-        gotoLineInput.value = '';
-
-        // 显示对话框
-        gotoLineModal.classList.add('visible');
-
-        // 聚焦输入框
-        setTimeout(() => {
-          gotoLineInput.focus();
-          gotoLineInput.select();
-        }, 100);
-      }
-
-      function hideGotoLineModal() {
-        if (gotoLineModal) {
-          gotoLineModal.classList.remove('visible');
-        }
-      }
-
-      function performGotoLine() {
-        const lineNum = parseInt(gotoLineInput.value, 10);
-
-        if (isNaN(lineNum) || lineNum < 1 || lineNum > originalLines.length) {
-          showMessage(`请输入有效的行号 (1 - ${originalLines.length})`);
-          return;
-        }
-
-        // 转换为0-based索引
-        const targetIndex = lineNum - 1;
-
-        // 跳转
-        jumpToLine(targetIndex, 'center');
-
-        // 隐藏对话框
-        hideGotoLineModal();
-
-        showMessage(`已跳转到第 ${lineNum} 行`);
-      }
-
       // 🚀 构建日志索引（新增优化功能）
       let indexBuildInProgress = false;
 
-      async function buildLogIndexes(lines, forceRebuild = false) {
-        // 防止重复构建
-        if (indexBuildInProgress && !forceRebuild) {
-          console.log('Index build already in progress, skipping...');
-          return;
-        }
-
-        indexBuildInProgress = true;
-
-        try {
-          // 初始化搜索和过滤模块（如果尚未初始化）
-          if (window.App && window.App.Search && !window.App.Search.indexer) {
-            window.App.Search.init();
-          }
-          if (window.App && window.App.Filter && !window.App.Filter.indexer) {
-            window.App.Filter.init();
-          }
-
-          // 显示索引构建状态
-          if (window.searchStatus) {
-            window.searchStatus.textContent = '索引构建中...';
-          }
-
-          // 构建搜索索引
-          if (window.App && window.App.Search && window.App.Search.buildIndex) {
-            window.App.Search.buildIndex(lines, forceRebuild);
-          }
-
-          // 构建过滤索引
-          if (window.App && window.App.Filter && window.App.Filter.buildIndex) {
-            window.App.Filter.buildIndex(lines, forceRebuild);
-          }
-
-          console.log(`✓ Index building initiated for ${lines.length} lines`);
-        } catch (error) {
-          console.error('Failed to build indexes:', error);
-        } finally {
-          // 延迟重置标志，避免重复构建
-          setTimeout(() => {
-            indexBuildInProgress = false;
-          }, 1000);
-        }
-      }
+      
 
 
       // 监听索引构建完成/进度事件（只注册一次，避免每次加载文件重复注册）
-      if (!window._indexListenersRegistered) {
-        window._indexListenersRegistered = true;
-
-        window.addEventListener('searchIndexComplete', (e) => {
-          const { totalLines, buildTime } = e.detail;
-          if (window.searchStatus) {
-            window.searchStatus.textContent = `索引已构建 (${totalLines}行, ${buildTime.toFixed(0)}ms)`;
-          }
-        });
-
-        window.addEventListener('filterIndexComplete', (e) => {
-          const { totalLines, buildTime } = e.detail;
-        });
-
-        window.addEventListener('searchIndexProgress', (e) => {
-          const { progress } = e.detail;
-          if (window.searchStatus) {
-            window.searchStatus.textContent = `索引构建: ${progress.toFixed(1)}%`;
-          }
-        });
-
-        window.addEventListener('filterIndexProgress', (e) => {
-        });
-      }
+      
 
       // 执行搜索（基于原始日志）
       async function performSearch() {
@@ -6073,6 +6245,106 @@
           updateSearchUI();
           renderLogLines();
           return;
+        }
+
+        // 🚀 分片模式：originalLines 为空，使用 ripgrep 搜索磁盘文件
+        var isChunkSearch = (window.fileLoadMode === 'chunk' && (!originalLines || originalLines.length === 0));
+        if (isChunkSearch) {
+          try {
+            var headers = window.App && window.App.ChunkCache
+              ? window.App.ChunkCache.getFileHeaders()
+              : (typeof fileHeaders !== 'undefined' ? fileHeaders : []);
+            if (!headers || headers.length === 0) {
+              showMessage('搜索失败：没有可搜索的文件');
+              return;
+            }
+            document.getElementById('status').textContent = '⏳ ripgrep 搜索中...';
+
+            var rgPattern = searchKeyword.split('|').map(function(k) {
+              return k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            }).join('|');
+
+            // 规范化路径用于比较（统一反斜杠为正斜杠，去除尾部斜杠）
+            function normPath(p) { return (p || '').replace(/\\/g, '/').replace(/\/+$/, ''); }
+            var headerPathMap = {};
+            for (var hdrIdx = 0; hdrIdx < headers.length; hdrIdx++) {
+              headerPathMap[normPath(headers[hdrIdx].filePath)] = headers[hdrIdx];
+            }
+
+            var files = [];
+            for (var fi = 0; fi < headers.length; fi++) {
+              var fp = headers[fi].filePath;
+              if (fp) files.push(fp);
+            }
+
+            var searchResult = null;
+            if (typeof window.electronAPI !== 'undefined' && window.electronAPI.callRGBatch) {
+              searchResult = await window.electronAPI.callRGBatch({
+                execPath: './rg.exe',
+                pattern: rgPattern,
+                files: files,
+                includeContent: true,
+                caseInsensitive: true
+              });
+            }
+
+            // 解析结果
+            var chunkMatches = [];
+            if (searchResult && searchResult.success) {
+              if (searchResult.files && searchResult.lineNums) {
+                var matchedCount = 0, skippedCount = 0;
+                for (var entryIdx = 0; entryIdx < searchResult.files.length; entryIdx++) {
+                  var entry = searchResult.files[entryIdx];
+                  if (entry.count === 0) continue;
+                  // 用规范化路径匹配 header
+                  var hdr = headerPathMap[normPath(entry.path)];
+                  if (!hdr) { skippedCount += entry.count; continue; }
+                  matchedCount += entry.count;
+                  for (var li = 0; li < entry.count; li++) {
+                    var rgLineNum = searchResult.lineNums[entry.offset + li];
+                    chunkMatches.push(hdr.startIndex + rgLineNum);
+                  }
+                }
+                if (skippedCount > 0) {
+                  console.warn('[performSearch] 部分结果因路径不匹配被跳过:', skippedCount);
+                }
+              } else if (searchResult.results) {
+                // 旧格式 fallback
+                for (var fi2 = 0; fi2 < headers.length; fi2++) {
+                  var hdr2 = headers[fi2];
+                  var fileMatches = searchResult.results[hdr2.filePath];
+                  if (!fileMatches || !fileMatches.length) continue;
+                  for (var mi = 0; mi < fileMatches.length; mi++) {
+                    chunkMatches.push(hdr2.startIndex + fileMatches[mi]);
+                  }
+                }
+              }
+              chunkMatches.sort(function(a, b) { return a - b; });
+            }
+
+            searchMatches = chunkMatches;
+            totalMatchCount = searchMatches.length;
+            currentMatchIndex = totalMatchCount > 0 ? 0 : -1;
+
+            document.getElementById('status').textContent =
+              totalMatchCount > 0
+                ? '✓ 搜索完成: ' + totalMatchCount + ' 个匹配'
+                : '未找到匹配项';
+
+            updateSearchUI();
+            renderLogLines();
+
+            if (totalMatchCount > 0) {
+              requestAnimationFrame(function() {
+                jumpToMatch(0);
+              });
+            }
+            return;
+          } catch (chunkSearchErr) {
+            console.error('[performSearch] 分片模式搜索失败:', chunkSearchErr);
+            document.getElementById('status').textContent = '';
+            // 失败不 return，继续走下面的线性搜索作为降级
+          }
         }
 
         // 🚀 优先使用索引搜索（新优化）
@@ -6166,9 +6438,12 @@
           }
         }
 
-        const lineTop = targetOriginalIndex * lineHeight;
+        const lineTop = typeof lineToScrollTop === 'function'
+          ? lineToScrollTop(targetOriginalIndex)
+          : targetOriginalIndex * lineHeight;
         const containerHeight = outer.clientHeight;
-        const scrollTop = lineTop - containerHeight / 2 + lineHeight / 2 + (9 * lineHeight); // 往下调整9行，防止被过滤框挡住
+        const vscale = (typeof virtualScrollScale !== 'undefined' && virtualScrollScale > 1) ? virtualScrollScale : 1;
+        const scrollTop = lineTop - (containerHeight / 2 - lineHeight / 2 - 9 * lineHeight) / vscale;
 
         const targetTop = Math.max(0, scrollTop);
 
@@ -6279,206 +6554,8 @@
             : "";
       }
 
-      // 修改：初始化拖拽功能，支持文件和文件夹拖拽（集成到outerContainer）
-      function initDragDrop() {
-        try {
-          const isFileLikeDrop = (dt) => {
-            try {
-              if (!dt) return false;
-
-              // 宽松检测：如果有 types，几乎都认为是文件拖拽
-              if (dt.types && dt.types.length > 0) {
-                try {
-                  const arr = Array.from(dt.types);
-                  console.log("🔍 isFileLikeDrop - types:", arr);
-
-                  // 标准的 Files 类型
-                  if (arr.includes("Files")) return true;
-
-                  // WinRAR 等工具可能使用的 text/uri-list 或 text/plain
-                  if (arr.includes("text/uri-list") || arr.includes("text/plain")) {
-                    return true;
-                  }
-
-                  // 兼容性检查：某些应用可能使用自定义类型
-                  if (arr.some(t => t && (
-                    t.includes("file") ||
-                    t.includes("uri") ||
-                    t.includes("path") ||
-                    t.includes("FileName") ||
-                    t.includes("FileNameW")
-                  ))) {
-                    return true;
-                  }
-
-                  // 特别处理：WinRAR 可能不提供标准类型，如果没有任何不相关的类型，也允许通过
-                  // 排除明显不是文件的类型（如 text/html, text/html等）
-                  const nonFileTypes = ['text/html', 'text/plain', 'text/xml', 'application/xml'];
-                  if (!arr.every(t => nonFileTypes.includes(t))) {
-                    console.log("✅ 宽松检测：允许通过（未知数据类型）");
-                    return true;
-                  }
-                } catch (_) {}
-              }
-
-              // 检查 files 属性
-              if (dt.files && dt.files.length > 0) return true;
-
-              // 检查 items 属性
-              if (dt.items && dt.items.length > 0) {
-                for (const it of dt.items) {
-                  if (it && it.kind === "file") return true;
-                }
-              }
-
-              return false;
-            } catch (_) {
-              return false;
-            }
-          };
-
-          const setCopyDropEffect = (e) => {
-            try {
-              if (!e || !e.dataTransfer) return;
-              e.dataTransfer.dropEffect = "copy";
-              e.dataTransfer.effectAllowed = "copy";
-            } catch (_) {
-              // ignore
-            }
-          };
-
-          const addDragOverStyle = () => {
-            try {
-              if (outer) outer.classList.add("drag-over");
-            } catch (_) {}
-          };
-
-          const removeDragOverStyle = () => {
-            try {
-              if (outer) outer.classList.remove("drag-over");
-            } catch (_) {}
-          };
-
-          // 统一处理：允许在页面任意位置拖拽文件/文件夹（不要求必须落在 outer 上）
-          const onDragOver = (e) => {
-            try {
-              if (!isFileLikeDrop(e.dataTransfer)) return;
-              e.preventDefault();
-              e.stopPropagation();
-              setCopyDropEffect(e);
-              addDragOverStyle();
-            } catch (err) {
-              console.error("dragover事件处理失败:", err);
-            }
-          };
-
-          const onDragLeave = (e) => {
-            try {
-              if (!isFileLikeDrop(e.dataTransfer)) return;
-              e.preventDefault();
-              // 只有当鼠标真正离开outer容器时才移除样式（relatedTarget 可能为空）
-              if (outer && e.relatedTarget && outer.contains(e.relatedTarget)) return;
-              removeDragOverStyle();
-            } catch (err) {
-              console.error("dragleave事件处理失败:", err);
-            }
-          };
-
-          const onDrop = async (e) => {
-            try {
-              if (!isFileLikeDrop(e.dataTransfer)) return;
-              e.preventDefault();
-              e.stopPropagation();
-              removeDragOverStyle();
-
-              // 📊 调试：显示文件数量
-              console.log("🏠 主窗口 drop 事件:");
-              console.log("  - 文件数量:", e.dataTransfer.files ? e.dataTransfer.files.length : 0);
-
-              if (!e.dataTransfer) {
-                console.error("dataTransfer 不存在");
-                showMessage("拖拽数据无效，请重新尝试");
-                return;
-              }
-              await handleDropFiles(e.dataTransfer);
-            } catch (error) {
-              console.error("拖拽文件处理失败:", error);
-              const errorMsg = error?.message || error?.toString() || "未知错误";
-              if (typeof showMessage === "function") {
-                showMessage(`拖拽文件失败: ${errorMsg}`);
-              } else {
-                alert(`拖拽文件失败: ${errorMsg}`);
-              }
-            }
-          };
-
-          // 主文档：捕获阶段监听，避免被其它组件拦截
-          document.addEventListener("dragover", onDragOver, true);
-          document.addEventListener("dragleave", onDragLeave, true);
-          document.addEventListener("drop", onDrop, true);
-          window.addEventListener("dragend", removeDragOverStyle, false);
-          window.addEventListener("blur", removeDragOverStyle, false);
-
-          // outer 上仍保留监听（便于 relatedTarget 判断更准确）
-          if (outer) {
-            outer.addEventListener("dragover", onDragOver, false);
-            outer.addEventListener("dragleave", onDragLeave, false);
-            outer.addEventListener("drop", onDrop, false);
-          }
-
-          // 兼容：当 log.html 被 index.html 以 iframe 方式嵌入时，
-          // 某些浏览器会把 drop 事件落在父页面的 iframe 元素上而不是子文档内部。
-          // 若同源，尝试在父文档捕获 drop 并转发到本页面的处理逻辑。
-          try {
-            const topWin = window.top;
-            const topDoc = topWin && topWin.document ? topWin.document : null;
-            if (topDoc && topDoc !== document) {
-              topDoc.addEventListener(
-                "dragover",
-                (e) => {
-                  if (!isFileLikeDrop(e.dataTransfer)) return;
-                  try {
-                    e.preventDefault();
-                    setCopyDropEffect(e);
-                  } catch (_) {}
-                },
-                true
-              );
-
-              topDoc.addEventListener(
-                "drop",
-                async (e) => {
-                  if (!isFileLikeDrop(e.dataTransfer)) return;
-                  try {
-                    const el =
-                      typeof topDoc.elementFromPoint === "function"
-                        ? topDoc.elementFromPoint(e.clientX, e.clientY)
-                        : null;
-                    const iframe =
-                      el && typeof el.closest === "function"
-                        ? el.closest("iframe")
-                        : null;
-                    if (iframe && iframe.contentWindow === window) {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      removeDragOverStyle();
-                      await handleDropFiles(e.dataTransfer);
-                    }
-                  } catch (err) {
-                    // 父文档转发失败不影响子文档自身拖拽
-                    console.warn("父页面drop转发失败:", err);
-                  }
-                },
-                true
-              );
-            }
-          } catch (_) {
-            // 跨域/受限时忽略
-          }
-        } catch (error) {
-          console.error("初始化拖拽功能失败:", error);
-        }
-      }
+      // 拖拽导入功能已移除 — 文件统一从文件树获取
+      function initDragDrop() {}
 
       // File System Access API（Chrome / Edge 86+）
       async function traverseHandle(handle, path, files, options = {}) {
@@ -8897,25 +8974,27 @@
 
           if (isLargeFile) {
             // 大文件使用流式读取
-            progressBar.style.display = "block";
-            progressFill.style.width = "0%";
+            var _hpf4 = document.getElementById('headerProgressFill');
+            if (_hpf4) {
+              _hpf4.classList.remove('complete');
+              _hpf4.style.width = '0%';
+              _hpf4.style.left = '50%';
+              var _hue2 = Math.floor(Math.random() * 360);
+              _hpf4.style.background = 'hsl(' + _hue2 + ', 72%, 55%)';
+            }
 
             await loadFileStreaming(file, fileName, CHUNK_SIZE, (progress) => {
-              progressFill.style.width = `${progress}%`;
+              var _hp = document.getElementById('headerProgressFill');
+              if (_hp) { _hp.style.width = progress + '%'; _hp.style.left = (50 - progress / 2) + '%'; }
             });
 
-            progressBar.style.display = "none";
+            var _hpf5 = document.getElementById('headerProgressFill');
+            if (_hpf5) { _hpf5.classList.add('complete'); _hpf5.style.width = '100%'; _hpf5.style.left = '0%'; }
           } else {
             // 小文件使用传统方式
             const content = await readFileAsText(file);
             processFileContent(content, fileName, filePath);
           }
-
-          // 🚀 构建搜索和过滤索引（新优化）
-          if (originalLines.length > 1000) { // 只对较大的文件构建索引
-            buildLogIndexes(originalLines);
-          }
-
           showLoading(false);
           // 🚀 隐藏进度条
           hideFileProgressBar();
@@ -8930,9 +9009,6 @@
 
       // 读取文件为文本（Promise包装，支持多种编码）
       async function readFileAsText(file) {
-        // 🚀 支持多种编码，优先尝试 UTF-8
-        const encodings = ['utf-8', 'gbk', 'gb2312', 'gb18030', 'windows-1252', 'utf-16le', 'utf-16be'];
-
         for (const encoding of encodings) {
           try {
             const result = await new Promise((resolve, reject) => {
@@ -9101,7 +9177,8 @@
           await processFileBatch(batch, sessionId);
 
           const progress = ((i + batch.length) / files.length) * 100;
-          progressFill.style.width = `${progress}%`;
+          var _hpf6 = document.getElementById('headerProgressFill');
+          if (_hpf6) { _hpf6.style.width = progress + '%'; _hpf6.style.left = (50 - progress / 2) + '%'; }
 
           await new Promise((resolve) => setTimeout(resolve, 0));
         }
@@ -9545,630 +9622,6 @@
         ];
       }
 
-      // 应用一级过滤 - 同步版本 + 性能优化
-      function applyFilter() {
-        const filterText = filterBox.value; // 不trim，保留空格
-
-        // 调试日志：记录过滤输入
-        console.log('=== applyFilter called (sync + optimized) ===');
-
-        // 🚀 新增：过滤模式检测（仅 rg 磁盘过滤模式才走 ripgrep 路径）
-        // memory 模式下 isFileLoadMode=true，走下面的 in-memory 过滤
-        if (fileLoadMode === 'filter' && filterModeFileList.length > 0) {
-          // 过滤模式：使用 rg 直接从文件列表中过滤
-          console.log(`[过滤模式] 使用 rg 从 ${filterModeFileList.length} 个文件中过滤`);
-          applyFilterWithRipgrepOnFiles(filterText, filterModeFileList);
-          return;
-        }
-
-        // 🚀 调试：输出文件信息
-        if (typeof currentFiles !== 'undefined' && currentFiles && currentFiles.length > 0) {
-          console.log('[Filter] 第一个文件信息:', {
-            name: currentFiles[0].name,
-            path: currentFiles[0].path,
-            archiveName: currentFiles[0].archiveName
-          });
-        }
-
-        // 🚀 优先使用 ripgrep 过滤（如果可用且有有效磁盘路径）
-        // 🔧 检查是否是压缩包文件 - 压缩包内容使用Worker过滤
-        // 🔧 调试：输出所有文件的压缩包属性
-        console.log('[Filter] currentFiles 总数:', currentFiles ? currentFiles.length : 0);
-        for (let i = 0; i < Math.min(currentFiles.length, 3); i++) {
-          const f = currentFiles[i];
-          console.log(`[Filter] 文件 ${i}:`, {
-            name: f.name,
-            path: f.path ? f.path.substring(0, 80) + '...' : '(no path)',
-            archiveName: f.archiveName ? f.archiveName.substring(0, 50) + '...' : '(no archiveName)',
-            fromArchive: f.fromArchive
-          });
-        }
-
-        const isArchiveFile = currentFiles.some(f => f.archiveName || f.fromArchive);
-        console.log('[Filter] isArchiveFile 检查结果:', isArchiveFile);
-
-        if (!isArchiveFile &&
-            typeof window.electronAPI !== 'undefined' &&
-            window.electronAPI.callRG &&
-            typeof currentFiles !== 'undefined' &&
-            currentFiles &&
-            currentFiles.length > 0 &&
-            currentFiles[0] &&
-            currentFiles[0].path &&
-            hasValidDiskPath(currentFiles[0].path)) {
-          console.log('[Filter] ✓ 使用 ripgrep 极速过滤');
-          applyFilterWithRipgrepAsync(filterText);
-          return;
-        } else {
-          if (isArchiveFile) {
-            console.log('[Filter] 文件来自压缩包，使用Worker过滤');
-          } else {
-            console.log('[Filter] 使用原有过滤方法');
-          }
-        }
-
-        // 调试日志：记录过滤输入
-        console.log('Input value:', JSON.stringify(filterText));
-
-        // 🚀 重新过滤前释放之前过滤的内存
-        cleanFilterData();
-
-        // 使用trim检查是否为空，但保留原始值用于过滤
-        if (filterText.trim() === "") {
-          // cleanFilterData 已经清空，无需再次调用 resetFilter
-          return;
-        }
-
-        // 新增：添加到过滤历史
-        addToFilterHistory(filterText);
-
-        // 解析过滤关键词（只支持管道符 | 分隔，逗号作为普通字符，支持转义）
-        const keywords = [];
-        let currentKeyword = "";
-        let escaping = false;
-
-        for (let i = 0; i < filterText.length; i++) {
-          const char = filterText[i];
-
-          if (escaping) {
-            currentKeyword += char;
-            escaping = false;
-          } else if (char === "\\") {
-            escaping = true;
-          } else if (char === "|") {
-            if (currentKeyword) {
-              keywords.push(currentKeyword); // 保留空格
-              currentKeyword = "";
-            }
-          } else {
-            currentKeyword += char;
-          }
-        }
-
-        if (currentKeyword) {
-          keywords.push(currentKeyword); // 保留空格
-        }
-
-        // ========== P1-3: 排除过滤（NOT 语义）==========
-        // 以 - 或 ! 开头的关键词为排除词，匹配到的行会被过滤掉
-        const positiveKeywords = [];
-        const negativeKeywords = [];
-        for (const kw of keywords) {
-          if (kw.startsWith('-') || kw.startsWith('!')) {
-            const neg = kw.substring(1);
-            if (neg) negativeKeywords.push(neg);
-          } else {
-            positiveKeywords.push(kw);
-          }
-        }
-
-        // 🚀 自动追加 "=== 文件:" 关键词，确保文件头始终显示在过滤结果中
-        // 例如：用户输入 "battery|charge"，实际过滤为 "battery|charge|=== 文件:"
-        positiveKeywords.push("=== 文件:");
-
-        // ========== 性能优化：智能匹配策略 ==========
-        // 根据关键词类型选择最快的匹配方法
-        // 🔧 大小写敏感：保留原始大小写进行匹配
-        const compilePatterns = (kws) => kws.map(keyword => {
-          // 检查是否包含正则特殊字符
-          const hasRegexSpecialChars = /[.*+?^${}()|[\]\\]/.test(keyword);
-
-          // 优化1：纯文本关键词（最常见）- 直接使用 includes，最快
-          if (!hasRegexSpecialChars && !keyword.includes(" ")) {
-            return {
-              type: 'simple',
-              keyword,
-              test: (lineContent) => lineContent.includes(keyword)
-            };
-          }
-
-          // 优化2：包含空格的短语 - 使用 includes
-          if (keyword.includes(" ")) {
-            return {
-              type: 'phrase',
-              keyword,
-              test: (lineContent) => lineContent.includes(keyword)
-            };
-          }
-
-          // 优化3：包含特殊字符 - 使用正则表达式（最慢，但功能最强）
-          try {
-            const regex = new RegExp(escapeRegExp(keyword));
-            return {
-              type: 'regex',
-              keyword,
-              regex,
-              test: (lineContent) => regex.test(lineContent)
-            };
-          } catch (e) {
-            // 降级：使用字符串匹配
-            return {
-              type: 'string',
-              keyword,
-              test: (lineContent) => lineContent.includes(keyword)
-            };
-          }
-        });
-
-        const compiledPatterns = compilePatterns(positiveKeywords);
-        const compiledNegativePatterns = compilePatterns(negativeKeywords);
-
-        // ========== 性能优化：已移除HTML反转义，直接使用原始内容 ==========
-        const getCachedUnescape = (line) => {
-          // 直接返回原始内容，不进行任何转义/反转义操作
-          return line;
-        };
-
-        // 🚀 执行过滤（增量显示，性能优化版）
-        console.log('[Filter] 开始增量过滤（优化版）...');
-
-        // 🔧 内存优化：设置过滤标志，禁用HTML缓存
-        isFiltering = true;
-
-        // 🧹 首先清理之前的过滤内容
-        console.log('[Filter] 清理旧内容...');
-        filteredPanel.classList.add("visible");
-
-        // 🚀 自动最大化：如果面板不是最大化状态，且用户没有手动还原过，自动最大化
-        if (typeof isFilterPanelMaximized !== 'undefined' && !isFilterPanelMaximized && typeof filteredPanelState !== 'undefined' && filteredPanelState.userPreference !== 'normal') {
-          if (typeof saveFilteredPanelState === 'function') saveFilteredPanelState();
-          filteredPanel.classList.add("maximized");
-          filteredPanel.style.removeProperty('height');
-          filteredPanel.style.removeProperty('width');
-          if (typeof filteredPanelLineHeight !== 'undefined') filteredPanel.style.removeProperty('--filtered-panel-top');
-          isFilterPanelMaximized = true;
-          const maximizeBtn = typeof DOMCache !== 'undefined' ? DOMCache.get('filteredPanelMaximize') : null;
-          if (maximizeBtn) maximizeBtn.textContent = '❐';
-          console.log('[Filter] 自动最大化过滤面板');
-        }
-
-        // 🔧 文件树和过滤面板共存：不再隐藏文件树
-
-        // 🔧 在清空数据之前，记住当前可见区域的中心行 originalIndex
-        // 这样过滤完成后可以自动跳回该行（如果该行仍存在）
-        if (lastClickedOriginalIndex < 0 && filteredPanelAllOriginalIndices.length > 0) {
-          const fpc = DOMCache.get('filteredPanelContent');
-          if (fpc) {
-            const prevScrollTop = fpc.scrollTop;
-            const prevPanelHeight = fpc.clientHeight;
-            const lh = typeof filteredPanelLineHeight !== 'undefined' ? filteredPanelLineHeight : 19;
-            const visStart = Math.floor(prevScrollTop / lh);
-            const visEnd = Math.ceil((prevScrollTop + prevPanelHeight) / lh);
-            const centerIdx = Math.floor((visStart + visEnd) / 2);
-            if (centerIdx >= 0 && centerIdx < filteredPanelAllOriginalIndices.length) {
-              lastClickedOriginalIndex = filteredPanelAllOriginalIndices[centerIdx];
-              console.log(`[applyFilter] 📍 记忆可见区域中心行: originalIndex=${lastClickedOriginalIndex} (在清空数据前)`);
-            }
-          }
-        }
-
-        filteredCount.textContent = "0 (0%)";
-        document.getElementById('status').textContent = '正在准备过滤...';
-
-        // 清空旧数据
-        filteredPanelAllLines = [];
-        filteredPanelAllOriginalIndices = [];
-        filteredPanelAllPrimaryIndices = [];
-        filteredPanelVisibleStart = -1;
-        filteredPanelVisibleEnd = -1;
-
-        // 清空 UI
-        filteredPanelPlaceholder.style.height = "0px";
-        filteredPanelVirtualContent.innerHTML = "";
-        filteredPanelContent.scrollTop = 0;
-        filteredPanelScrollPosition = 0;
-
-        // 使用 setTimeout 确保 UI 更新后再开始过滤
-        setTimeout(() => {
-          startIncrementalFilter(keywords, compiledPatterns, compiledNegativePatterns, getCachedUnescape);
-        }, 0);
-
-        // 提前返回，避免继续执行下面的代码
-        return;
-      }
-
-      // 🚀 增量过滤函数（独立出来便于多线程扩展）
-      function startIncrementalFilter(keywords, compiledPatterns, compiledNegativePatterns, getCachedUnescape) {
-        const startTime = performance.now();
-
-        // 🚀 智能跳转：记录当前查看位置的原始索引
-        // 优先使用点击记录的行，如果没有则使用可见区域的中心行
-        if (typeof lastClickedOriginalIndex === 'undefined' || lastClickedOriginalIndex < 0) {
-          // 没有点击记录时，尝试使用可见区域的中心行
-          if (typeof filteredPanelAllOriginalIndices !== 'undefined' &&
-              filteredPanelAllOriginalIndices &&
-              filteredPanelAllOriginalIndices.length > 0) {
-            const filteredPanelContent = DOMCache.get('filteredPanelContent');
-            if (filteredPanelContent) {
-              const scrollTop = filteredPanelContent.scrollTop;
-              const panelHeight = filteredPanelContent.clientHeight;
-              const lineHeight = typeof filteredPanelLineHeight !== 'undefined' ? filteredPanelLineHeight : 19;
-
-              // 计算可见区域的起始和结束索引
-              const visibleStart = Math.floor(scrollTop / lineHeight);
-              const visibleEnd = Math.ceil((scrollTop + panelHeight) / lineHeight);
-
-              // 计算中心行索引
-              const centerIndex = Math.floor((visibleStart + visibleEnd) / 2);
-
-              // 确保中心索引在有效范围内
-              if (centerIndex >= 0 && centerIndex < filteredPanelAllOriginalIndices.length) {
-                lastClickedOriginalIndex = filteredPanelAllOriginalIndices[centerIndex];
-                console.log(`[Filter MainThread] 📍 记忆可见区域中心行: originalIndex=${lastClickedOriginalIndex}`);
-              }
-            }
-          }
-        } else {
-          console.log(`[Filter MainThread] 📍 使用已记录位置: originalIndex=${lastClickedOriginalIndex}`);
-        }
-
-        const filteredLines = [];
-        const filteredToOriginalIndex = [];
-
-        // 性能优化：根据数据量动态调整批次大小
-        const totalLines = originalLines.length;
-        const CHUNK_SIZE = totalLines > 100000 ? 50000 :  // 超大数据：5万/批
-                              totalLines > 50000 ? 20000 :  // 大数据：2万/批
-                              totalLines > 10000 ? 10000 :  // 中数据：1万/批
-                              5000;                        // 小数据：5千/批
-
-        let processedCount = 0;
-        let lastUIUpdate = 0;
-        let lastDOMUpdate = 0;
-
-        // 更新阈值：减少UI更新频率
-        const UI_UPDATE_INTERVAL = 100;  // 每 100ms 更新一次文本
-        const DOM_UPDATE_THRESHOLD = 0.15;  // 每处理 15% 才更新 DOM
-
-        // 更新状态
-        document.getElementById('status').textContent = '正在过滤...';
-
-        // 使用分批处理，避免阻塞UI
-        function processBatch(startIndex) {
-          const endIndex = Math.min(startIndex + CHUNK_SIZE, totalLines);
-          const batchStartTime = performance.now();
-
-          console.log(`[Filter] 处理批次: ${startIndex} - ${endIndex} / ${totalLines} (${((endIndex / totalLines) * 100).toFixed(1)}%)`);
-
-          for (let i = startIndex; i < endIndex; i++) {
-            const line = originalLines[i];
-
-            // 使用缓存获取反转义后的内容
-            const lineContent = getCachedUnescape(line);
-
-            // P1-3: 排除过滤逻辑 — 匹配正面词 && 不匹配负面词
-            // 检查是否包含任何正面关键词（使用预编译的模式）
-            let matchesPositive = false;
-            for (const pattern of compiledPatterns) {
-              if (pattern.test(lineContent)) {
-                matchesPositive = true;
-                break;
-              }
-            }
-
-            // 如果匹配正面词，还需检查是否被负面词排除
-            let excluded = false;
-            if (matchesPositive && compiledNegativePatterns.length > 0) {
-              for (const pattern of compiledNegativePatterns) {
-                if (pattern.test(lineContent)) {
-                  excluded = true;
-                  break;
-                }
-              }
-            }
-
-            if (matchesPositive && !excluded) {
-              filteredLines.push(line);
-              filteredToOriginalIndex.push(i);
-            }
-          }
-
-          processedCount = endIndex;
-          const currentTime = performance.now();
-          const percentage = processedCount / totalLines;
-          const matchCount = filteredLines.length;
-
-          // 🚀 性能优化：减少 UI 更新频率
-          // 1. 更新文本计数器（每 100ms 或完成）
-          if (currentTime - lastUIUpdate >= UI_UPDATE_INTERVAL || endIndex === totalLines) {
-            const percentageText = (percentage * 100).toFixed(1);
-            filteredCount.textContent = `${matchCount} (${percentageText}%)`;
-            document.getElementById('status').textContent =
-              `过滤中... ${percentageText}% (${matchCount} 个匹配)`;
-            lastUIUpdate = currentTime;
-          }
-
-          // 2. 更新过滤框内容（只在关键节点：每 15% 或已有足够结果）
-          const shouldUpdateDOM = (percentage - lastDOMUpdate >= DOM_UPDATE_THRESHOLD) ||
-                                   (matchCount >= 100 && lastDOMUpdate === 0);
-
-          if (shouldUpdateDOM && matchCount >= 50 && endIndex < totalLines) {
-            // 更新过滤框数据
-            filteredPanelAllLines = filteredLines;
-            filteredPanelAllOriginalIndices = filteredToOriginalIndex;
-            filteredPanelAllPrimaryIndices = [];
-
-            // 🔧 内存优化：过滤过程中只更新占位符，不渲染内容
-            // 避免调用 updateFilteredPanelVisibleLines() 导致卡顿
-
-            // 🚀 性能优化2：预计算文件头索引集合，避免每行都执行 startsWith 检查
-            fileHeaderIndices.clear();
-            for (let i = 0; i < filteredPanelAllLines.length; i++) {
-              if (filteredPanelAllLines[i] && filteredPanelAllLines[i].startsWith("=== 文件:")) {
-                fileHeaderIndices.add(i);
-              }
-            }
-
-            // 重置虚拟滚动状态
-            filteredPanelVisibleStart = -1;
-            filteredPanelVisibleEnd = -1;
-
-            // 设置占位元素高度
-            const totalHeight = filteredLines.length * filteredPanelLineHeight;
-            filteredPanelPlaceholder.style.height = totalHeight + "px";
-
-            // 清空虚拟内容
-            filteredPanelVirtualContent.innerHTML = "";
-
-            // 保持滚动位置（只在第一次时设置）
-            if (filteredLines.length <= 50) {
-              filteredPanelContent.scrollTop = 0;
-              filteredPanelScrollPosition = 0;
-            }
-
-            // 🔧 性能优化：过滤过程中不渲染内容，避免卡顿
-            // updateFilteredPanelVisibleLines(); // ← 过滤中禁用，导致黑屏
-
-            lastDOMUpdate = percentage;
-            console.log(`[Filter] 增量更新UI: ${matchCount} 条结果 (${(percentage * 100).toFixed(1)}%)`);
-          }
-
-          // 继续处理下一批
-          if (endIndex < totalLines) {
-            // 🚀 使用 requestAnimationFrame 代替 setTimeout，性能更好
-            // 只在已经让出过主线程后使用 RAF，首次使用 setTimeout(0)
-            if (startIndex === 0) {
-              setTimeout(() => processBatch(endIndex), 0);
-            } else {
-              requestAnimationFrame(() => processBatch(endIndex));
-            }
-          } else {
-            // 🎉 处理完成
-            const totalTime = (performance.now() - startTime).toFixed(2);
-            console.log(`[Filter] 过滤完成: ${filteredLines.length} 个匹配, 耗时 ${totalTime}ms`);
-
-            finishFiltering(totalTime);
-          }
-        }
-
-        // 开始处理第一批
-        processBatch(0);
-
-        // 过滤完成后的处理
-        function finishFiltering(totalTime) {
-          // 🔧 内存优化：清除过滤标志，重新启用HTML缓存
-          isFiltering = false;
-
-          // 更新当前过滤状态
-          currentFilter = {
-            filteredLines,
-            filteredToOriginalIndex,
-            filterKeywords: keywords,
-            totalLines: filteredLines.length,
-          };
-
-          // 调试日志：记录过滤结果
-          console.log('Filter results (sync + optimized with incremental display):');
-          console.log('- Matched lines:', filteredLines.length);
-          console.log('- Cache size: N/A (unescapeCache removed)');
-          // 🚀 优化：避免输出大数组
-          if (filteredLines.length > 0) {
-            const sampleSize = Math.min(5, filteredLines.length);
-            const sample = filteredLines.slice(0, sampleSize).map(line => {
-              const truncated = line?.length > 100 ? line.substring(0, 100) + '...' : line;
-              return truncated;
-            });
-            console.log(`- First ${sampleSize} matches:`, JSON.stringify(sample));
-          }
-
-          // 修复：增加缓存版本号，确保应用新的过滤高亮
-          filteredLineCacheVersion++;
-
-          // 🔧 修复：清空主日志框的 HTML 解析缓存，避免显示旧的过滤关键词高亮
-          // 虽然主日志框不应该应用过滤关键词高亮，但清空缓存可以确保万无一失
-          clearHtmlParseCache();
-
-          isFiltering = false; // 🔧 过滤完成，重新启用缓存
-          document.getElementById("status").textContent =
-            `显示 ${filteredLines.length} / ${originalLines.length} 行`;
-
-          // 🔧 显示过滤耗时
-          const filteredTimeEl = document.getElementById('filteredTime');
-          if (filteredTimeEl && totalTime) {
-            const ms = parseFloat(totalTime);
-            filteredTimeEl.textContent = ms >= 1000
-              ? `(${(ms / 1000).toFixed(2)}s)`
-              : `(${ms}ms)`;
-          }
-
-          resetSearch();
-
-          // 🚀 性能优化：先更新过滤面板（用户最关心的），再延迟更新主日志框
-          // 之前是先 renderLogLines()（重建15万行DOM池）再 updateFilteredPanel()
-          // 导致过滤面板显示有明显延迟
-          updateFilteredPanel();
-
-          // 🚀 延迟执行主日志框的重渲染，让过滤面板先呈现
-          requestAnimationFrame(() => {
-            if (fileLoadMode === 'memory') {
-              // 仅内存模式：不渲染主日志框，只更新统计提示
-              showMemoryModeStats();
-            } else {
-              renderLogLines();
-              outer.scrollTop = 0;
-              updateVisibleLines();
-            }
-          });
-
-          // 🚀 高效方案：使用 Map 实现 O(1) 查找（不依赖内容匹配）
-          if (lastClickedOriginalIndex >= 0) {
-            console.log(`[Filter MainThread] 🔍 使用 Map 快速查找 originalIndex=${lastClickedOriginalIndex}...`);
-
-            // 创建 originalIndex -> filteredIndex 的映射 Map（O(n) 构建，O(1) 查找）
-            const originalToFilteredMap = new Map();
-            for (let i = 0; i < filteredToOriginalIndex.length; i++) {
-              originalToFilteredMap.set(filteredToOriginalIndex[i], i);
-            }
-
-            let targetFilteredIndex = originalToFilteredMap.get(lastClickedOriginalIndex);
-
-            // 🚀 如果没找到精确匹配，找到最接近的行
-            if (targetFilteredIndex === undefined) {
-              console.log(`[Filter MainThread] 📍 目标行不在结果中，查找最接近的行...`);
-
-              // 使用二分查找找到插入位置
-              let left = 0;
-              let right = filteredToOriginalIndex.length - 1;
-              while (left <= right) {
-                const mid = Math.floor((left + right) / 2);
-                if (filteredToOriginalIndex[mid] < lastClickedOriginalIndex) {
-                  left = mid + 1;
-                } else {
-                  right = mid - 1;
-                }
-              }
-
-              // left 是应该插入的位置，比较 left 和 left-1 哪个更接近
-              if (left >= filteredToOriginalIndex.length) {
-                // 目标行比所有结果都大，使用最后一个
-                targetFilteredIndex = filteredToOriginalIndex.length - 1;
-              } else if (left === 0) {
-                // 目标行比所有结果都小，使用第一个
-                targetFilteredIndex = 0;
-              } else {
-                // 比较左右两个哪个更接近
-                const diffLeft = Math.abs(filteredToOriginalIndex[left - 1] - lastClickedOriginalIndex);
-                const diffRight = Math.abs(filteredToOriginalIndex[left] - lastClickedOriginalIndex);
-                targetFilteredIndex = diffLeft <= diffRight ? left - 1 : left;
-              }
-
-              const closestOriginalIndex = filteredToOriginalIndex[targetFilteredIndex];
-              console.log(`[Filter MainThread] ✓ 找到最接近的行: filteredIndex=${targetFilteredIndex}, originalIndex=${closestOriginalIndex}, 距离=${Math.abs(closestOriginalIndex - lastClickedOriginalIndex)}`);
-            } else {
-              console.log(`[Filter MainThread] ✅ 找到精确匹配行，耗时: O(1), 索引: ${targetFilteredIndex}`);
-            }
-
-            if (targetFilteredIndex !== undefined) {
-              lastClickedFilteredIndex = targetFilteredIndex;
-
-              // 等待 DOM 更新后执行跳转
-              setTimeout(() => {
-                const fpc = DOMCache.get('filteredPanelContent');
-                const fpvc = DOMCache.get('filteredPanelVirtualContent');
-
-                if (fpc && fpvc) {
-                  // 移除旧的高亮
-                  const oldHighlights = fpvc.querySelectorAll('.filtered-log-line.highlighted, .filtered-log-line.search-match-highlight');
-                  oldHighlights.forEach(line => {
-                    line.classList.remove('highlighted', 'search-match-highlight');
-                  });
-
-                  // 查找目标行元素并使用 scrollIntoView 跳转
-                  const targetLine = fpvc.querySelector(`[data-filtered-index="${targetFilteredIndex}"]`);
-
-                  if (targetLine) {
-                    console.log(`[Filter MainThread] 🎯 找到目标行元素，使用 scrollIntoView 跳转`);
-                    targetLine.scrollIntoView({ behavior: 'instant', block: 'center' });
-                    targetLine.classList.add('highlighted');
-                    console.log(`[Filter MainThread] ✅ 已跳转并高亮行 ${targetFilteredIndex}`);
-                  } else {
-                    // 如果元素不在 DOM 中（虚拟滚动未渲染），先滚动到附近位置触发渲染
-                    console.log(`[Filter MainThread] ⚠️ 目标行不在 DOM 中，计算滚动位置...`);
-
-                    // 计算大概的滚动位置
-                    let lineHeight = typeof filteredPanelLineHeight !== 'undefined' ? filteredPanelLineHeight : 19;
-                    const estimatedTop = targetFilteredIndex * lineHeight;
-                    const panelHeight = fpc.clientHeight;
-                    const targetScrollTop = Math.max(0, estimatedTop - Math.floor(panelHeight / 2));
-
-                    console.log(`[Filter MainThread] 📍 设置 scrollTop = ${targetScrollTop}px (估计位置)`);
-
-                    // 设置滚动位置触发虚拟滚动更新
-                    fpc.scrollTop = targetScrollTop;
-
-                    // 等待虚拟滚动更新后再次查找元素
-                    setTimeout(() => {
-                      const targetLine2 = fpvc.querySelector(`[data-filtered-index="${targetFilteredIndex}"]`);
-                      if (targetLine2) {
-                        targetLine2.scrollIntoView({ behavior: 'instant', block: 'center' });
-                        targetLine2.classList.add('highlighted');
-                        console.log(`[Filter MainThread] ✅ 延迟跳转成功并高亮行 ${targetFilteredIndex}`);
-                      } else {
-                        console.error(`[Filter MainThread] ❌ 无法找到目标行元素: ${targetFilteredIndex}`);
-                      }
-                    }, 100);
-                  }
-                }
-              }, 150);
-            }
-          } else {
-            console.log('[Filter MainThread] ℹ️ 没有记录的点击行');
-          }
-
-          // 🔧 跳转完成后重置，让下次过滤重新捕获视口中心行
-          lastClickedOriginalIndex = -1;
-
-          // 新增：清除二级过滤状态（因为一级过滤已改变）
-          secondaryFilter = {
-            isActive: false,
-            filterText: "",
-            filterKeywords: [],
-            filteredLines: [],
-            filteredToOriginalIndex: [],
-            filteredToPrimaryIndex: [],
-          };
-
-          // 更新二级过滤状态显示
-          if (secondaryFilterStatus) {
-            secondaryFilterStatus.textContent = "未应用";
-            secondaryFilterStatus.className =
-              "secondary-filter-status secondary-filter-inactive";
-          }
-          filteredPanelFilterStatus.textContent = "";
-          filteredPanelFilterBox.value = "";
-          updateRegexStatus();
-
-          // 🆕 每次过滤后自动最大化过滤面板（尊重用户手动还原的偏好）
-          if (!isFilterPanelMaximized && filteredPanelState.userPreference !== 'normal' && typeof toggleFilterPanelMaximize === 'function') {
-            toggleFilterPanelMaximize();
-          }
-
-          if (progressBar) progressBar.style.display = 'none';
-        }
-
-        // 提前返回，避免继续执行下面的代码
-        return;
-      }
 
       // 重置过滤
       /**
@@ -10247,7 +9700,8 @@
         // 🚀 性能优化：使用 DOM 缓存
         const filteredPanelVirtualContent = DOMCache.get('filteredPanelVirtualContent');
         if (filteredPanelVirtualContent) {
-          filteredPanelVirtualContent.innerHTML = '';
+          if (window._releaseFilteredPanelDomPool) window._releaseFilteredPanelDomPool();
+            filteredPanelVirtualContent.innerHTML = '';
         }
         const filteredPanelPlaceholder = DOMCache.get('filteredPanelPlaceholder');
         if (filteredPanelPlaceholder) {
@@ -10259,11 +9713,12 @@
         if (status) status.textContent = "";
 
         // 15. 重置进度条
-        const progressBar = document.getElementById('progressBar');
-        const progressFill = document.getElementById('progressFill');
-
-        if (progressBar) progressBar.style.display = 'none';
-        if (progressFill) progressFill.style.width = '0%';
+        var _hpf2 = document.getElementById('headerProgressFill');
+        if (_hpf2) {
+          _hpf2.classList.add('complete');
+          _hpf2.style.width = '100%';
+          _hpf2.style.left = '0%';
+        }
 
         // 16. 隐藏 loading
         showLoading(false);
@@ -10280,17 +9735,30 @@
         }
 
         console.log('[Memory] 日志内存释放完成');
+        // 19. 清理分片缓存和临时文件
+        if (window.App && window.App.ChunkCache) {
+          window.App.ChunkCache.invalidate();
+        }
+        window.chunkTotalLines = 0;
+        window.virtualScrollScale = 1;
+        if (window.electronAPI && window.electronAPI.cleanupChunkTemp) {
+          window.electronAPI.cleanupChunkTemp();
+        }
       }
 
       /**
        * 隐藏文件加载进度条
        */
       function hideFileProgressBar() {
-        const progressBar = document.getElementById('progressBar');
-        const progressFill = document.getElementById('progressFill');
-
-        if (progressBar) progressBar.style.display = 'none';
-        if (progressFill) progressFill.style.width = '0%';
+        var _hpf3 = document.getElementById('headerProgressFill');
+        if (_hpf3) {
+          _hpf3.classList.add('complete');
+          _hpf3.style.width = '100%';
+          _hpf3.style.left = '0%';
+        }
+        setTimeout(function() {
+          if (_hpf3) _hpf3.style.background = '';
+        }, 800);
       }
 
       /**
@@ -10324,6 +9792,28 @@
         filteredPanelAllOriginalIndices = [];
         filteredPanelAllPrimaryIndices = [];
 
+        // 清理分片缓存
+        if (window.App && window.App.FilteredChunkCache) {
+          window.App.FilteredChunkCache.invalidate();
+        }
+        window._filteredChunkActive = false;
+
+        // 清理过滤面板产生的临时文件
+        if (window.electronAPI && window.electronAPI.cleanupChunkTemp) {
+          window.electronAPI.cleanupChunkTemp({ filterOnly: true });
+        }
+
+        // 清理单关键词过滤状态
+        window._perKeywordFilterResults = {};
+        window._perKeywordFilterActiveKeyword = '_combined';
+        window._perKeywordFilterOrder = [];
+        window._perKeywordFilteringInProgress = false;
+        window._perKeywordFilterGeneration++;
+        var _kwContainer = document.getElementById('filteredPanelKeywordContainer');
+        if (_kwContainer) _kwContainer.style.display = 'none';
+        var _kwProgress = document.getElementById('filteredPanelKeywordProgress');
+        if (_kwProgress) _kwProgress.textContent = '';
+
         // 清空过滤缓存
         // unescapeCache removed
         lastFilterCacheKey = "";
@@ -10347,7 +9837,8 @@
         // 🚀 性能优化：使用 DOM 缓存
         const filteredPanelVirtualContent = DOMCache.get('filteredPanelVirtualContent');
         if (filteredPanelVirtualContent) {
-          filteredPanelVirtualContent.innerHTML = '';
+          if (window._releaseFilteredPanelDomPool) window._releaseFilteredPanelDomPool();
+            filteredPanelVirtualContent.innerHTML = '';
         }
         const filteredPanelPlaceholder = DOMCache.get('filteredPanelPlaceholder');
         if (filteredPanelPlaceholder) {
@@ -10393,6 +9884,22 @@
 
         isFiltering = false;
 
+        // 清理单关键词过滤状态
+        window._perKeywordFilterResults = {};
+        window._perKeywordFilterActiveKeyword = '_combined';
+        window._perKeywordFilterOrder = [];
+        window._perKeywordFilteringInProgress = false;
+        window._perKeywordFilterGeneration++;
+        var _kwContainer2 = document.getElementById('filteredPanelKeywordContainer');
+        if (_kwContainer2) _kwContainer2.style.display = 'none';
+        var _kwProgress2 = document.getElementById('filteredPanelKeywordProgress');
+        if (_kwProgress2) _kwProgress2.textContent = '';
+
+        // 清理过滤面板产生的临时文件
+        if (window.electronAPI && window.electronAPI.cleanupChunkTemp) {
+          window.electronAPI.cleanupChunkTemp({ filterOnly: true });
+        }
+
         // 隐藏过滤时间显示
         const filteredTimeElement = document.getElementById('filteredTime');
         if (filteredTimeElement) {
@@ -10421,11 +9928,6 @@
 
       // 渲染日志（始终显示原始日志）
       function renderLogLines() {
-        // 仅内存模式：不渲染主日志框，显示统计信息
-        if (fileLoadMode === 'memory') {
-          showMemoryModeStats();
-          return;
-        }
         inner.innerHTML = "";
         lastVisibleStart = -1;
         lastVisibleEnd = -1;
@@ -10519,8 +10021,6 @@
        */
       function updateVisibleLinesBasic() {
         if (originalLines.length === 0) return;
-        // 仅内存模式：不渲染主日志框
-        if (fileLoadMode === 'memory') return;
 
         const scrollTop = outer.scrollTop;
         const clientHeight = outer.clientHeight;
@@ -10623,7 +10123,7 @@
           const highlightedLines = await window.HighlightWorkerManager.batchHighlight(
             linesToHighlight,
             {
-              searchKeyword: '',  // 🔧 不传递搜索关键词（用户不希望搜索关键词被高亮）
+              searchKeyword: searchKeyword,
               customHighlights: customHighlights || [],
               currentMatchLine: totalMatchCount > 0 ? searchMatches[currentMatchIndex] : -1
             }
@@ -10750,8 +10250,6 @@
       // 更新可见行（始终基于原始日志）- DOM池化优化版本
       function updateVisibleLines() {
         if (originalLines.length === 0) return;
-        // 仅内存模式：不渲染主日志框（内容只在内存中，供过滤使用）
-        if (fileLoadMode === 'memory') return;
 
         const scrollTop = outer.scrollTop;
         const clientHeight = outer.clientHeight;
@@ -10855,13 +10353,6 @@
             line.classList.remove("selected");
           }
 
-          // 高亮当前搜索匹配
-          if (!isFileHeader && i === currentMatchLine) {
-            line.classList.add("current-match-line");
-          } else {
-            line.classList.remove("current-match-line");
-          }
-
           // 高亮永久高亮行
           if (!isFileHeader && i === currentPermanentHighlightIndex) {
             line.classList.add("permanent-highlight");
@@ -10886,19 +10377,15 @@
           line.dataset.lineNumber = i + 1;
 
           // 🚀 性能优化：快速检查此行是否需要高亮处理
-          // 🔧 移除搜索关键词高亮（用户不希望搜索关键词被高亮）
-          const needsHighlight = !isFileHeader && hasCustomHighlights;
+          const needsHighlight = !isFileHeader && (hasCustomHighlights || (hasSearchKeyword && i === currentMatchLine));
 
           if (needsHighlight) {
             // 🎯 需要高亮：使用innerHTML（利用HTML缓存）
             let displayContent = lineContent;
 
-            // 🔧 修复：主日志框的缓存键不包含过滤关键词（避免显示错误的过滤高亮）
-            // 🔧 移除搜索关键词从缓存键（用户不希望搜索关键词被高亮）
             // 🚀 性能优化：生成缓存键，包含所有影响渲染的因素
             const cacheKeyParts = [];
-            // 搜索关键词不再影响缓存（不会高亮显示）
-            // if (hasSearchKeyword) cacheKeyParts.push(`s:${searchKeyword}`);
+            if (hasSearchKeyword) cacheKeyParts.push(`s:${searchKeyword}`);
             if (hasCustomHighlights) {
               const highlightKeys = customHighlights.map(h => h.keyword).join(',');
               cacheKeyParts.push(`h:${highlightKeys}`);
@@ -10913,9 +10400,8 @@
               // 缓存未命中，执行完整的HTML解析
 
               // 🚀 性能优化：使用合并高亮函数，一次性处理所有高亮类型
-              // 🔧 主日志框不传递搜索关键词和自定义高亮（仅限过滤面板）
               displayContent = applyBatchHighlight(displayContent, {
-                searchKeyword: '',
+                searchKeyword: searchKeyword,
                 customHighlights: [], // 主日志框不应用自定义高亮
                 currentMatchLine: currentMatchLine,
                 lineIndex: i
@@ -10961,7 +10447,7 @@
         }
 
         // ========== 虚拟滚动优化：更新滚动进度指示器 ==========
-        updateScrollProgress();
+        if (typeof updateScrollProgress === 'function') updateScrollProgress();
 
         // 🔧 恢复文本选区（DOM回收后根据行索引重新定位）
         _restoreMainLogSelection(savedSelection);

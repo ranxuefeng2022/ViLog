@@ -7,10 +7,84 @@
   "scripts": {
     "start": "electron .",
     "test": "node --test test/*.test.js",
-    "lint": "npx eslint src/ renderer/js/core/ renderer/js/services/ renderer/js/utils/ preload.js"
+    "lint": "npx eslint src/ renderer/js/core/ renderer/js/services/ renderer/js/utils/ preload.js",
+    "build:dir": "electron-builder --win --dir"
   },
   "devDependencies": {
     "electron": "^33.0.0",
+    "electron-builder": "^26.8.1",
     "globals": "^17.6.0"
+  },
+  "build": {
+    "appId": "com.logview.app",
+    "productName": "LogView",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "icon": "icons/icon.ico",
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "dir",
+          "arch": ["x64"]
+        },
+        {
+          "target": "zip",
+          "arch": ["x64"]
+        }
+      ]
+    },
+    "portable": {
+      "artifactName": "LogView-Portable-${version}.exe"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "artifactName": "LogView-Setup-${version}.exe"
+    },
+    "asar": false,
+    "files": [
+      "main.js",
+      "preload.js",
+      "preload-vlog-chart.js",
+      "index.html",
+      "vlog-chart.html",
+      "src/**/*",
+      "renderer/**/*",
+      "workers/**/*",
+      "icons/**/*",
+      "lib/**/*",
+      "better-sqlite3/**/*",
+      "tools/**/*",
+      "mem/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "rg.exe",
+        "to": "rg.exe"
+      },
+      {
+        "from": "fd.exe",
+        "to": "fd.exe"
+      },
+      {
+        "from": "es.exe",
+        "to": "es.exe"
+      },
+      {
+        "from": "fzf.exe",
+        "to": "fzf.exe"
+      },
+      {
+        "from": "7z.exe",
+        "to": "7z.exe"
+      },
+      {
+        "from": "busybox64.exe",
+        "to": "busybox64.exe"
+      }
+    ]
   }
 }

@@ -21,10 +21,13 @@ function find7z() {
 
   const basePath = process.resourcesPath || projectRoot || process.cwd();
   const possiblePaths = [
+    path.join(projectRoot, '7z.exe'),
+    path.join(basePath, '7z.exe'),
     path.join(basePath, '7z', '7za.exe'),
     path.join(basePath, 'app', '7z', '7za.exe'),
     path.join(basePath, 'app', '7za.exe'),
     path.join(basePath, 'tools', '7z.exe'),
+    path.join(process.cwd(), '7z.exe'),
     path.join(process.cwd(), 'app', '7z', '7za.exe'),
     path.join(process.cwd(), '7z', '7za.exe'),
     path.join(process.cwd(), '7za.exe'),
@@ -38,17 +41,24 @@ function find7z() {
 
   for (const testPath of possiblePaths) {
     try {
-      if (testPath !== '7z' && testPath !== '7za' && !fs.existsSync(testPath)) continue;
-      execSync(`"${testPath}" --help`, { windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] });
-      _cached7zPath = testPath;
-      console.log(`[find7z] 找到 7z: ${testPath}`);
-      return testPath;
-    } catch (e) {
-      if (testPath !== '7z' && testPath !== '7za' && fs.existsSync(testPath)) {
+      // 完整路径：直接检查文件是否存在
+      if (testPath !== '7z' && testPath !== '7za') {
+        if (!fs.existsSync(testPath)) continue;
         _cached7zPath = testPath;
-        console.log(`[find7z] 通过文件存在性确认 7z: ${testPath}`);
+        console.log(`[find7z] 找到 7z: ${testPath}`);
         return testPath;
       }
+      // 裸命令名：用 where/which 查找 PATH
+      try {
+        const where = process.platform === 'win32' ? 'where' : 'which';
+        execSync(`${where} ${testPath}`, { windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] });
+        _cached7zPath = testPath;
+        console.log(`[find7z] PATH 中找到: ${testPath}`);
+        return testPath;
+      } catch (_) {
+        continue;
+      }
+    } catch (e) {
       continue;
     }
   }
@@ -147,9 +157,7 @@ function focusWindowSafe(win) {
 }
 
 /**
- * 递归复制目录
- * @param {string} source - 源路径（文件或目录）
- * @param {string} target - 目标路径
+ * 递归复制目录（同步版本）
  */
 function copyDirRecursive(source, target) {
   if (!fs.existsSync(target)) {
@@ -162,6 +170,23 @@ function copyDirRecursive(source, target) {
     }
   } else {
     fs.copyFileSync(source, target);
+  }
+}
+
+/**
+ * 递归复制目录（异步版本，不阻塞主进程）
+ */
+async function copyDirRecursiveAsync(source, target) {
+  const fsp = fs.promises;
+  await fsp.mkdir(target, { recursive: true });
+  const stat = await fsp.stat(source);
+  if (stat.isDirectory()) {
+    const entries = await fsp.readdir(source, { withFileTypes: true });
+    for (const entry of entries) {
+      await copyDirRecursiveAsync(path.join(source, entry.name), path.join(target, entry.name));
+    }
+  } else {
+    await fsp.copyFile(source, target);
   }
 }
 
@@ -443,6 +468,139 @@ function extractZipEntryNative(archivePath, filePath) {
   }
 }
 
+// ===================================================================
+// Generic archive support (ZIP + 7z/RAR + folder) for analysis subsystem
+// ===================================================================
+
+/**
+ * List files in an archive or directory (generic: ZIP / 7z / RAR / folder)
+ * @param {string} sourcePath - path to archive file or directory
+ * @returns {{ success: boolean, files: string[], error?: string, extra?: any }}
+ *   extra.zipFd — open fd for ZIP native path (caller must close)
+ *   extra.zipEntries — Map for ZIP native path
+ */
+function listArchiveGeneric(sourcePath) {
+  const stat = fs.statSync(sourcePath);
+
+  // Folder: list disk files
+  if (stat.isDirectory()) {
+    const files = [];
+    try {
+      const walk = (dir) => {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          const fp = path.join(dir, entry.name);
+          if (entry.isDirectory()) { walk(fp); continue; }
+          if (entry.isFile()) files.push(fp);
+        }
+      };
+      walk(sourcePath);
+    } catch (e) {
+      return { success: false, error: '读取目录失败: ' + e.message, files: [] };
+    }
+    return { success: true, files };
+  }
+
+  if (!stat.isFile()) return { success: false, error: '无效路径', files: [] };
+
+  // ZIP: use native parser
+  const ext = path.extname(sourcePath).toLowerCase();
+  const lower = sourcePath.toLowerCase();
+  if (ext === '.zip' || lower.endsWith('.tar.gz') || lower.endsWith('.tgz')) {
+    try {
+      const index = buildZipIndex(sourcePath);
+      if (index) return { success: true, files: Array.from(index.entries.keys()), extra: { zipFd: index.fd, zipEntries: index.entries } };
+    } catch (e) { /* fall through to 7z */ }
+  }
+
+  // 7z / RAR / fallback via 7z.exe
+  const sevenZipPath = find7z();
+  if (!sevenZipPath) return { success: false, error: '7z 未安装，无法处理此格式', files: [] };
+
+  try {
+    const output = execSync(`"${sevenZipPath}" l -ba -y "${sourcePath}"`, {
+      encoding: 'utf-8', windowsHide: true, maxBuffer: 50 * 1024 * 1024
+    });
+    const files = [];
+    for (const line of output.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      const m = trimmed.match(/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+(\S{5})\s+\d+(?:\s+\d+)?\s+(.*)/);
+      if (!m) continue;
+      const attrs = m[1];
+      const fp = (m[2] || '').trim();
+      if (!fp || attrs[0] === 'D' || fp.endsWith('/') || fp.endsWith('\\')) continue;
+      files.push(fp);
+    }
+    return { success: true, files };
+  } catch (e) {
+    return { success: false, error: '列出归档失败: ' + e.message, files: [] };
+  }
+}
+
+/**
+ * Extract a single entry from an archive or read from disk
+ * ZIP fast path: uses { zipFd, zipEntries } from listArchiveGeneric.extra
+ * 7z/RAR: spawns 7z.exe
+ * Folder: reads file from disk
+ *
+ * @param {string} sourcePath
+ * @param {string} entryName - entry path (ignored for folder: each entry is an absolute path)
+ * @param {object|null} zipExtra - { zipFd, zipEntries } from listArchiveGeneric, null for non-ZIP
+ * @returns {{ success: boolean, content?: string, error?: string }}
+ */
+function extractArchiveEntry(sourcePath, entryName, zipExtra) {
+  // ZIP fast path
+  if (zipExtra && zipExtra.zipFd && zipExtra.zipEntries) {
+    try {
+      const norm = entryName.replace(/^\/+/, '').replace(/\\/g, '/');
+      const info = zipExtra.zipEntries.get(norm)
+        || zipExtra.zipEntries.get(norm.toLowerCase());
+      if (!info) return { success: false, error: 'Zip entry not found: ' + entryName };
+      return extractByIndex(zipExtra.zipFd, null, info);
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  }
+
+  // Folder: read directly from disk
+  const stat = (() => { try { return fs.statSync(sourcePath); } catch (e) { return null; } })();
+  if (stat && stat.isDirectory()) {
+    return readDiskFile(entryName); // entryName is absolute path in folder mode
+  }
+
+  // 7z / RAR / fallback
+  const sevenZipPath = find7z();
+  if (!sevenZipPath) return { success: false, error: '7z 未安装' };
+
+  try {
+    const escapedEntry = entryName.replace(/^\/+/, '').replace(/\\/g, '/');
+    // 7z e -so extracts entry to stdout
+    const result = execSync(`"${sevenZipPath}" e -so -y "${sourcePath}" "${escapedEntry}"`, {
+      encoding: 'buffer', windowsHide: true, maxBuffer: 500 * 1024 * 1024
+    });
+    const { content } = extractTextFromBuffer(result);
+    return { success: true, content };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+/**
+ * Read a file from disk, extracting text content
+ * @param {string} filePath - absolute path
+ * @returns {{ success: boolean, content?: string, error?: string }}
+ */
+function readDiskFile(filePath) {
+  try {
+    if (!fs.existsSync(filePath)) return { success: false, error: '文件不存在' };
+    const buf = fs.readFileSync(filePath);
+    const { content } = extractTextFromBuffer(buf);
+    return { success: true, content };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
 module.exports = {
   find7z,
   extractTextFromBuffer,
@@ -450,9 +608,13 @@ module.exports = {
   isArchiveFile,
   focusWindowSafe,
   copyDirRecursive,
+  copyDirRecursiveAsync,
   parseZipCentralDir,
   resolveZip64ExtraField,
   extractZipEntryNative,
   buildZipIndex,
-  extractByIndex
+  extractByIndex,
+  listArchiveGeneric,
+  extractArchiveEntry,
+  readDiskFile
 };

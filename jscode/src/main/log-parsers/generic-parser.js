@@ -45,21 +45,39 @@ function reEscape(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-// Split format string by top-level commas (respecting parentheses)
+// Split format string by top-level commas AND spaces (respecting parentheses)
+// Returns { parts: string[], seps: string[] } where seps[i] is ',' or ' '
 function splitTopLevel(format) {
   const parts = [];
+  const seps = [];
   let depth = 0;
   let start = 0;
   for (let i = 0; i < format.length; i++) {
-    if (format[i] === '(') depth++;
-    else if (format[i] === ')') depth--;
-    else if (format[i] === ',' && depth === 0) {
-      parts.push(format.substring(start, i));
-      start = i + 1;
+    const ch = format[i];
+    if (ch === '(') { depth++; }
+    else if (ch === ')') { depth--; }
+    else if (depth === 0) {
+      if (ch === ',') {
+        parts.push(format.substring(start, i));
+        seps.push(',');
+        start = i + 1;
+      } else if (ch === ' ') {
+        let j = i + 1;
+        while (j < format.length && format[j] === ' ') j++;
+        if (j < format.length && /^\w+[=:]/.test(format.substring(j))) {
+          const part = format.substring(start, i);
+          if (part) {
+            parts.push(part);
+            seps.push(' ');
+          }
+          start = j;
+          i = j - 1;
+        }
+      }
     }
   }
   if (start < format.length) parts.push(format.substring(start));
-  return parts;
+  return { parts, seps };
 }
 
 // Count format specifiers in a string
@@ -70,6 +88,58 @@ function countSpecifiers(s) {
   return count;
 }
 
+function splitTupleEntries(inner) {
+  const parts = [];
+  const seps = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < inner.length; i++) {
+    const ch = inner[i];
+    if (ch === '(') { depth++; }
+    else if (ch === ')') { depth--; }
+    else if (depth === 0) {
+      if (ch === ',') {
+        parts.push(inner.substring(start, i));
+        seps.push(',');
+        start = i + 1;
+      } else if (ch === ' ') {
+        let j = i + 1;
+        while (j < inner.length && inner[j] === ' ') j++;
+        if (j < inner.length && /^\w+[=:]/.test(inner.substring(j))) {
+          const part = inner.substring(start, i);
+          if (part) {
+            parts.push(part);
+            seps.push('\\s+');
+          }
+          start = j;
+          i = j - 1;
+        }
+      }
+    }
+  }
+  if (start < inner.length) parts.push(inner.substring(start));
+  parts._seps = seps;
+  return parts;
+}
+
+function pushValueParts(fmtPart, fieldName, labels, labelIdx, regexParts, fields, parentName) {
+  if (fmtPart.startsWith('0x')) {
+    regexParts.push('0x');
+    const rest = fmtPart.substring(2);
+    const st = extractSpecType(rest);
+    regexParts.push(SPEC_PATTERNS[st] || '([^,\\s\\n]+)');
+    const label = labelIdx.value < labels.length ? labels[labelIdx.value] : fieldName;
+    fields.push({ name: parentName || fieldName, key: fieldName, label, specType: st });
+    labelIdx.value++;
+  } else {
+    const st = extractSpecType(fmtPart);
+    regexParts.push(SPEC_PATTERNS[st] || '([^,\\s\\n]+)');
+    const label = labelIdx.value < labels.length ? labels[labelIdx.value] : fieldName;
+    fields.push({ name: parentName || fieldName, key: fieldName, label, specType: st });
+    labelIdx.value++;
+  }
+}
+
 // Parse one format segment (the part between commas) after the key= or key: prefix
 // Returns { regexParts: [string], fields: [{key, label, specType}] }
 function parseValueFormat(fmtPart, fieldName, labels, labelIdx) {
@@ -77,13 +147,23 @@ function parseValueFormat(fmtPart, fieldName, labels, labelIdx) {
   const fields = [];
 
   if (fmtPart.startsWith('(')) {
-    // Tuple: (%d,%d,...)
     const inner = fmtPart.substring(1, fmtPart.length - 1);
-    const parts = inner.split(',');
+    const tupleParts = splitTupleEntries(inner);
+    const isKvTuple = tupleParts.some(p => /^\w+[=:]/.test(p.trim()));
     regexParts.push('\\(');
-    for (let k = 0; k < parts.length; k++) {
-      if (k > 0) regexParts.push(',');
-      const st = extractSpecType(parts[k].trim());
+    for (let k = 0; k < tupleParts.length; k++) {
+      if (k > 0) regexParts.push(tupleParts._seps[k - 1] || ',');
+      const part = tupleParts[k].trim();
+      if (isKvTuple) {
+        const kvMatch = part.match(/^(\w+)([:=])(.*)$/);
+        if (kvMatch) {
+          const kn = kvMatch[1], kc = kvMatch[2], vp = kvMatch[3];
+          regexParts.push(reEscape(kn) + kc);
+          pushValueParts(vp, kn, labels, labelIdx, regexParts, fields, fieldName);
+          continue;
+        }
+      }
+      const st = extractSpecType(part);
       regexParts.push(SPEC_PATTERNS[st] || '([^,\\s\\n]+)');
       const label = labelIdx.value < labels.length ? labels[labelIdx.value] : fieldName + '_' + (k + 1);
       const key = fieldName + '_' + (k + 1);
@@ -92,31 +172,19 @@ function parseValueFormat(fmtPart, fieldName, labels, labelIdx) {
     }
     regexParts.push('\\)');
   } else if (fmtPart.startsWith('0x')) {
-    // Hex with prefix: 0x%x
-    regexParts.push('0x');
-    const rest = fmtPart.substring(2);
-    const st = extractSpecType(rest);
-    regexParts.push(SPEC_PATTERNS[st] || '([^,\\s\\n]+)');
-    const label = labelIdx.value < labels.length ? labels[labelIdx.value] : fieldName;
-    fields.push({ name: fieldName, key: fieldName, label, specType: st });
-    labelIdx.value++;
+    pushValueParts(fmtPart, fieldName, labels, labelIdx, regexParts, fields);
   } else {
-    // Simple (%d) or compound (%d(%d))
-    const st = extractSpecType(fmtPart);
-    regexParts.push(SPEC_PATTERNS[st] || '([^,\\s\\n]+)');
-    const label = labelIdx.value < labels.length ? labels[labelIdx.value] : fieldName;
-    fields.push({ name: fieldName, key: fieldName, label, specType: st });
-    labelIdx.value++;
-
-    // Check compound: %d(%d)
-    let pos = 2; // skip %x
-    if (pos < fmtPart.length && fmtPart[pos] === '(') {
-      const inner = fmtPart.substring(pos + 1, fmtPart.length - 1);
-      const st2 = extractSpecType(inner.trim());
-      regexParts.push('\\(' + (SPEC_PATTERNS[st2] || '([^,\\s\\n]+)') + '\\)');
-      const label2 = labelIdx.value < labels.length ? labels[labelIdx.value] : fieldName + '_2';
-      fields.push({ name: fieldName, key: fieldName + '_2', label: label2, specType: st2 });
-      labelIdx.value++;
+    pushValueParts(fmtPart, fieldName, labels, labelIdx, regexParts, fields);
+    if (fmtPart.length > 2) {
+      const afterSpec = fmtPart.replace(/^%[diuoxXfFeEgGaAcsp]/, '');
+      if (afterSpec.startsWith('(')) {
+        const inner = afterSpec.substring(1, afterSpec.length - 1);
+        const st2 = extractSpecType(inner.trim());
+        regexParts.push('\\(' + (SPEC_PATTERNS[st2] || '([^,\\s\\n]+)') + '\\)');
+        const label2 = labelIdx.value < labels.length ? labels[labelIdx.value] : fieldName + '_2';
+        fields.push({ name: fieldName, key: fieldName + '_2', label: label2, specType: st2 });
+        labelIdx.value++;
+      }
     }
   }
 
@@ -131,19 +199,30 @@ function extractSpecType(s) {
 // Compile format string into field definitions + payload regex
 function compileFormat(format, labels) {
   const norm = normalizeSpec(format);
-  const segments = splitTopLevel(norm);
+  const { parts: segments, seps } = splitTopLevel(norm);
   const allFields = [];
   const regexParts = [];
   const labelIdx = { value: 0 };
 
   for (let si = 0; si < segments.length; si++) {
-    if (si > 0) regexParts.push(',');
+    if (si > 0) regexParts.push(seps[si - 1] === ',' ? ',' : '\\s+');
 
     const seg = segments[si];
-    // Match: fieldName=fmt  or  fieldName:fmt
+    // Match: fieldName=fmt  or  fieldName:fmt  or  fieldName(fmt)
     const sepMatch = seg.match(/^(\w+)([:=])/);
-    if (!sepMatch) {
+    const bracketMatch = !sepMatch ? seg.match(/^(\w+)\(/) : null;
+    if (!sepMatch && !bracketMatch) {
       regexParts.push(reEscape(seg));
+      continue;
+    }
+
+    if (bracketMatch) {
+      const fieldName = bracketMatch[1];
+      const fmtPart = '(' + seg.substring(bracketMatch[0].length);
+      regexParts.push(reEscape(fieldName));
+      const result = parseValueFormat(fmtPart, fieldName, labels, labelIdx);
+      regexParts.push(...result.regexParts);
+      allFields.push(...result.fields);
       continue;
     }
 
@@ -169,9 +248,14 @@ const STANDARD_FIELDS = [
   { key: 'source_file', label: '源文件' },
   { key: 'android_time', label: 'Android时间' },
   { key: 'timestamp', label: '时间戳(s)' },
-  { key: 'ts_raw', label: '原始时间戳(μs)' },
+  { key: 'ts_raw', label: '原始时间戳(S)' },
   { key: 'caller', label: '调用线程' }
 ];
+
+function extractSpecTypeFromFormat(s) {
+  const m = s.match(/%[diuoxXfFeEgGaAcsp]/);
+  return m ? m[0].charAt(1) : 's';
+}
 
 // Preprocess format config:
 //  - Accept string or array of strings (multi-line C printf)
@@ -185,19 +269,32 @@ function preprocessFormat(format) {
   // Auto-extract marker: [AP], [CP], etc.
   const markerMatch = fmt.match(/^(\[[A-Za-z]+\])\s*/);
   let marker = null;
+  let bracketPrefix = null;
   if (markerMatch) {
     marker = markerMatch[1];
     fmt = fmt.substring(markerMatch[0].length);
+  } else if (/^\[\w+:[^=]*?%\w.*?\]\s*/.test(fmt)) {
+    const bracketContent = fmt.match(/^\[(\w+):([^\]]*)\]\s*/);
+    if (bracketContent) {
+      bracketPrefix = { key: bracketContent[1].toLowerCase(), raw: bracketContent[1], specType: extractSpecTypeFromFormat(bracketContent[2]) };
+      fmt = fmt.substring(bracketContent[0].length);
+    }
   }
-  return { fmt, marker };
+  return { fmt, marker, bracketPrefix };
 }
 
 // Create a parser module from a config entry
 function createParser(config) {
   const { tag, keyword, platform, labels, fieldAliases } = config;
-  const { fmt, marker: autoMarker } = preprocessFormat(config.format);
+  const { fmt, marker: autoMarker, bracketPrefix } = preprocessFormat(config.format);
   const marker = config.marker || autoMarker;
-  const compiled = compileFormat(fmt, labels || []);
+  let effectiveLabels = labels || [];
+  let bpLabel = null;
+  if (bracketPrefix && effectiveLabels.length > 0) {
+    bpLabel = effectiveLabels[0];
+    effectiveLabels = effectiveLabels.slice(1);
+  }
+  const compiled = compileFormat(fmt, effectiveLabels);
 
   // Apply field aliases if configured
   if (fieldAliases) {
@@ -213,6 +310,10 @@ function createParser(config) {
     headers.push(sf.key);
     headerLabels[sf.key] = sf.label;
   }
+  if (bracketPrefix) {
+    headers.push(bracketPrefix.key);
+    headerLabels[bracketPrefix.key] = bpLabel || bracketPrefix.key;
+  }
   for (const f of compiled.fields) {
     headers.push(f.key);
     headerLabels[f.key] = f.label;
@@ -222,17 +323,24 @@ function createParser(config) {
   const fieldMapping = buildFieldMapping(fmt, compiled);
 
   // Build printInterface — just the format string for display
-  const printInterface = (marker ? marker + ' ' : '') + fmt;
+  const printInterface = (bracketPrefix ? '[' + bracketPrefix.raw + ':' + bracketPrefix.fmtPart + '] ' : '') + (marker ? marker + ' ' : '') + fmt;
 
   // Build field lookup for smart fallback: fieldName → [field defs]
   // e.g. "cycle_counter" → [{key:"cycle_counter",specType:"d"}, {key:"cycle_counter_2",specType:"d"}]
   const fieldDefsMap = {};
+  if (bracketPrefix) {
+    fieldDefsMap[bracketPrefix.key] = [{ name: bracketPrefix.key, key: bracketPrefix.key, label: bpLabel || bracketPrefix.key, specType: bracketPrefix.specType }];
+  }
   for (const f of compiled.fields) {
     if (!fieldDefsMap[f.name]) fieldDefsMap[f.name] = [];
     fieldDefsMap[f.name].push(f);
+    if (f.key !== f.name) {
+      if (!fieldDefsMap[f.key]) fieldDefsMap[f.key] = [];
+      fieldDefsMap[f.key].push(f);
+    }
   }
-  // Also index by output key (after alias) for colon-separated fields
   const knownKeys = new Set(compiled.fields.map(f => f.key));
+  if (bracketPrefix) knownKeys.add(bracketPrefix.key);
 
   // Extract prefix fields from log line (common for all parsers)
   function extractPrefix(line) {
@@ -250,14 +358,19 @@ function createParser(config) {
     return { source_file: '', level, timestamp: tsSeconds, ts_raw: tsRaw, caller };
   }
 
+  function normalizeArrayKey(key) {
+    return key.replace(/\[(\d+)\]/g, '_$1');
+  }
+
   // Smart kv extraction: uses format metadata for type conversion,
   // handles compound/tuple values, only extracts known fields
   function extractSmartKv(payload) {
     const result = {};
-    const kvRegex = /(\w+)[=:]\((?:[^)]*)\)|(\w+)[=:]((?:\([^)]*\)|[^,])*)/g;
+    const kvRegex = /(\w+(?:\[\d+\])?)[=:]\((?:[^)]*)\)|(\w+(?:\[\d+\])?)[=:]((?:\([^)]*\)|[^,\s])*)/g;
     let kvMatch;
     while ((kvMatch = kvRegex.exec(payload)) !== null) {
-      const key = kvMatch[1] || kvMatch[2];
+      const rawKey = kvMatch[1] || kvMatch[2];
+      const key = normalizeArrayKey(rawKey);
       const rawVal = kvMatch[3] !== undefined ? kvMatch[3] : kvMatch[0].substring(kvMatch[0].indexOf('=') + 1);
       const defs = fieldDefsMap[key];
       if (!defs) continue; // Unknown field — skip
@@ -265,9 +378,24 @@ function createParser(config) {
       // Tuple: key=(v1,v2,...)
       const tupleMatch = rawVal.match(/^\((.+)\)$/);
       if (tupleMatch && defs.length > 1) {
-        const parts = tupleMatch[1].split(',');
-        for (let i = 0; i < parts.length && i < defs.length; i++) {
-          result[defs[i].key] = convertValue(parts[i].trim(), defs[i].specType);
+        const hasNestedKv = defs.some(d => d.name !== key);
+        const inner = tupleMatch[1];
+        if (hasNestedKv) {
+          const innerKvRegex = /(\w+)[=:](?:(\([^)]*\))|(\S+))/g;
+          let ikm;
+          while ((ikm = innerKvRegex.exec(inner)) !== null) {
+            const ik = ikm[1];
+            const iRawVal = ikm[2] || ikm[3] || '';
+            const iDefs = fieldDefsMap[ik];
+            if (!iDefs || iDefs.length === 0) continue;
+            const iDef = iDefs.find(d => d.key === ik) || iDefs[0];
+            result[iDef.key] = convertValue(iRawVal, iDef.specType);
+          }
+        } else {
+          const parts = inner.split(',');
+          for (let i = 0; i < parts.length && i < defs.length; i++) {
+            result[defs[i].key] = convertValue(parts[i].trim(), defs[i].specType);
+          }
         }
         continue;
       }
@@ -290,12 +418,24 @@ function createParser(config) {
   function parse(line, sourceFile) {
     if (!line || !line.includes(keyword)) return null;
 
+    // Extract common prefix fields
+    const data = extractPrefix(line);
+    data.source_file = sourceFile || '';
+
     // Locate payload
     let payload;
     if (marker) {
       const markerIdx = line.indexOf(marker);
       if (markerIdx === -1) return null;
       payload = line.substring(markerIdx + marker.length).trim();
+    } else if (bracketPrefix) {
+      const bracketPattern = '[' + bracketPrefix.raw + ':';
+      const bracketIdx = line.indexOf(bracketPattern);
+      if (bracketIdx === -1) return null;
+      const closeIdx = line.indexOf(']', bracketIdx);
+      if (closeIdx === -1) return null;
+      data[bracketPrefix.key] = convertValue(line.substring(bracketIdx + bracketPattern.length, closeIdx), bracketPrefix.specType);
+      payload = line.substring(closeIdx + 1).trim();
     } else {
       const firstField = compiled.fields[0];
       if (!firstField) return null;
@@ -310,10 +450,6 @@ function createParser(config) {
     if (corruptIdx > 0) {
       payload = payload.substring(0, corruptIdx).trim();
     }
-
-    // Extract common prefix fields
-    const data = extractPrefix(line);
-    data.source_file = sourceFile || '';
 
     // Strategy 1: Fast regex match (exact format)
     const m = payload.match(compiled.payloadRegex);
@@ -346,7 +482,7 @@ function createParser(config) {
 // Build FIELD_MAPPING from preprocessed format + compiled fields
 function buildFieldMapping(formatStr, compiled) {
   const norm = normalizeSpec(formatStr);
-  const segments = splitTopLevel(norm);
+  const { parts: segments } = splitTopLevel(norm);
   const mapping = [];
   let fieldIdx = 0;
 

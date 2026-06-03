@@ -7,7 +7,7 @@
  *   - Single-instance lock
  *   - Require 16 feature modules, wire cross-module getters
  *   - Call all registerIpcHandlers()
- *   - app.whenReady() → init logging, engine, tray, window
+ *   - app.whenReady() → init logging, tray, window
  *   - App events: open-file, window-all-closed, before-quit, will-quit
  *
  * IPC channels: enable-debug-log (1)
@@ -45,9 +45,9 @@ if (!IS_DEBUG) {
 
 // ===================================================================
 // Memory optimization (before app ready)
+// js-flags 已移至 main.js 顶部（必须在 Electron 初始化前设置）
 // ===================================================================
 
-app.commandLine.appendSwitch('js-flags', '--max-old-space-size=1024');
 app.commandLine.appendSwitch('disable-gpu-vsync');
 app.commandLine.appendSwitch('disable-software-rasterizer');
 app.commandLine.appendSwitch('disable-print-preview');
@@ -73,20 +73,17 @@ if (!gotTheLock) {
 // ===================================================================
 
 const logging = require('./logging');
-const engine = require('./engine');
 const windowManager = require('./window-manager');
 const fileOperations = require('./file-operations');
 const toolFinder = require('./tool-finder'); // Just for loading
 const keywordDB = require('./keyword-db');
-const remoteShareServer = require('./remote-share-server');
-const remoteClient = require('./remote-client');
 const directoryWatcher = require('./directory-watcher');
 const archiveHandler = require('./archive-handler');
 const tempDirManager = require('./temp-dir-manager');
 const searchTools = require('./search-tools');
-const remoteShareIPC = require('./remote-share-ipc');
-const autoUpdate = require('./auto-update');
 const logCsvExporter = require('./log-csv-exporter');
+const chunkFileReader = require('./chunk-file-reader');
+const configStore = require('./config-store');
 const { focusWindowSafe } = require('./utils');
 
 // ===================================================================
@@ -108,9 +105,9 @@ archiveHandler.registerIpcHandlers();
 tempDirManager.registerIpcHandlers();
 fileOperations.registerIpcHandlers();
 searchTools.registerIpcHandlers();
-remoteShareIPC.registerIpcHandlers();
-autoUpdate.registerIpcHandlers();
 logCsvExporter.registerIpcHandlers();
+chunkFileReader.registerIpcHandlers();
+configStore.registerIpcHandlers();
 
 // ===================================================================
 // App lifecycle
@@ -130,10 +127,8 @@ app.whenReady().then(() => {
   if (!gotTheLock) return;
 
   logging.initLogSystem();
-  engine.detectPythonCommand();
   Menu.setApplicationMenu(null);
   windowManager.createTray();
-  engine.startEngineProcess();
 
   windowManager.createWindow();
 
@@ -150,7 +145,7 @@ app.whenReady().then(() => {
       if (focusedWindow.webContents.isDevToolsOpened()) {
         focusedWindow.webContents.closeDevTools();
       } else {
-        focusedWindow.webContents.openDevTools();
+        focusedWindow.webContents.openDevTools({ mode: 'detach' });
       }
     }
   });
@@ -161,7 +156,7 @@ app.whenReady().then(() => {
       if (focusedWindow.webContents.isDevToolsOpened()) {
         focusedWindow.webContents.closeDevTools();
       } else {
-        focusedWindow.webContents.openDevTools();
+        focusedWindow.webContents.openDevTools({ mode: 'detach' });
       }
     }
   });
@@ -172,7 +167,7 @@ app.whenReady().then(() => {
       if (focusedWindow.webContents.isDevToolsOpened()) {
         focusedWindow.webContents.closeDevTools();
       } else {
-        focusedWindow.webContents.openDevTools();
+        focusedWindow.webContents.openDevTools({ mode: 'detach' });
       }
     }
   });
@@ -237,13 +232,11 @@ app.on('before-quit', () => {
 
 app.on('will-quit', () => {
   directoryWatcher.stopAllWatchers();
-  remoteShareServer.stopLocalServer();
   const keywordDBInstance = keywordDB.getKeywordDB();
   if (keywordDBInstance) {
     try { keywordDBInstance.close(); } catch(e) { /* 忽略 */ }
   }
   globalShortcut.unregisterAll();
-  engine.stopEngineProcess();
 
   // Clean up all renderer temp dirs
   for (const [rendererId, tempDir] of tempDirManager.rendererTempDirs) {

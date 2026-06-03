@@ -3,9 +3,15 @@
 const { parentPort, workerData } = require('worker_threads');
 const path = require('path');
 const fs = require('fs');
-const { buildZipIndex, extractByIndex } = require(path.join(__dirname, 'utils'));
+const { execSync } = require('child_process');
+const { buildZipIndex, extractByIndex, extractTextFromBuffer, find7z } = require(path.join(__dirname, 'utils'));
 
 const { archivePath, entries, keywords, platform } = workerData;
+
+// Detect source type
+const isZip = archivePath.toLowerCase().endsWith('.zip');
+const stat = (() => { try { return fs.statSync(archivePath); } catch (e) { return null; } })();
+const isDir = stat && stat.isDirectory();
 
 // Load config-based parsers first
 const activeParsers = [];
@@ -47,7 +53,6 @@ function tsRawToSeconds(raw) {
   return isNaN(n) ? NaN : n / 1e6;
 }
 
-// Extract ts_raw from the first 3 comma-separated fields
 function extractTsRaw(line) {
   const c1 = line.indexOf(',');
   if (c1 < 0) return null;
@@ -58,7 +63,6 @@ function extractTsRaw(line) {
   return line.substring(c2 + 1, c3);
 }
 
-// Parse "2026-01-04 22:38:01.351442" to milliseconds since epoch (UTC)
 function parseAndroidTimeMs(str) {
   const m = str.match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})\.(\d+)/);
   if (!m) return null;
@@ -69,7 +73,6 @@ function parseAndroidTimeMs(str) {
   return sec + frac;
 }
 
-// Format ms to CST (UTC+8): "YYYY-MM-DD HH:MM:SS.mmm"
 function formatTimeCST(ms) {
   const d = new Date(ms + 8 * 3600000);
   const pad = (n, l) => String(n).padStart(l, '0');
@@ -78,7 +81,6 @@ function formatTimeCST(ms) {
     + '.' + pad(d.getUTCMilliseconds(), 3);
 }
 
-// Binary search for nearest anchor by ts_raw seconds (sorted array)
 function lookupAndroidTime(tsRawVal, anchors) {
   if (anchors.length === 0) return '';
   const rawSec = tsRawToSeconds(tsRawVal);
@@ -88,7 +90,6 @@ function lookupAndroidTime(tsRawVal, anchors) {
     if (anchors[mid].sec < rawSec) lo = mid + 1;
     else hi = mid;
   }
-  // lo is the first anchor >= rawSec; check lo-1 to see which is closer
   if (lo > 0 && (rawSec - anchors[lo - 1].sec) < (anchors[lo].sec - rawSec)) lo--;
   const offsetMs = (rawSec - anchors[lo].sec) * 1000;
   return formatTimeCST(anchors[lo].androidMs + offsetMs);
@@ -97,29 +98,70 @@ function lookupAndroidTime(tsRawVal, anchors) {
 const ANDROID_RE = /android time (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+)/;
 
 const results = {};
+const fileMeta = {};  // entry → androidMs | null
 
-// Build ZIP index once — parse Central Directory a single time
-const zipIndex = buildZipIndex(archivePath);
-if (!zipIndex) {
-  parentPort.postMessage(results);
-  return; // not a function, just exits the worker script
+// ── ZIP fast path ──
+let zipFd = null;
+let zipEntries = null;
+
+if (isZip) {
+  const zipIndex = buildZipIndex(archivePath);
+  if (!zipIndex) {
+    parentPort.postMessage({ rows: results, fileMeta: {} });
+    return;
+  }
+  zipFd = zipIndex.fd;
+  zipEntries = zipIndex.entries;
 }
 
-const { fd, entries: entryMap } = zipIndex;
+// ── find 7z path (for 7z/RAR) ──
+let sevenZipPath = null;
+if (!isZip && !isDir) {
+  sevenZipPath = find7z();
+}
+
+// ── Extract function per source type ──
+function getFileContent(entryName) {
+  if (isDir) {
+    // Folder: entryName is absolute path
+    try {
+      const buf = fs.readFileSync(entryName);
+      const { content } = extractTextFromBuffer(buf);
+      return { success: true, content };
+    } catch (e) {
+      return { success: false, error: e.message };
+    }
+  }
+
+  if (isZip && zipFd && zipEntries) {
+    const norm = entryName.replace(/^\/+/, '').replace(/\\/g, '/');
+    const info = zipEntries.get(norm) || zipEntries.get(norm.toLowerCase());
+    if (!info) return { success: false, error: 'Zip entry not found' };
+    return extractByIndex(zipFd, null, info);
+  }
+
+  // 7z / RAR
+  if (!sevenZipPath) return { success: false, error: '7z 未安装' };
+  try {
+    const escaped = entryName.replace(/^\/+/, '').replace(/\\/g, '/');
+    const result = execSync('"' + sevenZipPath + '" e -so -y "' + archivePath + '" "' + escaped + '"', {
+      encoding: 'buffer', windowsHide: true, maxBuffer: 500 * 1024 * 1024
+    });
+    const { content } = extractTextFromBuffer(result);
+    return { success: true, content };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
 
 try {
   for (const entry of entries) {
-    const info = entryMap.get(entry.replace(/^\/+/, '').replace(/\\/g, '/'))
-      || entryMap.get(entry.replace(/^\/+/, '').replace(/\\/g, '/').toLowerCase());
-    if (!info) continue;
+    const result = getFileContent(entry);
+    if (!result.success) continue;
 
-    const extractResult = extractByIndex(fd, null, info);
-    if (!extractResult.success) continue;
+    const fileName = isDir ? path.basename(entry) : path.basename(entry);
+    const lines = result.content.split('\n');
 
-    const fileName = path.basename(entry);
-    const lines = extractResult.content.split('\n');
-
-    // Single-pass: collect anchors AND parse data simultaneously
     const anchors = [];
     const pendingData = [];
 
@@ -127,7 +169,6 @@ try {
       const line = lines[li];
       if (!line || line.charCodeAt(0) <= 32 && line.trim() === '') continue;
 
-      // Check for android time anchor
       const am = line.match(ANDROID_RE);
       if (am) {
         const tsRaw = extractTsRaw(line);
@@ -138,7 +179,6 @@ try {
         }
       }
 
-      // Check for data lines
       for (const { keyword, platform: kwPlatform, parser } of activeParsers) {
         if (!line.includes(keyword)) continue;
         const data = parser.parse(line, fileName);
@@ -147,12 +187,11 @@ try {
           pendingData.push(data);
           var resultKey = keyword + '_' + (kwPlatform || 'default');
           if (!results[resultKey]) results[resultKey] = [];
-          results[resultKey].push({ matched: true, keyword, data });
+          results[resultKey].push({ matched: true, keyword, data, _fileKey: entry });
         }
       }
     }
 
-    // Sort anchors and resolve any pending data
     if (anchors.length > 0) {
       anchors.sort((a, b) => a.sec - b.sec);
       for (const data of pendingData) {
@@ -161,9 +200,19 @@ try {
         }
       }
     }
+
+    // Compute representative android_time for file ordering
+    let repMs = null;
+    for (const d of pendingData) {
+      if (d.android_time) {
+        const ms = parseAndroidTimeMs(d.android_time);
+        if (ms !== null) { repMs = ms; break; }
+      }
+    }
+    fileMeta[entry] = repMs;
   }
 } finally {
-  fs.closeSync(fd);
+  if (zipFd) fs.closeSync(zipFd);
 }
 
-parentPort.postMessage(results);
+parentPort.postMessage({ rows: results, fileMeta });

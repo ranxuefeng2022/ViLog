@@ -56,18 +56,8 @@ window.App.DOM.init = function() {
   this.filteredPanelRegexStatus = document.getElementById("filteredPanelRegexStatus");
   this.secondaryFilterStatus = document.getElementById("secondaryFilterStatus");
 
-  // 书签相关
-  this.bookmarksPanel = document.getElementById("bookmarksPanel");
-  this.bookmarksList = document.getElementById("bookmarksList");
-  this.bookmarksSearch = document.getElementById("bookmarksSearch");
-  this.bookmarksCount = document.getElementById("bookmarksCount");
-
-  // AI助手相关
-  this.aiAssistantPanel = document.getElementById("aiAssistantPanel");
-  this.aiAssistantHeader = document.getElementById("aiAssistantHeader");
-  this.aiAssistantClose = document.getElementById("aiAssistantClose");
-  this.aiAssistantFrame = document.getElementById("aiAssistantFrame");
-  this.aiAssistantToolbarBtn = document.getElementById("aiAssistantToolbarBtn");
+  // 书签相关（已移除）
+  // AI助手相关（已移除）
 
   // 过滤建议
   this.filterSuggestions = document.getElementById("filterSuggestions");

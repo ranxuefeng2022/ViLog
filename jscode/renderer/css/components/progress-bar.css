@@ -5,13 +5,15 @@
   left: 50%;
   transform: translate(-50%, -50%);
   z-index: 9999;
-  background: white;
-  padding: 16px 24px;
-  border-radius: 12px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 20px 28px;
+  border-radius: 14px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
   display: none;
-  min-width: 350px;
-  border: 1px solid #e0e0e0;
+  min-width: 320px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
 }
 
 .file-loading-progress.visible {
@@ -20,7 +22,7 @@
 }
 
 .progress-section {
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
 .progress-section:last-child {
@@ -31,58 +33,61 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 6px;
-  font-size: 13px;
-  font-weight: 500;
-  color: #333;
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 400;
+  color: #1d1d1f;
 }
 
 #progressFileLabel,
 #progressLineLabel {
-  color: #666;
+  color: #6e6e73;
+  font-size: 11px;
 }
 
 #progressFilePercent {
-  color: #28a745;
-  font-weight: 600;
-  min-width: 50px;
+  color: #34c759;
+  font-weight: 500;
+  font-size: 11px;
+  min-width: 40px;
   text-align: right;
 }
 
 #progressLinePercent {
-  color: #007bff;
-  font-weight: 600;
-  min-width: 50px;
+  color: #0071e3;
+  font-weight: 500;
+  font-size: 11px;
+  min-width: 40px;
   text-align: right;
 }
 
 .progress-bar {
-  width: 80px; /* 🔧 改成固定宽度，不再100% */
-  height: 3px; /* 🔧 减小高度 */
-  background: rgba(102, 126, 234, 0.15); /* 🔧 更淡的背景 */
-  border-radius: 2px;
+  width: 100%;
+  height: 2px;
+  background: transparent;
+  border-radius: 0;
   overflow: hidden;
   position: relative;
-  flex-shrink: 0; /* 🔧 防止压缩 */
+  flex-shrink: 0;
 }
 
 .progress-fill {
   height: 100%;
-  border-radius: 2px; /* 🔧 匹配进度条圆角 */
-  background: linear-gradient(90deg, #28a745 0%, #34ce57 100%);
-  transition: width 0.2s ease-out; /* 🔧 更快的动画 */
+  border-radius: 0 1px 1px 0;
+  background: #007aff;
+  transition: width 0.3s ease-out;
   width: 0%;
   position: relative;
 }
 
 /* 绿色进度条 - 文件个数 */
 .progress-fill-green {
-  background: linear-gradient(90deg, #28a745 0%, #34ce57 100%);
+  background: linear-gradient(90deg, #34c759 0%, #30d158 100%);
 }
 
 /* 蓝色进度条 - 日志行数 */
 .progress-fill-blue {
-  background: linear-gradient(90deg, #007bff 0%, #0056b3 100%);
+  background: linear-gradient(90deg, #0071e3 0%, #5ac8fa 100%);
 }
 
 .progress-fill-green::after,
@@ -93,7 +98,102 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
-  animation: shimmer 2s infinite;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+  animation: shimmer 1.8s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* Chunk mode index building progress bar — Safari 风格细线 */
+.chunk-progress-bar {
+  position: fixed;
+  top: 28px;
+  left: var(--content-margin-left, 6px);
+  right: 6px;
+  height: 2px;
+  background: transparent;
+  z-index: 1999;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.chunk-progress-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: #007aff;
+  border-radius: 0 1px 1px 0;
+  transition: width 0.3s ease-out;
+  width: 0%;
+}
+
+.chunk-progress-label {
+  display: none;
+}
+
+/* ===== 过滤进度浮层 — 呼吸感设计 ===== */
+#filterProgressBar {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 30000;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 14px;
+  box-shadow: 0 2px 20px rgba(0, 0, 0, 0.08);
+  padding: 20px 32px;
+  min-width: 180px;
+  pointer-events: none;
+  animation: filterProgressBreathe 3s ease-in-out infinite;
+}
+
+#filterProgressBar.visible {
+  display: flex;
+}
+
+@keyframes filterProgressBreathe {
+  0%, 100% {
+    box-shadow: 0 2px 20px rgba(0, 0, 0, 0.06);
+    border-color: rgba(0, 0, 0, 0.04);
+  }
+  50% {
+    box-shadow: 0 4px 28px rgba(0, 113, 227, 0.08);
+    border-color: rgba(0, 113, 227, 0.08);
+  }
+}
+
+.filter-progress-ring {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid rgba(0, 0, 0, 0.06);
+  border-top-color: rgba(0, 113, 227, 0.5);
+  animation: filterProgressSpin 0.9s linear infinite;
+}
+
+@keyframes filterProgressSpin {
+  to { transform: rotate(360deg); }
+}
+
+#filterProgressLabel {
+  font-size: 12px;
+  color: #1d1d1f;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  letter-spacing: 0.02em;
+  text-align: center;
 }
 

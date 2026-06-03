@@ -1,66 +1,91 @@
-# Log Analysis System — Architecture & Development Guide
+# 日志分析系统 — 架构与开发指南
 
-## Overview
+## 概述
 
-The log analysis system extracts structured data from kernel log files inside ZIP archives, using configurable printf-style format definitions. It parses millions of log lines across multiple worker threads, then presents results in a self-contained HTML report window with virtual-scroll tables, canvas trend charts, statistics, and CSV export.
+日志分析系统从 ZIP 归档内的内核日志文件中提取结构化数据，使用可配置的 printf 风格格式定义。它在多个 Worker 线程中解析百万级日志行，将结果存储到 SQLite（零内存占用），然后在自包含的 HTML 报告窗口中展示结果，包含 Canvas 渲染的虚拟滚动表格、趋势图表、统计分析和 CSV 导出功能。
 
-## Architecture Diagram
+## 架构图
 
 ```
-User selects ZIP + platform + keywords (renderer: 08-file-tree.js)
+用户选择 ZIP + 平台 + 关键词（渲染进程: 08-file-tree.js）
   │
   ▼ IPC: export-csv-analysis
-log-csv-exporter.js (main process)
-  ├── listZipEntries() — parse ZIP central directory
-  ├── filter kernel_log files by config.filePatterns
-  ├── runWorkers() — dispatch to N worker threads
+log-csv-exporter.js（主进程）
+  ├── listZipEntries() — 解析 ZIP 中央目录
+  ├── 按 config.filePatterns 过滤 kernel_log 文件
+  ├── runWorkers() — 分发到 N 个 Worker 线程
   │     │
-  │     ▼ (each worker)
+  │     ▼（每个 worker）
   │   analysis-worker.js
-  │     ├── buildZipIndex() — parse ZIP CD once
-  │     ├── for each log file entry:
-  │     │     ├── extractByIndex() — decompress entry
-  │     │     ├── collect android_time anchors
-  │     │     └── for each parser × line:
+  │     ├── buildZipIndex() — 一次性解析 ZIP 中央目录
+  │     ├── 对每个日志文件条目：
+  │     │     ├── extractByIndex() — 解压条目
+  │     │     ├── 收集 android_time 锚点
+  │     │     └── 对每个解析器 × 每行：
   │     │           └── parser.parse(line, fileName)
-  │     │                 ├── Strategy 1: compiled regex (fast path)
-  │     │                 └── Strategy 2: smart kv fallback
+  │     │                 ├── 策略1：编译正则（快速路径）
+  │     │                 └── 策略2：智能键值回退
   │     └── parentPort.postMessage(results)
   │
-  ├── merge worker results by keyword_platform key
-  ├── buildStore() — build tab structures, auto-hide empty columns
-  ├── generateStaticHTML() — full self-contained HTML page
-  └── open in frameless BrowserWindow
+  ├── 按 keyword_platform 键合并 Worker 结果
+  ├── buildTabMetadata() — 构建 Tab 结构，自动隐藏空列
+  ├── writeToDatabase() — 将所有行写入 SQLite (mem/analysis_<时间戳>.db)
+  ├── generateStaticHTML() — HTML 模板（从 renderer/ 文件读取 CSS/JS）
+  └── 在无边框 BrowserWindow 中打开
         │
-        ▼ (report window)
-      analysis-report-preload.js — exposes logAnalysis API
-      Inline JS: virtual-scroll table, chart, stats, CSV export, search
+        ▼（报告窗口）
+      analysis-report-preload.js — 暴露 logAnalysis API
+      渲染进程 JS 模块（拼接进 HTML）：
+        state.js → utils.js → tabs.js → canvas-renderer.js → selection.js
+        → search.js → goto.js → stats.js → chart-renderer.js → export.js
+        → iface-dialog.js → col-dialog.js → app.js
 ```
 
-## File Inventory
+## 文件清单
 
-### Core Pipeline (main process)
+### 核心流水线（主进程）
 
-| File | Lines | Purpose |
-|------|-------|---------|
-| `src/main/log-parsers/config.json` | 111 | Declarative parser definitions: keyword, platform, printf format, labels, field aliases |
-| `src/main/log-parsers/generic-parser.js` | 414 | Compiles printf format strings to regex + smart kv extractors |
-| `src/main/log-parsers/index.js` | 1830 | Parser registry (`Map<keyword_platform, parser>`), `generateStaticHTML()` template |
-| `src/main/analysis-worker.js` | 169 | Worker thread: ZIP extraction, line-by-line parsing, timestamp resolution |
-| `src/main/analysis-report-preload.js` | 20 | Preload for report window: exposes `logAnalysis` API via contextBridge |
-| `src/main/log-csv-exporter.js` | 444 | Orchestrator: ZIP listing, worker pool, result merge, report window creation, all IPC handlers |
-| `src/main/utils.js` | 458 | `buildZipIndex()`, `extractByIndex()`, `parseZipCentralDir()` — low-level ZIP parsing |
-| `src/main/log-parsers/parsers/` | (empty) | Drop-in directory for legacy JS-based parsers (all active parsers now use config.json) |
+| 文件 | 行数 | 用途 |
+|------|------|------|
+| `src/main/log-parsers/config.json` | 126 | 声明式解析器定义：关键词、平台、printf 格式、标签、字段别名 |
+| `src/main/log-parsers/generic-parser.js` | 432 | 将 printf 格式字符串编译为正则 + 智能键值提取器；支持逗号和空格分隔符 |
+| `src/main/log-parsers/index.js` | 220 | 解析器注册表（`Map<keyword_platform, parser>`）、`generateStaticHTML()` 模板、报告生成 |
+| `src/main/analysis-worker.js` | 169 | Worker 线程：ZIP 解压、逐行解析、时间戳解析 |
+| `src/main/analysis-report-preload.js` | 29 | 报告窗口预加载：通过 contextBridge 暴露 `logAnalysis` API |
+| `src/main/log-csv-exporter.js` | 952 | 编排器：ZIP 列出、Worker 池、结果合并、SQLite 存储、所有 IPC 处理器 |
+| `src/main/utils.js` | 458 | `parseZipCentralDir()`、`extractTextFromBuffer()`、`find7z()`、ZIP/7z 工具函数 |
 
-### Integration Points
+### 报告渲染器（构建时拼接进 HTML）
 
-| File | Purpose |
-|------|---------|
-| `src/main/index.js` | Imports `log-csv-exporter` and calls `registerIpcHandlers()` |
-| `renderer/js/legacy/08-file-tree.js` | Analysis trigger UI: platform selector, keyword checkboxes, progress listener |
-| `preload.js` | Exposes analysis IPC bridges (`export-csv-analysis`, `get-analysis-keywords`, etc.) |
+| 文件 | 行数 | 用途 |
+|------|------|------|
+| `renderer/js/state.js` | 47 | 全局常量（ROW_H=32, CHUNK_SIZE=3000）、DOM 引用、状态变量 |
+| `renderer/js/utils.js` | 44 | `esc()`、`truncateText()`（二分查找）、`fmtN()`、`makeDraggable()` |
+| `renderer/js/tabs.js` | 231 | Tab 下拉菜单、分块加载含 LRU 淘汰、`autoFitColumns()`、`renderTab()` |
+| `renderer/js/canvas-renderer.js` | 217 | Canvas 绘制、滚动处理、Alt+滚轮横向滚动、resize 监听 |
+| `renderer/js/selection.js` | 118 | 单元格点击/拖拽选择、剪贴板复制（Ctrl+C） |
+| `renderer/js/search.js` | 69 | 搜索对话框：IPC `searchRows` + 上一个/下一个导航 |
+| `renderer/js/goto.js` | 48 | 跳转到行对话框：跳转到指定行号 |
+| `renderer/js/stats.js` | 234 | 统计对话框：数值列检测、最小/最大/平均/差值/百分位数 |
+| `renderer/js/chart-renderer.js` | 1,077 | 多系列折线图：缩放/平移、阈值线、范围选择统计 |
+| `renderer/js/export.js` | 32 | CSV 导出：IPC 模式（实时）或 Blob 下载（嵌入） |
+| `renderer/js/iface-dialog.js` | 35 | 打印格式对话框：显示 printf 格式、字段映射、未匹配字段 |
+| `renderer/js/col-dialog.js` | 47 | 列可见性选择器：复选框切换 |
+| `renderer/js/app.js` | 58 | 初始化：窗口控制、嵌入 vs 实时模式分支 |
+| `renderer/css/base.css` | 143 | 重置、布局、工具栏、滚动条、主题 |
+| `renderer/css/table.css` | 65 | 表格容器、表头行、加载遮罩 |
+| `renderer/css/dialogs.css` | 448 | 所有对话框覆盖层：搜索、跳转、统计、图表、列、格式、键、阈值 |
+| `renderer/css/chart.css` | 95 | 图表对话框、Canvas 容器、面板、提示框 |
 
-## Config Format (`config.json`)
+### 集成点
+
+| 文件 | 用途 |
+|------|------|
+| `src/main/index.js` | 导入 `log-csv-exporter` 并调用 `registerIpcHandlers()` |
+| `renderer/js/legacy/08-file-tree.js` | 分析触发 UI：平台选择器、关键词复选框、进度监听 |
+| `preload.js` | 暴露分析 IPC 桥接（`export-csv-analysis`、`get-analysis-keywords`） |
+
+## 配置格式（`config.json`）
 
 ```json
 {
@@ -77,197 +102,159 @@ log-csv-exporter.js (main process)
       ],
       "labels": ["充电状态", "VBUS电压(mV)", "IBUS电流(mA)", ...],
       "fieldAliases": { "FG_ENCRYPTION_VERIFY_RESULT": "fg_encryption_verify_result" }
+    },
+    {
+      "tag": "healthd_info",
+      "keyword": "healthd: battery l",
+      "platform": "mtk",
+      "format": ["l=%d v=%d t=%.1f h=%d st=%d c=%d fc=%d cc=%d eng=%d sd=%d cs=%d bts=%d bes=%d bwtcs=%d bwttts=%d p=%d wts=%d md=%d otg=%d chg=%c\\n"],
+      "labels": ["电池电量(%)", "电池电压(mV)", ...]
     }
   ]
 }
 ```
 
-### Field Definitions
+### 字段定义
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `tag` | yes | Display tab name (e.g. `"电池基本信息"`) |
-| `keyword` | yes | String to locate in log lines (e.g. `"vfcs_get_ap_state_info"`) |
-| `platform` | no | `"qcom"` or `"mtk"` — parsers are matched per platform |
-| `format` | yes | Array of printf-style format strings (multi-line C printf), or single string |
-| `labels` | yes | Chinese labels for each `%d`/`%s`/etc. specifier, in order |
-| `fieldAliases` | no | Map of `fieldName → outputKey` to rename fields (e.g. for case normalization) |
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| `tag` | 是 | 显示的 Tab 名称（如 `"healthd_info"`） |
+| `keyword` | 是 | 在日志行中定位的字符串（如 `"healthd: battery l"`） |
+| `platform` | 否 | `"qcom"` 或 `"mtk"` — 解析器按平台匹配 |
+| `format` | 是 | printf 风格格式字符串数组（多行 C printf），或单个字符串 |
+| `labels` | 是 | 每个 `%d`/`%s` 等占位符对应的中文标签，按顺序对应 |
+| `fieldAliases` | 否 | `字段名 → 输出键名` 的映射，用于重命名字段（如大小写规范化） |
 
-### Format String Features
+### 格式字符串特性
 
-- **Multi-line**: `format` as array is auto-joined. Trailing `\\n` is stripped.
-- **Auto marker extraction**: `[AP]`, `[CP]` etc. at the start are auto-detected as markers.
-- **Specifier types**: `%d` `%i` `%u` `%x` `%X` `%o` `%s` `%c` `%f` `%F` `%e` `%E` `%g` `%G` `%a` `%A` `%p` — all normalized and compiled to regex capture groups.
-- **Compound fields**: `key=%d(%d)` produces two fields: `key` and `key_2`.
-- **Tuple fields**: `key=(%d,%d)` produces `key_1` and `key_2`.
-- **Hex prefix**: `key=0x%x` auto-handles the `0x` literal prefix.
-- **Field separator**: Both `=` and `:` are supported (e.g. `key:%d` or `key=%d`).
+- **多行**：`format` 为数组时自动拼接。末尾的 `\\n` 会被去除。
+- **自动标记提取**：行首的 `[AP]`、`[CP]` 等会自动识别为标记。
+- **占位符类型**：`%d` `%i` `%u` `%x` `%X` `%o` `%s` `%c` `%f` `%F` `%e` `%E` `%g` `%G` `%a` `%A` `%p` — 全部规范化并编译为正则捕获组。
+- **复合字段**：`key=%d(%d)` 产生两个字段：`key` 和 `key_2`。
+- **元组字段**：`key=(%d,%d)` 产生 `key_1` 和 `key_2`。
+- **十六进制前缀**：`key=0x%x` 自动处理 `0x` 字面前缀。
+- **字段分隔符**：同时支持 `=` 和 `:`（如 `key:%d` 或 `key=%d`）。
+- **逗号分隔格式**：`field1=%d,field2=%d,field3=%d` — 标准逗号分隔的 key=value 对。
+- **空格分隔格式**：`field1=%d field2=%d field3=%d` — 空格分隔的 key=value 对（如 Android healthd 电池日志）。`splitTopLevel()` 自动检测分隔符类型。
 
 ### `filePatterns`
 
-Array of filename prefixes for source file matching within the ZIP. The system filters ZIP entries where the basename starts with any of these patterns (case-insensitive). Defaults to `["kernel_log"]`.
+ZIP 内源文件匹配的文件名前缀数组。系统过滤基本名以这些前缀开头（不区分大小写）的 ZIP 条目。默认为 `["kernel_log"]`。
 
-## Parsing Pipeline (generic-parser.js)
+## 解析流水线（generic-parser.js）
 
-### Compilation Phase
+### 编译阶段
 
-1. **`preprocessFormat(format)`**: Join multi-line array → strip `\\n` → auto-extract `[xxx]` marker.
-2. **`compileFormat(fmt, labels)`**: Split format by top-level commas (respecting parentheses) → for each segment, detect `fieldName=fmtPart` or `fieldName:fmtPart` → compile `%d`/`%s` etc. into regex capture groups via `SPEC_PATTERNS`.
-3. **Result**: `{ fields: [{name, key, label, specType}], payloadRegex: RegExp, labelCount }`.
+1. **`preprocessFormat(format)`**：拼接多行数组 → 去除 `\\n` → 自动提取 `[xxx]` 标记。
+2. **`compileFormat(fmt, labels)`**：通过 `splitTopLevel()` 按顶层逗号和空格分割格式（考虑括号嵌套）。对于空格分隔格式，检测空格后的 `key=` 模式。对每个片段，检测 `fieldName=fmtPart` 或 `fieldName:fmtPart` → 通过 `SPEC_PATTERNS` 将 `%d`/`%s` 等编译为正则捕获组。
+3. **结果**：`{ fields: [{name, key, label, specType}], payloadRegex: RegExp, labelCount }`。
 
-### Runtime Parse Strategy (two-layer)
+### 运行时解析策略（双层）
 
-**Strategy 1 — Compiled regex (fast path)**:
-- Locates payload in line (after marker or first field name).
-- Matches against `compiled.payloadRegex`.
-- If match succeeds, all fields are extracted and type-converted in one pass.
+**策略1 — 编译正则（快速路径）**：
+- 在行中定位载荷（标记或第一个字段名之后）。
+- 与 `compiled.payloadRegex` 匹配。
+- 正则在逗号分隔片段间使用 `,`，在空格分隔片段间使用 `\s+`。
+- 匹配成功后，一次遍历提取所有字段并类型转换。
 
-**Strategy 2 — Smart kv fallback** (when format changed in firmware):
-- Extracts key-value pairs from payload using regex.
-- For each key, looks up field definitions in `fieldDefsMap` (built by field name).
-- Handles tuples (`key=(v1,v2)`), compounds (`key=v(sub)`), and simple values.
-- Unknown fields (not in config) are silently skipped.
-- Type conversion uses the spec type from config (`%d` → int, `%x` → hex, `%f` → float, `%s` → string).
+**策略2 — 智能键值回退**（固件格式变更时）：
+- 使用正则从载荷中提取键值对（在逗号和空白处停止：`[^,\s]*`）。
+- 对每个键，在 `fieldDefsMap`（按字段名构建）中查找字段定义。
+- 处理元组（`key=(v1,v2)`）、复合（`key=v(sub)`）和简单值。
+- 未知字段（不在配置中）静默跳过。
+- 类型转换使用配置中的 spec 类型（`%d` → 整数，`%x` → 十六进制，`%f` → 浮点，`%s` → 字符串）。
 
-### Standard Prefix Fields
+### 标准前缀字段
 
-Every parsed row includes these fields extracted from the log line prefix:
+每条解析结果包含从日志行前缀提取的这些字段：
 
-| Key | Label | Source |
-|-----|-------|--------|
-| `source_file` | 源文件 | Filename passed to `parse()` |
-| `android_time` | Android时间 | Resolved via binary search against anchor timestamps |
-| `timestamp` | 时间戳(s) | Second field in comma-separated prefix (ts_raw / 1e6) |
-| `ts_raw` | 原始时间戳(μs) | Third field in comma-separated prefix |
-| `caller` | 调用线程 | `caller=Txxx` extracted from line |
+| 键 | 标签 | 来源 |
+|----|------|------|
+| `source_file` | 源文件 | 传入 `parse()` 的文件名 |
+| `level` | （不显示） | 行前缀的第一个逗号分隔字段 |
+| `timestamp` | 时间戳(s) | 逗号分隔前缀的第二个字段 |
+| `ts_raw` | 原始时间戳(μs) | 逗号分隔前缀的第三个字段 |
+| `caller` | 调用线程 | 从行中提取的 `caller=Txxx` |
 
-### Parser Module Interface
+### 解析器模块接口
 
-Each compiled parser exposes:
+每个编译后的解析器暴露：
 
 ```js
 {
   keyword: "vfcs_get_ap_state_info",
-  platform: "qcom",        // or undefined for universal
+  platform: "qcom",        // 或 undefined 表示通用
   parser: {
-    parse(line, sourceFile),     // → {source_file, android_time, timestamp, ts_raw, caller, ...fields} | null
+    parse(line, sourceFile),     // → {source_file, timestamp, ts_raw, caller, ...fields} | null
     getHeaders(),                // → ["source_file", "android_time", ..., "chg_status", "vbus_mv", ...]
     getHeaderLabels(),           // → {source_file: "源文件", chg_status: "充电状态", ...}
-    getTabName(),                // → "电池基本信息"
+    getTabName(),                // → "ap_info_vfcs"
     getFieldMapping(),           // → [{raw: "chg_status=%d", keys: ["chg_status"]}, ...]
     getPrintInterface()          // → "[AP] chg_status=%d,vbus_mv=%d,..."
   }
 }
 ```
 
-## Analysis Worker (analysis-worker.js)
+## 分析 Worker（analysis-worker.js）
 
-### Worker Data Input
-
-```js
-{ archivePath, entries: [fileNames], keywords: [keyword_platform strings], platform: "mtk"|"qcom" }
-```
-
-### Processing Steps
-
-1. **Load parsers**: Config parsers first via `loadConfigParsers()`, then legacy parsers from `parsers/` dir (skipping those already covered by config). Filter by requested keywords and platform.
-2. **Build ZIP index**: `buildZipIndex(archivePath)` — parse Central Directory once.
-3. **For each log file entry**:
-   - `extractByIndex()` — decompress entry content.
-   - Single-pass through all lines:
-     - Collect android_time anchors (lines matching `/android time \d{4}-\d{2}-.../`).
-     - Run each parser on each line, collect matched data.
-   - Sort anchors, resolve `android_time` for each data row via binary search.
-4. **Post results**: `{ "keyword_platform": [{matched, keyword, data}, ...] }`.
-
-### Timestamp Resolution
-
-- **ts_raw format**: `240564883` → `240.564883` seconds (last 6 digits = microseconds).
-- **android_time anchors**: Lines containing `android time YYYY-MM-DD HH:MM:SS.ffffff`.
-- **Binary search**: For each data row's `ts_raw`, find nearest anchor, compute offset → format as CST (UTC+8).
-
-## Report Window (generateStaticHTML)
-
-### Window Configuration
-
-- Frameless `BrowserWindow` (1400×900, maximized on open).
-- Uses `analysis-report-preload.js` for IPC.
-- Static HTML written to temp file, loaded via `loadFile()`.
-
-### Embedded Features (inline JS in HTML template)
-
-| Feature | Description |
-|---------|-------------|
-| **Virtual-scroll table** | DOM pool rendering for millions of rows, row height 32px |
-| **Tab switching** | Dropdown menu with tab name + row count badge |
-| **Canvas trend chart** | Multi-series line chart with zoom/pan, threshold lines, range selection stats |
-| **Statistics** | Min/max/avg/delta over selected row range |
-| **Column picker** | Toggle column visibility with checkbox list |
-| **Search** | Find text across all visible cells, navigate prev/next |
-| **Go-to line** | Jump to specific row number |
-| **Cell selection** | Click/drag to select cells, copy to clipboard |
-| **CSV export** | Export current tab data as CSV file |
-| **Print format dialog** | Shows original printf format, field mapping (format key → label), unmatched fields |
-| **Save report** | Export self-contained HTML file with embedded data |
-| **Keyboard shortcuts** | Ctrl+F (search), Ctrl+G (goto), Ctrl+S (save), Ctrl+C (copy), Ctrl+A (select all) |
-
-### Data Flow in Report Window
-
-```
-Window loads → check __EMBEDDED_TABS/__EMBEDDED_DATA (exported report)
-                or call logAnalysis.getTabs() + logAnalysis.getFullData(tabIdx) (live window)
-              → buildTabButtons(), loadTabData()
-              → renderVisibleRows() on scroll
-              → drawChart() on demand
-```
-
-### Color Picker (chart panel)
-
-- Each series has a circular color dot (18px, border-radius 50%).
-- Styled `<input type="color">` with `-webkit-appearance: none`.
-- Hover effect: scale(1.2) + shadow.
-- Default palette: Apple system colors `['#007AFF','#FF9500','#34C759','#5856D6','#FF2D55','#5AC8FA','#FFCC00','#8E8E93']`.
-
-## IPC Channels
-
-| Channel | Direction | Handler | Purpose |
-|---------|-----------|---------|---------|
-| `get-analysis-keywords` | render→main | `log-csv-exporter.js` | Return available keywords for platform |
-| `export-csv-analysis` | render→main | `log-csv-exporter.js` | Full analysis: ZIP → parse → open report |
-| `csv-export-progress` | main→render | (sender.send) | Progress updates during analysis |
-| `analysis-get-tabs` | report→main | `log-csv-exporter.js` | Get tab metadata (headers, widths, field mapping) |
-| `analysis-get-full-data` | report→main | `log-csv-exporter.js` | Get all row data for a tab |
-| `save-analysis-report` | report→main | `log-csv-exporter.js` | Save self-contained HTML report |
-| `analysis-window-minimize` | report→main | `log-csv-exporter.js` | Minimize report window |
-| `analysis-window-maximize` | report→main | `log-csv-exporter.js` | Toggle maximize/restore |
-| `analysis-window-close` | report→main | `log-csv-exporter.js` | Close report window |
-
-## Parser Registry (index.js)
-
-### Internal Structure
+### Worker 数据输入
 
 ```js
-parsers = Map<string, {keyword, platform, parser}>
-// key format: "keyword_platform" (e.g. "vfcs_get_ap_state_info_qcom")
+{ archivePath, entries: [文件名], keywords: [keyword_platform 字符串], platform: "mtk"|"qcom" }
 ```
 
-### Loading Order
+### 处理步骤
 
-1. Config parsers from `config.json` via `generic-parser.loadConfigParsers()`.
-2. Legacy JS parsers from `parsers/` directory — skipped if `keyword_platform` already registered.
+1. **加载解析器**：先通过 `loadConfigParsers()` 加载配置解析器，再从 `parsers/` 目录加载遗留 JS 解析器（跳过已注册的 `keyword_platform`）。按请求的关键词和平台过滤。
+2. **构建 ZIP 索引**：`buildZipIndex(archivePath)` — 一次性解析中央目录。
+3. **对每个日志文件条目**：
+   - `extractByIndex()` — 解压条目内容。
+   - 单遍扫描所有行：
+     - 收集 android_time 锚点（匹配 `/android time \d{4}-\d{2}-.../` 的行）。
+     - 对每行运行每个解析器，收集匹配数据。
+   - 排序锚点，通过二分查找为每条数据行解析 `android_time`。
+4. **发送结果**：`{ "keyword_platform": [{matched, keyword, data}, ...] }`。
 
-### Key Functions
+### 时间戳解析
 
-| Function | Description |
-|----------|-------------|
-| `register(keyword, parser, platform)` | Add parser to registry |
-| `getKeywords()` | Get all registered keys |
-| `getParser(keyword)` | Get parser by key (without platform suffix) |
-| `getKeywordsWithInfo(platform)` | Get keywords filtered by platform, with tab names |
-| `generateStaticHTML(embeddedTabs, embeddedData)` | Generate full self-contained HTML report page |
-| `generateReportHTML(storeTabs, storeData)` | Generate report HTML for save-to-file export |
+- **ts_raw 格式**：`240564883` → `240.564883` 秒（后 6 位 = 微秒）。
+- **android_time 锚点**：包含 `android time YYYY-MM-DD HH:MM:SS.ffffff` 的行。
+- **二分查找**：对每条数据行的 `ts_raw`，找最近的锚点，计算偏移 → 格式化为 CST（UTC+8）。
 
-## Result Store (log-csv-exporter.js)
+## SQLite 存储（log-csv-exporter.js）
+
+### 数据库结构
+
+解析完成后，所有结果写入 `mem/analysis_<时间戳>.db` 的 SQLite 数据库：
+
+```
+PRAGMA: journal_mode=WAL, synchronous=OFF, cache_size=-32000 (32MB)
+
+tab_0 (rowid INTEGER PRIMARY KEY AUTOINCREMENT, col_0 TEXT, col_1 TEXT, ...)
+tab_1 (rowid INTEGER PRIMARY KEY AUTOINCREMENT, col_0 TEXT, col_1 TEXT, ...)
+...
+_tab_meta (tab_idx INTEGER PRIMARY KEY, meta TEXT NOT NULL)
+```
+
+- 每个解析器关键词对应一个 `tab_N` 表。
+- 所有单元格值以 TEXT 存储。
+- `_tab_meta` 以 JSON 存储每个 Tab 的元数据（名称、表头、宽度、键、字段映射等），用于数据库导入恢复。
+
+### 写入流程（`writeToDatabase`）
+
+1. 设置 WAL 模式 + OFF 同步 + 32MB 缓存以优化批量写入性能。
+2. 对每个 Tab：`CREATE TABLE tab_N`，然后单事务批量 INSERT。
+3. 将所有 Tab 元数据插入 `_tab_meta`。
+
+### 读取流程（IPC 处理器）
+
+- **分块读取**：`analysis-get-rows` 使用 `SELECT ... WHERE rowid BETWEEN ? AND ?` 进行高效范围查询。
+- **搜索**：`analysis-search-rows` 构建动态 `LIKE '%term%'` 跨所有列，返回匹配的 rowid 索引。
+- **图表数据**：`analysis-get-chart-series` 使用 SQL 聚合（MIN/MAX/AVG）加采样进行降采样。
+- **统计**：`analysis-stats-calc` 通过 SQL 计算百分位数、标准差、差值。
+- **完整导出**：`analysis-get-full-data` 使用 `stmt.iterate()` 流式读取，不将所有行加载到内存。
+
+### 数据存储（内存句柄）
 
 ```js
 analysisStore = {
@@ -275,63 +262,205 @@ analysisStore = {
     name, count, headerLabels, colWidths, keyword,
     printInterface, fieldMapping, keyLabels, keys, unmatchedFields
   }],
-  data: [rows[]],      // rows[i] = array of cell strings for tab i
+  db: Database,           // better-sqlite3 连接（保持打开以供按需读取）
+  dbPath: 'mem/analysis_<时间戳>.db',
+  dbIsImported: false,    // 如果用户导入了外部 .db 文件则为 true
   reportWindow: BrowserWindow | null
 }
 ```
 
-### Auto-hide Empty Columns
+### 自动隐藏空列
 
-In `buildStore()`, columns where every row has empty value are hidden from display. Standard prefix fields (`source_file`, `android_time`, `timestamp`, `ts_raw`, `caller`) are always kept.
+在 `buildTabMetadata()` 中，每行值都为空的列会在显示时隐藏。标准前缀字段（`source_file`、`android_time`、`timestamp`、`ts_raw`、`caller`）始终保留。
 
-### Unmatched Fields
+### 未匹配字段
 
-Fields defined in config but not present in actual log data are tracked as `unmatchedFields: [{key, label}]` and shown in the print format dialog with an orange "未匹配" badge.
+配置中定义但实际日志数据中不存在的字段会被记录为 `unmatchedFields: [{key, label}]`，并在打印格式对话框中显示橙色"未匹配"标记。
 
-## Common Development Tasks
+## 报告窗口
 
-### Add a New Parser
+### 窗口配置
 
-1. Edit `src/main/log-parsers/config.json`, add entry to `parsers` array:
+- 无边框 `BrowserWindow`（1400×900，打开时最大化）。
+- 使用 `analysis-report-preload.js` 进行 IPC。
+- 静态 HTML 写入临时文件，通过 `loadFile()` 加载。
+- CSS/JS 源文件位于 `renderer/css/` 和 `renderer/js/`，运行时由 `readRendererFiles()` 拼接并嵌入 HTML 模板。
+
+### 嵌入功能（渲染进程 JS 模块）
+
+| 功能 | 模块 | 说明 |
+|------|------|------|
+| **Canvas 表格渲染** | `canvas-renderer.js` | 基于 Canvas 的虚拟滚动，支持百万行，行高 32px，列裁剪，HiDPI 支持 |
+| **Tab 切换** | `tabs.js` | 下拉菜单含 Tab 名称 + 行数标记，LRU 分块淘汰 |
+| **分块加载** | `tabs.js` | 按需行加载（CHUNK_SIZE=3000，最多 20 个分块约 60K 行在内存中） |
+| **Canvas 趋势图** | `chart-renderer.js` | 多系列折线图，支持缩放/平移、阈值线、范围选择统计 |
+| **统计分析** | `stats.js` | 选定行范围的最小/最大/平均/差值/标准差/百分位数 |
+| **列选择器** | `col-dialog.js` | 复选框切换列可见性 |
+| **搜索** | `search.js` | 在所有可见单元格中查找文本，上一个/下一个导航 |
+| **跳转到行** | `goto.js` | 跳转到指定行号 |
+| **单元格选择** | `selection.js` | 点击/拖拽选择单元格，复制到剪贴板 |
+| **CSV 导出** | `export.js` | 将当前 Tab 导出为 CSV（实时用 IPC，嵌入用 Blob） |
+| **打印格式对话框** | `iface-dialog.js` | 显示原始 printf 格式、字段映射、未匹配字段 |
+| **保存报告** | 通过 IPC | 导出自包含 HTML 文件，数据内嵌 |
+| **数据库导入** | 通过 IPC | 导入外部 .db 文件替换当前分析 |
+| **键盘快捷键** | `app.js` | Ctrl+F（搜索）、Ctrl+G（跳转）、Ctrl+C（复制）、Ctrl+A（全选）、Esc（取消） |
+
+### 报告窗口数据流
+
+```
+窗口加载 → 检查 __EMBEDDED_TABS/__EMBEDDED_DATA（导出的报告）
+              或调用 logAnalysis.getTabs()（实时窗口）
+           → buildTabButtons()、renderTab(0)
+           → ensureRows() → requestChunk() → IPC getRows(tab, from, count)
+           → 滚动时：drawCanvas() + 防抖 ensureRows() 预取分块
+           → LRU 淘汰：内存中最多 20 个分块，释放远处分块
+```
+
+### 分块加载详情
+
+```
+CHUNK_SIZE = 3000 行
+MAX_LOADED_CHUNKS = 20（每个 Tab 渲染进程内存中最多约 60K 行）
+
+滚动事件 → requestAnimationFrame → drawCanvas()
+                                 → 100ms 防抖 → ensureRows(firstRow, lastRow)
+                                                    → requestChunk() 加载缺失分块
+                                                    → IPC: getRows(tabIdx, from, count)
+                                                    → 写入 loc.rows[]
+                                                    → evictDistantChunks() 如果超过 20 个分块
+
+Tab 切换 → 释放旧 Tab rows[] → renderTab(newIdx) → 加载第一个分块
+```
+
+### Canvas 渲染详情
+
+```
+drawCanvas():
+  1. 从 scrollTop 计算可见行范围（± BUFFER=30 行）
+  2. 横向列裁剪：跳过视口外的列
+  3. 绘制：行号背景 → 数据背景 → 搜索高亮
+     → 选择高亮 → 单元格文本（含二分查找截断）→ 网格线 → 行号
+  4. 所有渲染在单个 <canvas> 元素上，按 devicePixelRatio 缩放
+```
+
+### 颜色选择器（图表面板）
+
+- 每个系列有一个圆形颜色点（18px，border-radius 50%）。
+- 使用 `-webkit-appearance: none` 样式的 `<input type="color">`。
+- 悬停效果：scale(1.2) + 阴影。
+- 默认调色板：Apple 系统颜色 `['#007AFF','#FF9500','#34C759','#5856D6','#FF2D55','#5AC8FA','#FFCC00','#8E8E93']`。
+
+## IPC 通道
+
+### 主窗口通道
+
+| 通道 | 方向 | 处理器 | 用途 |
+|------|------|--------|------|
+| `get-analysis-keywords` | 渲染→主 | `log-csv-exporter.js` | 返回指定平台的可用关键词 |
+| `export-csv-analysis` | 渲染→主 | `log-csv-exporter.js` | 完整分析：ZIP → 解析 → SQLite → 打开报告 |
+| `csv-export-progress` | 主→渲染 | (sender.send) | 分析过程中的进度更新 |
+
+### 报告窗口通道
+
+| 通道 | 方向 | 处理器 | 用途 |
+|------|------|--------|------|
+| `analysis-get-tabs` | 报告→主 | `log-csv-exporter.js` | 获取 Tab 元数据（表头、宽度、字段映射） |
+| `analysis-get-full-data` | 报告→主 | `log-csv-exporter.js` | 获取 Tab 的所有行数据（用于嵌入报告导出） |
+| `analysis-get-rows` | 报告→主 | `log-csv-exporter.js` | 分块加载的行范围查询（SELECT WHERE rowid BETWEEN） |
+| `analysis-search-rows` | 报告→主 | `log-csv-exporter.js` | 搜索 Tab，返回匹配的 rowid 索引（LIKE） |
+| `analysis-get-chart-meta` | 报告→主 | `log-csv-exporter.js` | 检测图表的数值列（SQL 采样） |
+| `analysis-get-chart-series` | 报告→主 | `log-csv-exporter.js` | 获取降采样后的图表数据点 |
+| `analysis-get-chart-tooltip` | 报告→主 | `log-csv-exporter.js` | 获取图表点的悬停提示数据 |
+| `analysis-stats-meta` | 报告→主 | `log-csv-exporter.js` | 检测统计的数值列 |
+| `analysis-stats-calc` | 报告→主 | `log-csv-exporter.js` | 计算统计（最小/最大/平均/百分位数） |
+| `analysis-export-csv` | 报告→主 | `log-csv-exporter.js` | 将 Tab 导出为 CSV 文件（从 SQLite 流式读取） |
+| `save-analysis-report` | 报告→主 | `log-csv-exporter.js` | 保存自包含 HTML 报告（含嵌入数据） |
+| `analysis-import-database` | 报告→主 | `log-csv-exporter.js` | 导入外部 .db 文件替换当前分析 |
+| `analysis-window-minimize` | 报告→主 | `log-csv-exporter.js` | 最小化报告窗口 |
+| `analysis-window-maximize` | 报告→主 | `log-csv-exporter.js` | 切换最大化/还原 |
+| `analysis-window-close` | 报告→主 | `log-csv-exporter.js` | 关闭报告窗口 |
+
+## 解析器注册表（index.js）
+
+### 内部结构
+
+```js
+parsers = Map<string, {keyword, platform, parser}>
+// 键格式："keyword_platform"（如 "vfcs_get_ap_state_info_qcom"）
+```
+
+### 加载顺序
+
+1. 先通过 `generic-parser.loadConfigParsers()` 从 `config.json` 加载配置解析器。
+2. 再从 `parsers/` 目录加载遗留 JS 解析器 — 如果 `keyword_platform` 已注册则跳过。
+
+### 关键函数
+
+| 函数 | 说明 |
+|------|------|
+| `register(keyword, parser, platform)` | 将解析器添加到注册表 |
+| `getKeywords()` | 获取所有已注册的键 |
+| `getParser(keyword)` | 按键获取解析器（不含平台后缀） |
+| `getKeywordsWithInfo(platform)` | 按平台过滤获取关键词，含 Tab 名称 |
+| `generateStaticHTML(embeddedTabs, embeddedData)` | 生成 HTML，含拼接的渲染器 CSS/JS |
+| `generateReportHTML(storeTabs, storeData)` | 生成保存到文件的报告 HTML |
+
+## 常见开发任务
+
+### 新增解析器
+
+1. 编辑 `src/main/log-parsers/config.json`，在 `parsers` 数组中添加条目：
 ```json
 {
   "tag": "显示标签",
-  "keyword": "unique_log_keyword",
+  "keyword": "唯一日志关键词",
   "platform": "mtk",
   "format": ["[AP] field1=%d,field2=%d,field3=%s\\n"],
   "labels": ["字段1", "字段2", "字段3"]
 }
 ```
-2. No code changes needed — `generic-parser.js` compiles it automatically.
+2. 无需修改代码 — `generic-parser.js` 会自动编译。
 
-### Add a New Printf Specifier Type
+对于空格分隔格式（如 Android healthd），在 key=value 对之间使用空格：
+```json
+{
+  "tag": "healthd_info",
+  "keyword": "healthd: battery l",
+  "platform": "mtk",
+  "format": ["l=%d v=%d t=%.1f h=%d st=%d\\n"],
+  "labels": ["电量", "电压", "温度", "健康状态", "充电状态"]
+}
+```
 
-1. Add regex pattern to `SPEC_PATTERNS` in `generic-parser.js`.
-2. Add conversion logic to `convertValue()`.
+### 新增 printf 占位符类型
 
-### Modify the Report Window UI
+1. 在 `generic-parser.js` 的 `SPEC_PATTERNS` 中添加正则模式。
+2. 在 `convertValue()` 中添加转换逻辑。
 
-1. Edit `generateStaticHTML()` in `src/main/log-parsers/index.js`.
-2. CSS is inline in the `<style>` block (starts at line ~57).
-3. JS is inline in the `<script>` block (starts at line ~350).
-4. HTML structure is in the `<body>` section.
+### 修改报告窗口 UI
 
-### Modify Chart Behavior
+1. **CSS**：编辑 `src/main/log-parsers/renderer/css/` 中的文件。
+2. **JS**：编辑 `src/main/log-parsers/renderer/js/` 中的文件。
+3. **HTML 结构**：编辑 `src/main/log-parsers/index.js` 中的 `generateStaticHTML()`。
+4. 文件在运行时由 `readRendererFiles()` 拼接并嵌入 HTML。加载顺序由 `index.js` 中的 `JS_FILES` 和 `CSS_FILES` 数组定义。
 
-- Chart rendering: `drawChart()` function in the inline JS.
-- Chart colors: `CHART_COLORS` array.
-- Chart config panel HTML: generated in `showChart()`.
-- Chart CSS: `.chart-*` classes in the inline `<style>`.
+### 修改图表行为
 
-### Add a Legacy JS Parser (rare — prefer config.json)
+- 图表渲染：`renderer/js/chart-renderer.js`。
+- 图表颜色：`state.js` 中的 `CHART_COLORS` 数组。
+- 图表 CSS：`renderer/css/chart.css`。
 
-1. Create `src/main/log-parsers/parsers/your-parser.js`.
-2. Export: `{ keyword, platform?, parser: { parse, getHeaders, getHeaderLabels, getTabName } }`.
-3. Will be auto-loaded and deduplicated against config parsers.
+### 新增遗留 JS 解析器（少见 — 优先使用 config.json）
 
-## Important Notes
+1. 创建 `src/main/log-parsers/parsers/your-parser.js`。
+2. 导出：`{ keyword, platform?, parser: { parse, getHeaders, getHeaderLabels, getTabName } }`。
+3. 将被自动加载并与配置解析器去重。
 
-- **Template literal escaping**: The report HTML is a JS template literal. `\n` and `\t` in inline JS must be written as `\\n` and `\\t` to avoid becoming literal newline/tab characters.
-- **Worker thread isolation**: `analysis-worker.js` runs in a separate Node.js thread. It cannot access Electron APIs. It requires modules via absolute paths built from `__dirname`.
-- **ZIP handling**: Central directory is parsed manually (no external ZIP library). Supports ZIP64 for large archives.
-- **Self-contained reports**: Exported HTML files embed all data inline via `__EMBEDDED_TABS`/`__EMBEDDED_DATA` script tags. No external dependencies.
+## 重要说明
+
+- **渲染器文件拼接**：`renderer/` 中的 CSS/JS 文件在运行时读取并拼接，然后嵌入 HTML 模板。`JS_FILES`（index.js 第 47 行）中的加载顺序必须遵守 — `state.js` 在前（全局变量），`app.js` 在后（初始化）。
+- **Worker 线程隔离**：`analysis-worker.js` 在独立的 Node.js 线程中运行，不能访问 Electron API，通过从 `__dirname` 构建的绝对路径 require 模块。
+- **ZIP 处理**：中央目录手动解析（无外部 ZIP 库），支持 ZIP64 大归档。
+- **自包含报告**：导出的 HTML 文件通过 `__EMBEDDED_TABS`/`__EMBEDDED_DATA` script 标签内嵌所有数据，无外部依赖。
+- **SQLite 生命周期**：`analysis_<时间戳>.db` 文件在 `mem/` 中创建，报告窗口存活期间保持打开。新分析时会清理上次会话的 DB 文件。导入的 DB 文件不会被删除（属于用户）。
+- **内存控制**：无论 ZIP 中有多少行，渲染进程每个 Tab 最多持有 20 × 3000 = 60,000 行。其他所有数据留在 SQLite 中，通过 `rowid` 范围查询按需加载。

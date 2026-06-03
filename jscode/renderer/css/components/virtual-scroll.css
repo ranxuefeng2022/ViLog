@@ -22,8 +22,8 @@
 /* 日志行元素 - 虚拟滚动中的定位行 */
 .log-line {
   position: absolute;
-  width: max-content; /* 🔧 让行宽根据内容自由扩展，启用横向滚动 */
-  min-width: 100%; /* 最小占满容器宽度 */
+  width: max-content;
+  min-width: 100%;
   left: 0;
   height: var(--log-line-height, 19px);
   line-height: var(--log-line-height, 19px);
@@ -34,6 +34,7 @@
   color: #000000;
   background-color: transparent;
   box-sizing: border-box;
+  contain: layout style;
 }
 
 /* 文件头样式 */
@@ -41,14 +42,15 @@
   position: absolute;
   width: 100%;
   left: 0;
-  height: var(--log-line-height, 19px);
-  line-height: var(--log-line-height, 19px);
-  padding: 2px 6px;
+  height: 22px;
+  min-height: 22px;
+  line-height: 22px;
+  padding: 0 6px;
   margin: 0;
-  background: rgba(144, 238, 144, 0.3);
-  border-left: 3px solid #90ee90;
+  background: rgba(0, 0, 0, 0.03);
+  border-left: 3px solid rgba(0, 113, 227, 0.35);
   font-weight: 500;
-  color: #2e7d32;
+  color: #6e6e73;
   font-size: 12px;
   border-radius: 0 5px 5px 0;
   white-space: pre;

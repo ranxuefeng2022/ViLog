@@ -3,47 +3,55 @@
 /* 右键菜单样式 */
 .context-menu {
   position: fixed;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
   z-index: 10000;
   display: none;
   min-width: 160px;
-  padding: 4px 0;
+  padding: 6px;
 }
 
 .context-menu.visible {
   display: block;
+  animation: menuFadeIn 0.15s ease-out;
+}
+
+@keyframes menuFadeIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 .context-menu-item {
-  padding: 8px 16px;
+  padding: 7px 12px;
   cursor: pointer;
   font-size: 13px;
   color: #1d1d1f;
-  transition: background-color 0.2s ease;
+  transition: background-color 0.12s ease, color 0.12s ease;
   display: flex;
   align-items: center;
   gap: 8px;
+  border-radius: 6px;
 }
 
 .context-menu-item:hover {
-  background-color: rgba(0, 113, 227, 0.1);
+  background-color: rgba(0, 0, 0, 0.04);
+  color: #0071e3;
 }
 
 .context-menu-item.active {
-  background-color: rgba(0, 113, 227, 0.15);
+  background-color: rgba(0, 113, 227, 0.08);
   color: #0071e3;
   font-weight: 500;
 }
 
 .context-menu-separator {
   height: 1px;
-  background: rgba(0, 0, 0, 0.08);
-  margin: 4px 0;
+  background: rgba(0, 0, 0, 0.06);
+  margin: 4px 6px;
 }
 
 /* CSV表格右键菜单 */
@@ -60,30 +68,30 @@
 .color-options-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  padding: 8px;
+  gap: 5px;
+  padding: 6px;
   justify-content: center;
 }
 
 .color-option {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   border-radius: 6px;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
 
 .color-option:hover {
-  transform: scale(1.15);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  transform: scale(1.2);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
 }
 
 .color-option span {
   width: 100%;
   height: 100%;
   display: block;
-  border-radius: 4px;
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 5px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 
@@ -252,18 +260,20 @@
   position: fixed;
   display: none;
   width: 280px;
-  padding: 4px;
-  background: rgba(255, 255, 255, 0.98);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 8px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15), 0 2px 8px rgba(0, 0, 0, 0.1);
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
   z-index: 10000;
   overflow: hidden;
 }
+
 #logContextMenu.visible {
   display: block;
+  animation: menuFadeIn 0.15s ease-out;
 }
 
 /* 菜单项通用样式 */
@@ -278,24 +288,24 @@
   font-size: 13px;
   text-align: left;
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition: background-color 0.12s ease, color 0.12s ease;
   gap: 8px;
   min-height: 32px;
   box-sizing: border-box;
-  border-radius: 4px;
+  border-radius: 6px;
 }
 
 #logContextMenu .menu-item:hover {
-  background: rgba(0, 113, 227, 0.08);
+  background: rgba(0, 0, 0, 0.04);
   color: #0071e3;
 }
 
 #logContextMenu .menu-item:active {
-  background: rgba(0, 113, 227, 0.12);
+  background: rgba(0, 0, 0, 0.07);
 }
 
 #logContextMenu .menu-item:disabled {
-  opacity: 0.4;
+  opacity: 0.35;
   cursor: not-allowed;
   color: #8e8e93;
 }
@@ -326,12 +336,12 @@
 
 /* 菜单标题 */
 #logContextMenu .menu-title {
-  padding: 6px 10px 4px;
+  padding: 8px 10px 4px;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
   color: #8e8e93;
-  background: rgba(0, 0, 0, 0.02);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  background: none;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -343,18 +353,18 @@
   padding: 2px 0;
 }
 
-/* 右键菜单两列布局 - 优化为显示完整文字 */
+/* 右键菜单两列布局 */
 #logContextMenu .menu-group.two-columns {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 6px;
-  padding: 6px;
+  gap: 4px;
+  padding: 4px;
 }
 
 #logContextMenu .menu-group.two-columns .menu-item {
   min-width: 0;
-  min-height: 38px;
-  padding: 8px 10px;
+  min-height: 34px;
+  padding: 6px 8px;
   font-size: 12px;
 }
 
@@ -374,17 +384,17 @@
 #logContextMenu .menu-group-title {
   padding: 4px 10px 2px;
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 500;
   color: #8e8e93;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.3px;
 }
 
 /* 分隔线 */
 #logContextMenu .menu-separator {
   height: 1px;
-  background: rgba(0, 0, 0, 0.06);
-  margin: 2px 0;
+  background: rgba(0, 0, 0, 0.05);
+  margin: 3px 6px;
 }
 
 /* 文件信息区域 */
@@ -440,125 +450,36 @@
   display: block;
 }
 
-/* 快捷键说明按钮 - 小圆形，右下角，显眼的"快"字 */
-#shortcutsToggleBtn {
+
+/* ===== 统一 Toast 通知 ===== */
+.app-toast {
   position: fixed;
-  right: 16px;
-  bottom: 16px;
-  width: 32px;
-  height: 32px;
-  background: linear-gradient(135deg, #ff6b6b 0%, #ff8e53 100%);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  font-size: 16px;
-  font-weight: bold;
-  color: white;
-  box-shadow: 0 3px 10px rgba(255, 107, 107, 0.5);
-  z-index: 10001;
-  transition: all 0.2s ease;
-  -webkit-app-region: no-drag;
-  app-region: no-drag;
-  font-family: "Microsoft YaHei", "SimHei", sans-serif;
-}
-
-#shortcutsToggleBtn:hover {
-  background: linear-gradient(135deg, #ff5252 0%, #ff7043 100%);
-  transform: scale(1.1);
-  box-shadow: 0 4px 15px rgba(255, 107, 107, 0.7);
-}
-
-#shortcutsToggleBtn:active {
-  transform: scale(0.95);
-}
-
-/* 快捷键说明面板 */
-#shortcutsPanel {
-  position: fixed;
-  right: 16px;
-  bottom: 60px;
-  width: 200px;
-  background: rgba(255, 255, 255, 0.98);
-  border-radius: 8px;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100000;
+  background: rgba(29, 29, 31, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: #fff;
+  padding: 8px 20px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  pointer-events: none;
+  white-space: nowrap;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-  z-index: 10001;
-  display: none;
-  overflow: hidden;
+  animation: toastIn 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-#shortcutsPanel.visible {
-  display: block;
-  animation: slideUp 0.2s ease;
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(-8px) scale(0.96); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
 }
 
-.shortcuts-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 12px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.shortcuts-header #shortcutsClose {
-  background: rgba(255, 255, 255, 0.2);
-  border: none;
-  color: white;
-  width: 20px;
-  height: 20px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.2s ease;
-}
-
-.shortcuts-header #shortcutsClose:hover {
-  background: rgba(255, 255, 255, 0.4);
-}
-
-.shortcuts-content {
-  padding: 8px 12px;
-  font-size: 11px;
-}
-
-.shortcut-category {
-  font-weight: 600;
-  color: #666;
-  margin-top: 12px;
-  margin-bottom: 4px;
-  padding-bottom: 2px;
-  border-bottom: 1px solid #eee;
-}
-
-.shortcut-category:first-child {
-  margin-top: 0;
-}
-
-.shortcut-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 0;
-  color: #333;
-}
-
-.shortcut-item kbd {
-  background: rgba(0, 0, 0, 0.06);
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  border-radius: 4px;
-  padding: 2px 6px;
-  font-family: inherit;
-  font-size: 10px;
-  color: #555;
-  min-width: 50px;
-  text-align: center;
+@keyframes toastOut {
+  from { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+  to { opacity: 0; transform: translateX(-50%) translateY(-6px) scale(0.96); }
 }
 
 /* 快捷键提示样式 */

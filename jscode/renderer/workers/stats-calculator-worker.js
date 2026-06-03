@@ -24,9 +24,6 @@ self.onmessage = function(e) {
     case 'lineLengthStats':
       handleLineLengthStats(data);
       break;
-    case 'bookmarkStats':
-      handleBookmarkStats(data);
-      break;
     case 'logLevelStats':
       handleLogLevelStats(data);
       break;
@@ -309,48 +306,6 @@ function handleLineLengthStats(data) {
   }
 
   processBatch(0);
-}
-
-/**
- * 计算书签统计
- */
-function handleBookmarkStats(data) {
-  const { bookmarks, lines } = data;
-  const startTime = performance.now();
-
-  const stats = {
-    totalBookmarks: bookmarks.length,
-    filesWithBookmarks: new Set(),
-    lineLengths: [],
-    notesCount: 0
-  };
-
-  for (const bookmark of bookmarks) {
-    if (bookmark.filePath) {
-      stats.filesWithBookmarks.add(bookmark.filePath);
-    }
-    if (bookmark.note && bookmark.note.trim()) {
-      stats.notesCount++;
-    }
-    if (bookmark.lineIndex !== undefined && lines[bookmark.lineIndex]) {
-      stats.lineLengths.push(lines[bookmark.lineIndex].length);
-    }
-  }
-
-  stats.filesWithBookmarks = stats.filesWithBookmarks.size;
-  stats.avgLineLength = stats.lineLengths.length > 0
-    ? stats.lineLengths.reduce((a, b) => a + b, 0) / stats.lineLengths.length
-    : 0;
-
-  delete stats.lineLengths;
-
-  const elapsed = performance.now() - startTime;
-  console.log(`[Stats Worker] 书签统计完成: ${bookmarks.length} 个书签, 耗时 ${elapsed.toFixed(2)}ms`);
-
-  self.postMessage({
-    type: 'bookmarkStatsResult',
-    data: stats
-  });
 }
 
 /**

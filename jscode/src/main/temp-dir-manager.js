@@ -4,61 +4,48 @@
 
 const path = require('path');
 const fs = require('fs');
-const crypto = require('crypto');
-const { execSync } = require('child_process');
+const crypto = require('crypto'); // eslint-disable-line no-redeclare
 const { ipcMain } = require('electron');
 const { extractArchiveToDir } = require('./archive-handler');
 const projectRoot = path.resolve(__dirname, '..', '..');
+const fsp = fs.promises;
 
 // 存储渲染进程的临时目录信息
 const rendererTempDirs = new Map();
 
 
 ipcMain.handle('create-temp-extract-dir', async (event) => {
-  const path = require('path');
-  const fs = require('fs');
-  const crypto = require('crypto');
-
   try {
-    // 🔧 修复：正确计算应用目录
-    // 在开发模式下：__dirname 是 resources/app，需要向上两级到达 ViLog 根目录
-    // 在打包后：process.resourcesPath 指向 resources 目录
     let appDir;
     if (process.resourcesPath) {
-      // 打包后的应用
       appDir = process.resourcesPath;
     } else {
-      // 开发模式：从 __dirname (resources/app) 向上两级到项目根目录
       appDir = projectRoot;
     }
 
     const baseTempDir = path.join(appDir, 'temp_extract');
 
     // 确保基础临时目录存在
-    if (!fs.existsSync(baseTempDir)) {
-      fs.mkdirSync(baseTempDir, { recursive: true });
-    }
+    await fsp.mkdir(baseTempDir, { recursive: true });
 
-    // 生成唯一的临时目录名（使用时间戳 + 随机数）
+    // 生成唯一的临时目录名
     const uniqueId = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
     const tempDirPath = path.join(baseTempDir, `session-${uniqueId}`);
 
-    // 创建临时目录
-    fs.mkdirSync(tempDirPath, { recursive: true });
+    await fsp.mkdir(tempDirPath, { recursive: true });
 
-    // 获取渲染进程的 ID（使用 webContents 的 ID）
+    // 获取渲染进程的 ID
     const rendererId = event.sender.id;
 
     // 如果该渲染进程已有临时目录，先清空
     if (rendererTempDirs.has(rendererId)) {
       const oldDir = rendererTempDirs.get(rendererId);
-      if (fs.existsSync(oldDir)) {
-        fs.rmSync(oldDir, { recursive: true, force: true });
+      try {
+        await fsp.rm(oldDir, { recursive: true, force: true });
         console.log(`[temp-extract] 已清理旧临时目录: ${oldDir}`);
-      }
+      } catch { /* 忽略清理失败 */ }
     }
 
-    // 保存新的临时目录路径
     rendererTempDirs.set(rendererId, tempDirPath);
 
     console.log(`[temp-extract] 应用目录: ${appDir}`);
@@ -71,32 +58,29 @@ ipcMain.handle('create-temp-extract-dir', async (event) => {
 });
 
 ipcMain.handle('clear-temp-extract-dir', async (event) => {
-  const path = require('path');
-  const fs = require('fs');
-
   try {
     const rendererId = event.sender.id;
     const tempDir = rendererTempDirs.get(rendererId);
 
     if (!tempDir) {
-      console.log(`[temp-extract] 渲染进程 ${rendererId} 没有临时目录`);
       return { success: true };
     }
 
-    if (!fs.existsSync(tempDir)) {
-      console.log(`[temp-extract] 临时目录不存在: ${tempDir}`);
+    try {
+      await fsp.access(tempDir);
+    } catch {
       return { success: true };
     }
 
     // 清空目录内容
-    const files = fs.readdirSync(tempDir);
+    const files = await fsp.readdir(tempDir);
     for (const file of files) {
       const filePath = path.join(tempDir, file);
-      const stat = fs.statSync(filePath);
+      const stat = await fsp.stat(filePath);
       if (stat.isDirectory()) {
-        fs.rmSync(filePath, { recursive: true, force: true });
+        await fsp.rm(filePath, { recursive: true, force: true });
       } else {
-        fs.unlinkSync(filePath);
+        await fsp.unlink(filePath);
       }
     }
 
@@ -109,10 +93,6 @@ ipcMain.handle('clear-temp-extract-dir', async (event) => {
 });
 
 ipcMain.handle('extract-to-temp-dir', async (event, archivePath, relativePath) => {
-  const path = require('path');
-  const fs = require('fs');
-  const { execSync } = require('child_process');
-
   try {
     const rendererId = event.sender.id;
     const tempDir = rendererTempDirs.get(rendererId);
@@ -121,49 +101,42 @@ ipcMain.handle('extract-to-temp-dir', async (event, archivePath, relativePath) =
       return { success: false, error: '临时目录不存在，请先创建临时目录' };
     }
 
-    // 如果是压缩包内的文件，需要先解压整个压缩包
     if (relativePath) {
-      // 这是一个压缩包内的文件，需要解压整个压缩包
       const archiveName = path.basename(archivePath);
       const extractDir = path.join(tempDir, archiveName);
 
-      // 确保目标目录存在
-      if (!fs.existsSync(extractDir)) {
-        fs.mkdirSync(extractDir, { recursive: true });
-      }
+      await fsp.mkdir(extractDir, { recursive: true });
 
       console.log(`[temp-extract] 解压 ${archivePath} -> ${extractDir}`);
 
-      // 调用现有的解压功能
       const result = await extractArchiveToDir(archivePath, extractDir);
       if (!result.success) {
         return result;
       }
 
-      // 返回解压后的文件路径
       const extractedFilePath = path.join(extractDir, relativePath);
+
+
+
       return {
         success: true,
         extractedPath: extractedFilePath,
         extractDir: extractDir
       };
     } else {
-      // 这是一个普通的压缩包文件，直接解压
       const archiveName = path.basename(archivePath, path.extname(archivePath));
       const extractDir = path.join(tempDir, archiveName);
 
-      // 确保目标目录存在
-      if (!fs.existsSync(extractDir)) {
-        fs.mkdirSync(extractDir, { recursive: true });
-      }
+      await fsp.mkdir(extractDir, { recursive: true });
 
       console.log(`[temp-extract] 解压 ${archivePath} -> ${extractDir}`);
 
-      // 调用现有的解压功能
       const result = await extractArchiveToDir(archivePath, extractDir);
       if (!result.success) {
         return result;
       }
+
+
 
       return {
         success: true,
@@ -177,9 +150,6 @@ ipcMain.handle('extract-to-temp-dir', async (event, archivePath, relativePath) =
 });
 
 ipcMain.handle('delete-temp-extract-dir', async (event) => {
-  const path = require('path');
-  const fs = require('fs');
-
   try {
     const rendererId = event.sender.id;
     const tempDir = rendererTempDirs.get(rendererId);
@@ -188,10 +158,10 @@ ipcMain.handle('delete-temp-extract-dir', async (event) => {
       return { success: true };
     }
 
-    if (fs.existsSync(tempDir)) {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+    try {
+      await fsp.rm(tempDir, { recursive: true, force: true });
       console.log(`[temp-extract] 已删除临时目录: ${tempDir}`);
-    }
+    } catch { /* 忽略删除失败 */ }
 
     rendererTempDirs.delete(rendererId);
     return { success: true };

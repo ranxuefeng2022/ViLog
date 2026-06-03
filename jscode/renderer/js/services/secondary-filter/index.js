@@ -511,96 +511,15 @@
         const lines = secondaryFilter.filteredLines;
         const primaryIndices = secondaryFilter.filteredToPrimaryIndex;
         const originalIndices = secondaryFilter.filteredToOriginalIndex;
-        const keywords = secondaryFilter.filterKeywords;
 
-        // 使用Canvas渲染
         if (window.SecondaryFilterCanvas) {
-          // 直接使用原始行数据，Canvas渲染器不需要HTML转义和高亮
           window.SecondaryFilterCanvas.setData(lines, primaryIndices, originalIndices);
         } else {
-          // Canvas不可用时的降级处理（使用DOM渲染）
-          console.warn('[SecondaryFilter] Canvas渲染器不可用，使用DOM渲染');
-          renderWithDOM(lines, primaryIndices, originalIndices, keywords);
+          console.error('[SecondaryFilter] Canvas渲染器不可用');
         }
       }
 
-      // DOM渲染降级方案
-      function renderWithDOM(lines, primaryIndices, originalIndices, keywords) {
-        // 清空内容
-        secondaryFilterSidebarVirtualContent.innerHTML = "";
 
-        // 设置占位符高度
-        const lineHeight = 30; // 边栏行高
-        const totalHeight = lines.length * lineHeight;
-        secondaryFilterSidebarPlaceholder.style.height = totalHeight + "px";
-
-        // 渲染所有行
-        const fragment = document.createDocumentFragment();
-
-        for (let i = 0; i < lines.length; i++) {
-          const lineContent = lines[i];
-          const primaryIndex = primaryIndices[i];
-          const originalIndex = originalIndices[i];
-
-          const lineElement = document.createElement("div");
-          lineElement.className = "secondary-filter-result-line";
-          lineElement.dataset.index = i;
-          lineElement.dataset.primaryIndex = primaryIndex;
-          lineElement.dataset.originalIndex = originalIndex;
-
-          // 检查是否是文件头
-          const isFileHeader = lineContent && lineContent.startsWith("=== 文件:");
-          if (isFileHeader) {
-            lineElement.classList.add("file-header");
-          }
-
-
-
-
-          // 高亮匹配的关键词
-          let displayContent = escapeHtmlSecondaryFilter(lineContent);
-          displayContent = highlightSecondaryFilterKeywords(displayContent, keywords);
-
-          // 添加行号（使用原始日志行号）
-          if (!isFileHeader) {
-            const lineNumber = originalIndex + 1;
-            displayContent = `<span class="line-number">${lineNumber}</span>${displayContent}`;
-          }
-
-          lineElement.innerHTML = displayContent;
-
-          // 🚀 优化：点击事件：跳转到过滤面板对应位置
-          // 使用事件委托或直接绑定，避免每次点击都查询所有行
-          lineElement.addEventListener("click", (e) => {
-            // 阻止事件冒泡，避免触发其他点击事件
-            e.stopPropagation();
-
-            // 直接调用跳转函数
-            jumpToPrimaryFilterLine(primaryIndex);
-
-            // 🚀 优化：只更新当前行的选中状态，避免查询所有行
-            const sidebarContent = secondaryFilterSidebarVirtualContent;
-            const prevSelected = sidebarContent.querySelector(".secondary-filter-result-line.selected");
-            if (prevSelected && prevSelected !== lineElement) {
-              prevSelected.classList.remove("selected");
-            }
-            lineElement.classList.add("selected");
-          });
-
-          // 设置位置
-          lineElement.style.position = "absolute";
-          lineElement.style.left = "0";
-          // 🚀 使用 transform 替代 top，启用 GPU 合成层
-          lineElement.style.transform = `translateY(${i * lineHeight}px)`;
-          lineElement.style.width = "max-content";
-          lineElement.style.minWidth = "100%";
-          lineElement.style.boxSizing = "border-box";
-
-          fragment.appendChild(lineElement);
-        }
-
-        secondaryFilterSidebarVirtualContent.appendChild(fragment);
-      }
 
       /**
        * 跳转到过滤面板对应位置
@@ -692,56 +611,6 @@
             applyHighlight(targetLine);
           }
         }
-      }
-
-      /**
-       * HTML转义函数（用于二级过滤）
-       */
-      function escapeHtmlSecondaryFilter(text) {
-        if (!text) return "";
-        return text
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;")
-          .replace(/"/g, "&quot;")
-          .replace(/'/g, "&#39;");
-      }
-
-      /**
-       * 高亮二级过滤关键词
-       */
-      function highlightSecondaryFilterKeywords(text, keywords) {
-        if (!keywords || keywords.length === 0) return text;
-
-        let result = text;
-        for (const keyword of keywords) {
-          if (!keyword) continue;
-          // 🚀 性能优化：使用缓存的正则表达式，避免重复创建
-          try {
-            const regex = getCachedRegex(keyword);  // 复用缓存
-            result = result.replace(regex, (match) => {
-              return `<span class="secondary-filter-match-highlight">${match}</span>`;
-            });
-          } catch (e) {
-            // 正则失败，使用字符串替换
-            const lowerKeyword = keyword.toLowerCase();
-            const lowerText = result.toLowerCase();
-            let idx = 0;
-            while ((idx = lowerText.indexOf(lowerKeyword, idx)) !== -1) {
-              const before = result.slice(0, idx);
-              const matched = result.slice(idx, idx + keyword.length);
-              const after = result.slice(idx + keyword.length);
-              result = before + `<span class="secondary-filter-match-highlight">${matched}</span>` + after;
-              idx += matched.length + 45; // 跳过高亮标签长度
-            }
-          }
-        }
-        return result;
-      }
-
-      // 正则转义函数
-      function escapeRegExp(string) {
-        return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       }
 
       // 暴露新函数到全局

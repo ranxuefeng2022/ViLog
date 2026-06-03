@@ -142,23 +142,8 @@
         return true;
       }
 
-      // 仅内存模式：在主日志框显示统计提示（不渲染日志内容）
-      function showMemoryModeStats() {
-        const totalLines = originalLines.length;
-        const estMB = (totalLines * 500 / 1024 / 1024).toFixed(1);
-        const innerEl = document.getElementById("innerContainer");
-        if (!innerEl) return;
-        innerEl.innerHTML = '';
-        const tip = document.createElement('div');
-        tip.style.cssText = 'padding:40px 20px;color:#666;font-size:14px;text-align:center;line-height:2;';
-        const totalFiles = fileHeaders.length;
-        tip.innerHTML =
-          `<div style="font-size:18px;margin-bottom:12px;">仅内存模式</div>` +
-          `<div>已加载 ${totalFiles} 个文件，共 ${totalLines.toLocaleString()} 行（约 ${estMB}MB）</div>` +
-          `<div style="color:#999;font-size:12px;">在顶部过滤框输入关键词按 Enter 开始过滤</div>`;
-        innerEl.appendChild(tip);
-      }
-      window.showMemoryModeStats = showMemoryModeStats; // 暴露给 patch 文件
+      // no-op stub — memory mode removed, but legacy code still calls this
+      window.showMemoryModeStats = function () {};
 
       const inner = document.getElementById("innerContainer");
       const outer = document.getElementById("outerContainer");
@@ -190,39 +175,18 @@
       const fileTreeCtxRefresh = document.getElementById("fileTreeCtxRefresh");
       const fileTreeCtxExtractArchive = document.getElementById("fileTreeCtxExtractArchive");
       const fileTreeCtxExportCsv = document.getElementById("fileTreeCtxExportCsv");
+      const fileTreeCtxRemoveFrequent = document.getElementById("fileTreeCtxRemoveFrequent");
+      const fileTreeCtxToggleStar = document.getElementById("fileTreeCtxToggleStar");
+      const fileTreeCtxFilterSubtree = document.getElementById("fileTreeCtxFilterSubtree");
+      const fileTreeSubtreeFilterDialog = document.getElementById("fileTreeSubtreeFilterDialog");
+      const subtreeFilterTitle = document.getElementById("subtreeFilterTitle");
+      const subtreeFilterClose = document.getElementById("subtreeFilterClose");
+      const subtreeFilterInput = document.getElementById("subtreeFilterInput");
+      const subtreeFilterMatchCount = document.getElementById("subtreeFilterMatchCount");
+      const fileTreeTabBar = document.getElementById("fileTreeTabBar");
       const importFileInput = document.getElementById("importFileInput");
       const importFolderInput = document.getElementById("importFolderInput");
       const lineFileHoverTip = document.getElementById("lineFileHoverTip");
-
-      // 🚀 远程目录相关元素
-      const remoteConnectBtn = document.getElementById("remoteConnectBtn");
-      const remoteDirectoryArea = document.getElementById("remoteDirectoryArea");
-      const remoteDirectoryList = document.getElementById("remoteDirectoryList");
-      const remoteConnectDialog = document.getElementById("remoteConnectDialog");
-      const remoteConnectIp = document.getElementById("remoteConnectIp");
-      const remoteConnectPort = document.getElementById("remoteConnectPort");
-      const remoteConnectPath = document.getElementById("remoteConnectPath");
-      const remoteConnectName = document.getElementById("remoteConnectName");
-      const remoteConnectDialogClose = document.getElementById("remoteConnectDialogClose");
-      const remoteConnectCancel = document.getElementById("remoteConnectCancel");
-      const remoteConnectConfirm = document.getElementById("remoteConnectConfirm");
-
-      // 🚀 本地共享相关元素
-      const localShareBtn = document.getElementById("localShareBtn");
-      const localShareStatus = document.getElementById("localShareStatus");
-      const localShareDialog = document.getElementById("localShareDialog");
-      const localSharePath = document.getElementById("localSharePath");
-      const localSharePort = document.getElementById("localSharePort");
-      const localShareDialogClose = document.getElementById("localShareDialogClose");
-      const localShareCancel = document.getElementById("localShareCancel");
-      const localShareConfirm = document.getElementById("localShareConfirm");
-      const stopLocalShareBtn = document.getElementById("stopLocalShareBtn");
-
-      // 远程连接列表
-      const remoteConnections = [];
-
-      // 本地共享状态
-      let localShareRunning = false;
 
       // 日志内容框右键菜单相关元素
       const logContextMenu = document.getElementById("logContextMenu");
@@ -315,46 +279,9 @@
         "secondaryFilterSidebarClose"
       );
 
-      // 四角调整大小手柄
-      const resizeHandleNW = document.querySelector(
-        "#filteredPanel .panel-resize-handle.nw"
-      );
-      const resizeHandleNE = document.querySelector(
-        "#filteredPanel .panel-resize-handle.ne"
-      );
-      const resizeHandleSW = document.querySelector(
-        "#filteredPanel .panel-resize-handle.sw"
-      );
-      const resizeHandleSE = document.querySelector(
-        "#filteredPanel .panel-resize-handle.se"
-      );
-
 
       // 过滤自动建议下拉菜单
       const filterSuggestions = document.getElementById("filterSuggestions");
-
-      // AI助手相关元素
-      const aiAssistantPanel = document.getElementById("aiAssistantPanel");
-      const aiAssistantHeader = document.getElementById("aiAssistantHeader");
-      const aiAssistantClose = document.getElementById("aiAssistantClose");
-      const aiAssistantFrame = document.getElementById("aiAssistantFrame");
-      const aiAssistantToolbarBtn = document.getElementById(
-        "aiAssistantToolbarBtn"
-      );
-
-      // AI助手面板的四角调整手柄
-      const aiResizeHandleNW = document.querySelector(
-        "#aiAssistantPanel .panel-resize-handle.nw"
-      );
-      const aiResizeHandleNE = document.querySelector(
-        "#aiAssistantPanel .panel-resize-handle.ne"
-      );
-      const aiResizeHandleSW = document.querySelector(
-        "#aiAssistantPanel .panel-resize-handle.sw"
-      );
-      const aiResizeHandleSE = document.querySelector(
-        "#aiAssistantPanel .panel-resize-handle.se"
-      );
 
       // 过滤关键词高亮颜色类名
       const filterHighlightClasses = [
@@ -475,11 +402,13 @@
         if (naturalHeight <= MAX_DOM_HEIGHT) {
           virtualScrollScale = 1;
           virtualTotalHeight = naturalHeight;
+          window.virtualScrollScale = 1;
           return { height: naturalHeight, scale: 1 };
         }
         // 压缩到安全高度内，scale > 1 表示 1px 对应多行
         virtualScrollScale = naturalHeight / MAX_DOM_HEIGHT;
         virtualTotalHeight = MAX_DOM_HEIGHT;
+        window.virtualScrollScale = virtualScrollScale;
         return { height: MAX_DOM_HEIGHT, scale: virtualScrollScale };
       }
 
@@ -678,34 +607,35 @@
       let expandedArchives = new Set(); // 已展开的压缩包名称集合
       let archiveMultiSelectedFiles = new Set(); // 多选的文件路径集合
       
-      // 服务器连接相关变量
-      let isServerMode = false;  // 是否处于服务器模式
-      let serverBaseUrl = "";    // 服务器基础 URL
-      let serverCurrentPath = ""; // 当前服务器路径
-
       // 文件树搜索状态
       let fileTreeSearchTerm = "";
+      let fileTreeActiveTab = "__local_drives__";
       // 文件树搜索匹配项索引列表（用于高亮显示）
       let fileTreeMatchedIndices = [];
       // 文件树搜索只显示匹配项模式（按Enter后启用）
       let fileTreeSearchShowOnlyMatches = false;
       // 记录上次 Enter 触发过滤时的搜索词（用于二次 Enter 全选）
       let fileTreeLastEnterSearchTerm = "";
+      // 搜索跳转导航：当前高亮索引位置
+      let fileTreeSearchNavIndex = -1;
       // 🚀 标志：记录文件树是否因过滤面板显示而被自动隐藏
       let fileTreeWasHiddenByFilter = false;
 
-      // 🚀 新增：文件加载模式管理
-      // 三态：'load' = 加载模式 | 'memory' = 仅内存模式 | 'filter' = 过滤模式
-      let fileLoadMode = 'load';
-      // 使用 getter 确保每次访问 window.fileLoadMode 都能拿到最新值
+      // 子树过滤状态
+      let subtreeFilterRootIndex = -1;
+      let subtreeFilterLastEnterTerm = "";
+
+      // 文件加载模式：统一为分片模式
       Object.defineProperty(window, 'fileLoadMode', {
-        get() { return fileLoadMode; },
+        get() { return 'chunk'; },
         configurable: true
       });
-      // 兼容旧代码：'load' 或 'memory' 时为 true
-      let isFileLoadMode = true;
+      let isFileLoadMode = false;
       // 过滤模式下存储的待过滤文件列表（文件路径数组）
       let filterModeFileList = [];
+      // 分片模式下的总行数（含虚拟文件头行）
+      let chunkTotalLines = 0;
+      window.chunkTotalLines = 0;
 
       /**
        * 解析文件树搜索关键词（支持 | 分隔多个关键词）
@@ -751,6 +681,186 @@
       function matchesFileTreeSearchKeywords(fileName, keywords) {
         const name = fileName.toLowerCase();
         return keywords.some(keyword => name.includes(keyword));
+      }
+
+      var _starredDirsCache = null;
+      var _frequentDirsCache = null;
+      const MAX_FREQUENT_DIRS = 20;
+      var _CONFIG_KEYS = (window.App && window.App.Constants && window.App.Constants.CONFIG_KEYS) || {};
+      const CONFIG_KEY_STARRED = _CONFIG_KEYS.fileTreeStarredDirs || 'fileTree.starredDirs';
+      const CONFIG_KEY_FREQUENT = _CONFIG_KEYS.fileTreeFrequentDirs || 'fileTree.frequentDirs';
+
+      function loadStarredDirectories() {
+        return _starredDirsCache != null ? _starredDirsCache : [];
+      }
+
+      function loadFrequentDirectories() {
+        return _frequentDirsCache != null ? _frequentDirsCache : [];
+      }
+
+      async function initDirectoryConfigCache() {
+        try {
+          var starred = await window.electronAPI.configGet(CONFIG_KEY_STARRED);
+          _starredDirsCache = Array.isArray(starred) ? starred : [];
+        } catch (e) {
+          _starredDirsCache = [];
+        }
+        try {
+          var frequent = await window.electronAPI.configGet(CONFIG_KEY_FREQUENT);
+          _frequentDirsCache = Array.isArray(frequent) ? frequent.slice(0, MAX_FREQUENT_DIRS) : [];
+        } catch (e) {
+          _frequentDirsCache = [];
+        }
+        _migrateFromLocalStorage();
+      }
+
+      function _migrateFromLocalStorage() {
+        var FREQUENT_LS_KEY = (window.App && window.App.Constants && window.App.Constants.STORAGE_KEYS && window.App.Constants.STORAGE_KEYS.fileTreeFrequentDirs) || 'aitool.fileTree.frequentDirs';
+        var STARRED_LS_KEY = (window.App && window.App.Constants && window.App.Constants.STORAGE_KEYS && window.App.Constants.STORAGE_KEYS.fileTreeStarredDirs) || 'aitool.fileTree.starredDirs';
+        var migrated = false;
+        try {
+          var rawStarred = localStorage.getItem(STARRED_LS_KEY);
+          if (rawStarred) {
+            var list = JSON.parse(rawStarred);
+            if (Array.isArray(list) && list.length > 0) {
+              _starredDirsCache = list;
+              window.electronAPI.configSet(CONFIG_KEY_STARRED, list);
+              localStorage.removeItem(STARRED_LS_KEY);
+              migrated = true;
+            }
+          }
+        } catch (e) { /* ignore */ }
+        try {
+          var rawFrequent = localStorage.getItem(FREQUENT_LS_KEY);
+          if (rawFrequent) {
+            var list2 = JSON.parse(rawFrequent);
+            if (Array.isArray(list2) && list2.length > 0) {
+              _frequentDirsCache = list2.slice(0, MAX_FREQUENT_DIRS);
+              window.electronAPI.configSet(CONFIG_KEY_FREQUENT, _frequentDirsCache);
+              localStorage.removeItem(FREQUENT_LS_KEY);
+              migrated = true;
+            }
+          }
+        } catch (e) { /* ignore */ }
+        if (migrated) console.log('[CoreInit] 已从 localStorage 迁移配置到 config.json');
+      }
+
+      function saveStarredDirectories(list) {
+        _starredDirsCache = list;
+        window.electronAPI.configSet(CONFIG_KEY_STARRED, list);
+      }
+
+      function saveFrequentDirectories(list) {
+        _frequentDirsCache = list.slice(0, MAX_FREQUENT_DIRS);
+        window.electronAPI.configSet(CONFIG_KEY_FREQUENT, _frequentDirsCache);
+      }
+
+      function isStarredDirectory(dirPath) {
+        var list = loadStarredDirectories();
+        for (var i = 0; i < list.length; i++) {
+          if (list[i].path === dirPath) return true;
+        }
+        return false;
+      }
+
+      function addStarredDirectory(dirPath, dirName) {
+        if (!dirPath || !dirName) return;
+        if (isStarredDirectory(dirPath)) return;
+        var list = loadStarredDirectories();
+        list.push({ path: dirPath, name: dirName, starredAt: Date.now() });
+        saveStarredDirectories(list);
+      }
+
+      function removeStarredDirectory(dirPath) {
+        var list = loadStarredDirectories();
+        var filtered = [];
+        for (var i = 0; i < list.length; i++) {
+          if (list[i].path !== dirPath) filtered.push(list[i]);
+        }
+        saveStarredDirectories(filtered);
+      }
+
+      function addFrequentDirectory(dirPath, dirName) {
+        if (!dirPath || !dirName) return;
+        var list = loadFrequentDirectories();
+        var existing = null;
+        for (var i = 0; i < list.length; i++) {
+          if (list[i].path === dirPath) { existing = list[i]; break; }
+        }
+        if (existing) {
+          existing.count = (existing.count || 0) + 1;
+          existing.lastAccess = Date.now();
+          list.splice(i, 1);
+        } else {
+          existing = { path: dirPath, name: dirName, count: 1, lastAccess: Date.now() };
+        }
+        list.unshift(existing);
+        list.sort(function(a, b) {
+          var wa = (a.count || 0) * 2 + (a.lastAccess || 0) / 86400000;
+          var wb = (b.count || 0) * 2 + (b.lastAccess || 0) / 86400000;
+          return wb - wa;
+        });
+        saveFrequentDirectories(list);
+        if (typeof refreshFrequentAccessNodes === 'function') {
+          refreshFrequentAccessNodes();
+        }
+      }
+
+      function removeFrequentDirectory(dirPath) {
+        var list = loadFrequentDirectories();
+        var filtered = [];
+        for (var i = 0; i < list.length; i++) {
+          if (list[i].path !== dirPath) filtered.push(list[i]);
+        }
+        saveFrequentDirectories(filtered);
+      }
+
+      function rebuildFrequentDriveNodes() {
+        var starredDirs = loadStarredDirectories();
+        var frequentDirs = loadFrequentDirectories();
+        var starredPaths = {};
+        for (var si = 0; si < starredDirs.length; si++) {
+          starredPaths[starredDirs[si].path] = true;
+        }
+        var nonStarredFrequent = [];
+        for (var fi2 = 0; fi2 < frequentDirs.length; fi2++) {
+          if (!starredPaths[frequentDirs[fi2].path]) {
+            nonStarredFrequent.push(frequentDirs[fi2]);
+          }
+        }
+        var allDirs = starredDirs.concat(nonStarredFrequent);
+        var nodes = [];
+        if (allDirs.length > 0) {
+          nodes.push({
+            name: '常用访问',
+            path: '__frequent_access__',
+            type: 'drive-category',
+            expanded: true,
+            level: 0,
+            file: null,
+            childrenLoaded: false,
+            loadingChildren: false,
+            size: 0
+          });
+          for (var di = 0; di < allDirs.length; di++) {
+            var isStarred = !!starredPaths[allDirs[di].path];
+            nodes.push({
+              name: allDirs[di].name,
+              path: allDirs[di].path,
+              type: 'drive',
+              expanded: false,
+              level: 1,
+              file: null,
+              childrenLoaded: false,
+              loadingChildren: false,
+              isLocalDrive: true,
+              isFrequentDir: true,
+              isStarredDir: isStarred,
+              size: 0
+            });
+          }
+        }
+        return nodes;
       }
 
       // 可见文件树项目映射

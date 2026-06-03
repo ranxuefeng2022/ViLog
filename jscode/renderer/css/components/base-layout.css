@@ -1,5 +1,9 @@
 /* Base Layout — body reset, toolbar, window controls, inputs, scrollbar */
 
+:root {
+  --toolbar-offset: 28px;
+}
+
 .archive-loading-overlay {
   position: absolute;
   top: 0;
@@ -25,43 +29,6 @@
   background: #34c759 !important;
   color: white !important;
 }
-/* 优化网站库按钮样式 - 使用绿色渐变 */
-#toggleQuickLinksBtn {
-  background: linear-gradient(135deg, #34c759 0%, #30d158 100%) !important;
-  color: white !important;
-  font-weight: 500;
-  letter-spacing: 0.3px;
-  box-shadow: 0 2px 8px rgba(52, 199, 89, 0.3);
-  border: none;
-  position: relative;
-  overflow: hidden;
-}
-
-#toggleQuickLinksBtn::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-  transition: left 0.5s;
-}
-
-#toggleQuickLinksBtn:hover:not(:disabled) {
-  background: linear-gradient(135deg, #42d873 0%, #34c759 100%) !important;
-  box-shadow: 0 4px 12px rgba(52, 199, 89, 0.4) !important;
-  transform: translateY(-1px);
-}
-
-#toggleQuickLinksBtn:hover:not(:disabled)::before {
-  left: 100%;
-}
-
-#toggleQuickLinksBtn:active:not(:disabled) {
-  transform: translateY(0);
-  box-shadow: 0 2px 6px rgba(52, 199, 89, 0.3) !important;
-}
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     Helvetica, Arial, sans-serif;
@@ -80,7 +47,40 @@ body {
   color: #1d1d1f;
   overflow: hidden;
   min-height: 100vh;
+  box-sizing: border-box;
 }
+
+/* 过滤进度浮层 — 居中显示 */
+#filterProgressBar {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 30000;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 10px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15);
+  padding: 16px 28px;
+  min-width: 220px;
+  pointer-events: none;
+}
+
+#filterProgressBar.visible {
+  display: flex;
+}
+
+#filterProgressLabel {
+  font-size: 13px;
+  color: #333;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+
 
 /* CSV列选择弹窗 */
 .csv-column-selector {
@@ -212,32 +212,259 @@ body {
   background: #0077ed;
 }
 
-#toolbar {
-  position: relative;
-  background: linear-gradient(180deg, #e8e8e8 0%, #d4d4d4 100%);
-  padding: 1px 6px;
+/* ===== macOS 风格窗口控制头部 ===== */
+#windowControls {
+  position: fixed;
+  top: 0;
+  left: var(--content-margin-left, 6px);
+  right: 6px;
+  z-index: 2000;
   display: flex;
   align-items: center;
-  gap: 3px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-  z-index: 1000;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
-  height: 24px;
+  height: 28px;
+  padding: 0 10px;
+  background: rgba(246, 246, 246, 0.88);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  gap: 7px;
+}
+#windowControls button {
+  width: 12px;
+  height: 12px;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  padding: 0;
+  font-size: 0;
+  line-height: 0;
+  transition: filter 0.15s ease;
+  position: relative;
   -webkit-app-region: no-drag;
-  app-region: no-drag;
+}
+#windowControls button:active {
+  filter: brightness(0.85);
+}
+#wcClose {
+  background: #ff5f57;
+  order: 1;
+}
+#wcMinimize {
+  background: #febc2e;
+  order: 2;
+}
+#wcMaximize {
+  background: #28c840;
+  order: 3;
+}
+#windowControls:hover #wcClose::after {
+  content: '×';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 700;
+  color: rgba(0, 0, 0, 0.5);
+  line-height: 1;
+}
+#windowControls:hover #wcMinimize::after {
+  content: '−';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(0, 0, 0, 0.5);
+  line-height: 1;
+}
+#windowControls:hover #wcMaximize::after {
+  content: '⤢';
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 8px;
+  font-weight: 700;
+  color: rgba(0, 0, 0, 0.5);
+  line-height: 1;
+}
+#windowControls:not(:hover) #wcClose,
+#windowControls:not(:hover) #wcMinimize,
+#windowControls:not(:hover) #wcMaximize {
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+#windowDragHandle {
+  flex: 1;
+  height: 100%;
+  cursor: grab;
+  -webkit-app-region: drag;
+  order: 4;
+}
+  color: #0071e3 !important;
+}
+#windowDragHandle:active {
+  cursor: grabbing;
+}
+body.fullscreen #windowDragHandle {
+  display: none !important;
+}
+#headerProgressLine {
+  position: fixed;
+  top: 29px;
+  left: var(--content-margin-left, 6px);
+  right: 6px;
+  height: 2px;
+  background: transparent;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 1999;
+}
+#headerProgressFill {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  left: 50%;
+  width: 0%;
+  border-radius: 1px;
+  transition: width 0.3s ease-out, left 0.3s ease-out;
+}
+#headerProgressFill.complete {
+  opacity: 0;
+  transition: width 0.3s ease-out, left 0.3s ease-out, opacity 0.4s ease 0.3s;
 }
 
-/* 窗口拖拽区域 - 整个工具栏（除按钮外）可拖拽 */
-.window-drag-area {
-  -webkit-app-region: drag;
-  app-region: drag;
+/* ===== 浮动搜索框 — Ctrl+F 弹出 ===== */
+#searchFloatingBar {
+  position: fixed;
+  top: 10px;
+  left: 200px;
+  display: none;
+  z-index: 2000;
+  background: #fff;
+  border: 1px solid #d0d0d0;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+  padding: 4px 8px;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+#searchFloatingBar.visible {
+  display: flex;
+}
+#searchFloatingBar input {
+  border: none;
+  outline: none;
+  width: 200px;
+  font-size: 13px;
+  padding: 2px 4px;
+  background: transparent;
+  color: #333;
+}
+#searchFloatingBar button {
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  background: rgba(0,0,0,0.06);
+  color: #555;
+  font-size: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: all 0.15s;
+}
+#searchFloatingBar button:hover:not(:disabled) {
+  background: #0071e3;
+  color: #fff;
+}
+#searchFloatingBar button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+#searchFloatingBarHandle {
+  cursor: move;
+  color: #ccc;
+  font-size: 12px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ===== 搜索历史弹框 ===== */
+#searchSuggestions {
+  display: none;
   position: absolute;
-  left: 100px; /* 窗口控制按钮右侧 */
-  right: 350px; /* 工具栏按钮组左侧留出空间（增大空间给右侧按钮） */
-  top: 0;
-  bottom: 0;
-  z-index: 1;
-  pointer-events: auto;
+  top: 100%;
+  left: 0;
+  background: #fff;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  z-index: 2001;
+  margin-top: 4px;
+  min-width: 260px;
+  max-width: 400px;
+  padding: 4px;
+}
+#searchSuggestions .filter-suggestion-item {
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #555;
+  border-radius: 4px;
+  transition: background 0.1s;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#searchSuggestions .filter-suggestion-item:hover {
+  background: #f5f5f5;
+}
+#searchSuggestions .filter-suggestion-item.selected {
+  background: #e8e8e8;
+  color: #222;
+}
+
+/* ===== 浮动过滤框 — F 键弹出 ===== */
+#filterFloatingBar {
+  display: none;
+  align-items: center;
+  gap: 6px;
+}
+#filterFloatingBar input {
+  border: none;
+  outline: none;
+  width: 260px;
+  font-size: 13px;
+  padding: 2px 4px;
+  background: transparent;
+  color: #333;
+}
+#filterFloatingBar button {
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  background: rgba(0,0,0,0.06);
+  color: #555;
+  font-size: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: all 0.15s;
+}
+#filterFloatingBar button:hover {
+  background: #0071e3;
+  color: #fff;
 }
 
 /* 四边和四角的窗口缩放手柄 */
@@ -406,143 +633,6 @@ body.window-resizing * {
 }
 
 /* 窗口控制按钮样式 */
-.window-controls {
-  /* 防止按钮区域拖拽 */
-  -webkit-app-region: no-drag;
-  app-region: no-drag;
-  position: relative;
-  z-index: 10; /* 确保按钮在拖拽区域之上 */
-}
-.window-controls button {
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  flex-shrink: 0;
-  font-size: 11px;
-  font-weight: bold;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
-  -webkit-app-region: no-drag;
-  app-region: no-drag;
-  position: relative;
-  z-index: 11;
-}
-
-/* 最小化按钮 - 黄色系（与过滤面板一致） */
-#windowMinimizeBtn {
-  background: rgba(255, 204, 0, 0.9);
-  color: #333333;
-  margin-right: 3px;
-}
-
-#windowMinimizeBtn:hover {
-  background: rgba(255, 214, 0, 1);
-  transform: translateY(-1px);
-}
-
-#windowMinimizeBtn:active {
-  transform: scale(0.95);
-  box-shadow: none;
-}
-
-/* 最大化按钮 - 绿色系（与过滤面板一致） */
-#windowMaximizeBtn {
-  background: rgba(52, 199, 89, 0.9);
-  color: #ffffff;
-  margin-right: 3px;
-  font-size: 10px;
-}
-
-#windowMaximizeBtn:hover {
-  background: rgba(66, 216, 115, 1);
-  transform: translateY(-1px);
-}
-
-#windowMaximizeBtn:active {
-  transform: scale(0.95);
-  box-shadow: none;
-}
-
-/* 关闭按钮 - 红色系（与过滤面板一致） */
-#windowCloseBtn {
-  background: rgba(255, 59, 48, 0.9);
-  color: #ffffff;
-}
-
-#windowCloseBtn:hover {
-  background: rgba(255, 69, 58, 1);
-  transform: translateY(-1px);
-}
-
-#windowCloseBtn:active {
-  transform: scale(0.95);
-  box-shadow: none;
-}
-#filterBox {
-  display: none;
-  flex: 1;
-  min-width: 160px;
-  max-width: 500px;
-  padding: 0 6px;
-  border: 1px solid rgba(0, 0, 0, 0.15);
-  border-radius: 3px;
-  background: rgba(255, 255, 255, 0.85);
-  font-size: 11px;
-  -webkit-app-region: no-drag;
-  app-region: no-drag;
-  transition: all 0.15s ease;
-  height: 20px;
-  box-sizing: border-box;
-  position: relative;
-  color: #333;
-  text-align: center;
-}
-
-/* 过滤输入框容器 */
-.toolbar-group:has(#filterBox) {
-  position: relative;
-}
-#filterBox:focus {
-  min-width: 220px;
-  max-width: 700px;
-  outline: none;
-  border-color: #0071e3;
-  box-shadow: 0 0 0 1.5px rgba(0, 113, 227, 0.25);
-  background: white;
-}
-#searchBox {
-  padding: 0 6px;
-  border: 1px solid rgba(0, 0, 0, 0.15);
-  border-radius: 3px;
-  background: rgba(255, 255, 255, 0.85);
-  font-size: 11px;
-  -webkit-app-region: no-drag;
-  app-region: no-drag;
-  transition: all 0.15s ease;
-  height: 20px;
-  box-sizing: border-box;
-  width: 130px;
-  text-align: center;
-  color: #333;
-}
-#searchBox:focus {
-  outline: none;
-  border-color: #0071e3;
-  box-shadow: 0 0 0 1.5px rgba(0, 113, 227, 0.25);
-  background: white;
-}
-#searchStatus {
-  color: #888;
-  font-size: 10px;
-  margin-left: 3px;
-}
 button {
   padding: 0 8px;
   border: none;
@@ -584,23 +674,7 @@ button:disabled {
   background: #0077ed;
 }
 
-/* 网站库按钮 */
-#toggleQuickLinksBtn {
-  background: #0071e3;
-}
-#toggleQuickLinksBtn:hover {
-  background: #0077ed;
-}
-
-/* 更新工具按钮 */
-#updateCodeBtn {
-  display: none;
-  background: #0071e3;
-  font-weight: 500;
-}
-#updateCodeBtn:hover {
-  background: #0077ed;
-}
+/* 展开过滤按钮 */
 
 /* 展开过滤按钮 */
 #expandFilterBtn {
@@ -664,59 +738,6 @@ button:disabled {
 body.show-stats .system-stats {
   display: inline-block;
 }
-.quick-links-search-container {
-  padding: 16px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-  background: #fafafa;
-  position: sticky;
-  top: 0;
-  z-index: 1;
-}
-
-.quick-links-search {
-  width: 100%;
-  padding: 10px 14px;
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  border-radius: 8px;
-  background: white;
-  font-size: 13px;
-  color: #1d1d1f;
-  box-sizing: border-box;
-  transition: all 0.2s ease;
-}
-
-.quick-links-search:focus {
-  outline: none;
-  border-color: #0071e3;
-  box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.1);
-  background: white;
-}
-
-.quick-links-search::placeholder {
-  color: #8e8e93;
-}
-
-/* 没有匹配结果时的提示 */
-.quick-links-no-results {
-  padding: 40px 20px;
-  text-align: center;
-  color: #8e8e93;
-  font-size: 13px;
-}
-
-/* 隐藏匹配的元素 */
-.quick-links-hidden {
-  display: none !important;
-}
-
-/* 高亮搜索匹配的文本 */
-.quick-links-search-highlight {
-  background-color: rgba(0, 113, 227, 0.15);
-  color: #0071e3;
-  border-radius: 3px;
-  padding: 1px 3px;
-  font-weight: 500;
-}
 /* 保留HTML行号样式（用于向后兼容） */
 .line-number {
   display: inline-block;
@@ -737,205 +758,14 @@ body.show-stats .system-stats {
 .search-highlight {
   background: rgba(255, 59, 48, 0.25);
 }
-body.fullscreen #toolbar {
-  top: -36px;
-}
 body.fullscreen #outerContainer {
-  top: 0;
+  top: 28px;
   border-radius: 0;
   margin: 0;
 }
 body.fullscreen #hScroll {
-  bottom: -16px;
+  bottom: -8px;
 }
-.toolbar-group {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  position: relative;
-  -webkit-app-region: no-drag;
-  app-region: no-drag;
-  z-index: 10;
-}
-.toolbar-divider {
-  width: 1px;
-  height: 18px;
-  background: rgba(0, 0, 0, 0.1);
-  margin: 0 3px;
-}
-/* 快速链接面板样式 - 优化为简洁美观的设计 */
-.quick-links-panel {
-  position: fixed;
-  background: #ffffff;
-  top: 25px; /* 工具栏高度 */
-  left: 0;
-  width: 380px; /* 稍微减小宽度，更紧凑 */
-  height: calc(100vh - 25px - 16px); /* 减去工具栏和水平滚动条高度 */
-  z-index: 1001; /* 高于工具栏(1000) */
-  display: none;
-  flex-direction: column;
-  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.12);
-  overflow-y: auto;
-  overflow-x: hidden;
-  border-right: 1px solid rgba(0, 0, 0, 0.08);
-  padding: 0; /* 移除padding，让内容更贴合 */
-  box-sizing: border-box;
-}
-
-.quick-links-panel.visible {
-  display: flex;
-}
-
-/* 面板头部 - 包含搜索框 */
-.quick-links-panel-header {
-  padding: 12px 16px;
-  background: #f8f9fa;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
-
-/* 面板内容区域 */
-.quick-links-panel-content {
-  padding: 12px 0;
-  flex: 1;
-  overflow-y: auto;
-}
-
-/* 自定义滚动条样式 */
-.quick-links-panel::-webkit-scrollbar {
-  width: 6px;
-}
-
-.quick-links-panel::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.quick-links-panel::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 3px;
-}
-
-.quick-links-panel::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.3);
-}
-
-.quick-links-panel .link-button {
-  display: flex;
-  align-items: center;
-  width: calc(100% - 16px);
-  padding: 10px 14px;
-  margin: 3px 8px;
-  border: none;
-  border-radius: 6px;
-  background: #ffffff;
-  color: #333333;
-  text-align: left;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  font-size: 13px;
-  font-weight: 400;
-  border-left: 3px solid transparent;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-  position: relative;
-  overflow: hidden;
-  box-sizing: border-box;
-}
-
-/* 链接按钮的图标指示器 */
-.quick-links-panel .link-button::before {
-  content: '→';
-  position: absolute;
-  right: 12px;
-  color: inherit;
-  opacity: 0;
-  transform: translateX(-5px);
-  transition: all 0.15s ease;
-  font-size: 14px;
-}
-
-.quick-links-panel .link-button:hover {
-  background: #0071e3;
-  color: white;
-  transform: translateX(2px);
-  box-shadow: 0 2px 6px rgba(0, 113, 227, 0.2);
-}
-
-.quick-links-panel .link-button:hover::before {
-  opacity: 1;
-  transform: translateX(0);
-}
-
-.quick-links-panel .link-category {
-  font-weight: 600;
-  font-size: 11px;
-  color: #666666;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin: 16px 8px 8px 8px;
-  padding: 4px 8px;
-  background: #f8f9fa;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-}
-
-/* 分类标题的计数徽章 */
-.quick-links-panel .link-category::after {
-  content: attr(data-count);
-  margin-left: auto;
-  background: #e9ecef;
-  color: #495057;
-  font-size: 10px;
-  padding: 2px 6px;
-  border-radius: 10px;
-  font-weight: 600;
-}
-
-.quick-links-panel .link-category:first-child {
-  margin-top: 0;
-}
-
-/* 优化快速链接搜索框 */
-.quick-links-search {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  border-radius: 6px;
-  font-size: 13px;
-  background: #ffffff;
-  box-sizing: border-box;
-  transition: all 0.2s ease;
-}
-
-.quick-links-search:focus {
-  outline: none;
-  border-color: #0071e3;
-  box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.08);
-}
-
-.quick-links-search::placeholder {
-  color: #9ca3af;
-  font-size: 12px;
-}
-
-.quick-links-search-container {
-  margin-bottom: 0;
-}
-
-.quick-links-category {
-  padding: 0;
-}
-
-/* 搜索高亮样式 */
-.quick-links-search-highlight {
-  background: rgba(255, 230, 0, 0.4);
-  border-radius: 2px;
-  padding: 0 2px;
-  font-weight: 600;
-}
-
 .file-count {
   color: #888;
   font-size: 10px;
@@ -1035,85 +865,6 @@ body.fullscreen #hScroll {
   transform: scale(1.1);
   box-shadow: 0 4px 15px rgba(0, 113, 227, 0.4);
 }
-/* 服务器连接区域样式 - 优化：IP和目录在同一行 */
-#serverConnectArea {
-  padding: 4px 10px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-  background: rgba(0, 113, 227, 0.03);
-  overflow: visible; /* 改为visible，避免裁剪下拉菜单 */
-  min-width: 0;
-}
-/* 新增：合并输入组 */
-#serverUnifiedGroup {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  width: 100%;
-}
-/* 蓝色呼吸灯动画 - 服务器已连接 */
-@keyframes breathe-blue {
-  0%, 100% {
-    opacity: 0.4;
-    text-shadow: 0 0 4px rgba(0, 122, 255, 0.3);
-  }
-  50% {
-    opacity: 1;
-    text-shadow: 0 0 12px rgba(0, 122, 255, 0.8), 0 0 20px rgba(0, 122, 255, 0.4);
-  }
-}
-
-/* 红色呼吸灯动画 - 服务器断开 */
-@keyframes breathe-red-light {
-  0%, 100% {
-    opacity: 0.4;
-    text-shadow: 0 0 4px rgba(255, 59, 48, 0.3);
-  }
-  50% {
-    opacity: 1;
-    text-shadow: 0 0 12px rgba(255, 59, 48, 0.8), 0 0 20px rgba(255, 59, 48, 0.4);
-  }
-}
-
-.server-address-option {
-  width: 100%;
-  text-align: left;
-  padding: 8px 10px;
-  border: none;
-  background: transparent;
-  font-size: 12px;
-  cursor: pointer;
-  color: #111827;
-}
-.server-address-option:hover {
-  background: rgba(0, 113, 227, 0.08);
-}
-.server-address-option.active {
-  background: rgba(0, 113, 227, 0.14);
-  font-weight: 600;
-}
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
-}
-.month-option {
-  width: 100%;
-  text-align: left;
-  padding: 8px 12px;
-  border: none;
-  background: transparent;
-  font-size: 12px;
-  cursor: pointer;
-  color: #111827;
-  white-space: nowrap;
-}
-.month-option:hover {
-  background: rgba(0, 113, 227, 0.08);
-}
-.month-option.current {
-  background: rgba(0, 113, 227, 0.14);
-  font-weight: 600;
-}
-
 /* 🚀 VS Code 风格缩进参考线 */
 .ft-indent-guide {
   position: absolute;
@@ -1124,10 +875,10 @@ body.fullscreen #hScroll {
   pointer-events: none;
 }
 body.fullscreen #fileTreeContainer {
-  top: 0;
+  top: 28px;
 }
 body.fullscreen #fileTreeContainer ~ #outerContainer {
-  top: 0;
+  top: 28px;
 }
 
 /* 拖拽文件树调宽时：禁用动画，防止边沿/按钮分离 */
@@ -1443,12 +1194,6 @@ body.panel-resizing #filteredPanel {
   transition: none !important;
 }
 
-/* 全屏模式下的调整 */
-body.fullscreen #aiAssistantPanel {
-  top: 0;
-  height: 100vh;
-}
-
 .panel-resizing {
   cursor: nwse-resize !important;
 }
@@ -1556,3 +1301,27 @@ body.fullscreen #aiAssistantPanel {
 .secondary-filter-highlight-19 {
   background: rgba(199, 21, 133, 0.2);
 } /* 中紫红色 */
+
+/* CSS Custom Highlight API — 过滤面板关键词高亮（零 DOM 修改） */
+/* 颜色由 JS 动态注入 _fpHighlightStyleEl，此处为默认值 */
+::highlight(fp-kw-0) { background-color: rgba(255, 99, 71, 0.3); }
+::highlight(fp-kw-1) { background-color: rgba(32, 178, 170, 0.3); }
+::highlight(fp-kw-2) { background-color: rgba(138, 43, 226, 0.3); }
+::highlight(fp-kw-3) { background-color: rgba(255, 165, 0, 0.3); }
+::highlight(fp-kw-4) { background-color: rgba(50, 205, 50, 0.3); }
+::highlight(fp-kw-5) { background-color: rgba(0, 191, 255, 0.3); }
+::highlight(fp-kw-6) { background-color: rgba(255, 20, 147, 0.3); }
+::highlight(fp-kw-7) { background-color: rgba(106, 90, 205, 0.3); }
+::highlight(fp-kw-8) { background-color: rgba(60, 179, 113, 0.3); }
+::highlight(fp-kw-9) { background-color: rgba(255, 140, 0, 0.3); }
+::highlight(fp-kw-10) { background-color: rgba(70, 130, 180, 0.3); }
+::highlight(fp-kw-11) { background-color: rgba(186, 85, 211, 0.3); }
+::highlight(fp-kw-12) { background-color: rgba(100, 149, 237, 0.3); }
+::highlight(fp-kw-13) { background-color: rgba(210, 105, 30, 0.3); }
+::highlight(fp-kw-14) { background-color: rgba(178, 34, 34, 0.3); }
+::highlight(fp-kw-15) { background-color: rgba(65, 105, 225, 0.3); }
+::highlight(fp-kw-16) { background-color: rgba(218, 112, 214, 0.3); }
+::highlight(fp-kw-17) { background-color: rgba(95, 158, 160, 0.3); }
+::highlight(fp-kw-18) { background-color: rgba(123, 104, 238, 0.3); }
+::highlight(fp-kw-19) { background-color: rgba(199, 21, 133, 0.3); }
+::highlight(fp-search) { background-color: rgba(255, 59, 48, 0.35); }

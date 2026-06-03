@@ -8,9 +8,9 @@
   height: 45vh; /* 默认高度为下半屏略小 */
   max-height: calc(100vh - 60px); /* 最大高度不超过窗口 */
   background: rgba(255, 255, 255, 1); /* 不透明白色背景 */
-  border: 1px solid rgba(0, 0, 0, 0.2);
+  border: none;
   border-radius: 12px 12px 0 0; /* 只在上方有圆角 */
-  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.06);
   z-index: 10002; /* 高于过滤面板 */
   display: none;
   flex-direction: column;
@@ -73,7 +73,7 @@
   align-items: center;
   padding: 1px 8px;
   background: rgba(245, 245, 245, 1);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
   gap: 4px;
   flex-shrink: 0;
   user-select: none;
@@ -92,7 +92,7 @@
   width: 50px;
   height: 10px;
   background: rgba(245, 245, 245, 1);
-  border: 1px solid rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 5px;
   cursor: ns-resize;
   display: flex;
@@ -268,14 +268,14 @@
 }
 
 .secondary-filter-result-line.selected {
-  background: rgba(255, 150, 100, 0.35);
+  background: rgba(0, 113, 227, 0.15);
   font-weight: 500;
 }
 
 .secondary-filter-result-line.file-header {
-  background: transparent; /* 🚀 文件头也不使用背景色 */
+  background: rgba(0, 0, 0, 0.03);
   font-weight: 500;
-  color: #990000;
+  color: #6e6e73;
 }
 
 /* 二级过滤行号 */
@@ -377,7 +377,7 @@
   gap: 6px;
   padding: 2px 10px;
   background: rgba(250, 250, 250, 1);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
   flex-shrink: 0;
   min-height: 24px;
   height: auto;
@@ -387,7 +387,7 @@
   flex: 1;
   min-width: 0;
   padding: 2px 6px;
-  border: 1px solid rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 4px;
   font-size: 11px;
   font-family: 'Consolas', 'Monaco', monospace;
@@ -403,7 +403,7 @@
 .highlight-color-picker {
   width: 28px;
   height: 18px;
-  border: 1px solid rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 4px;
   cursor: pointer;
   padding: 0;
@@ -480,87 +480,74 @@
 .file-tree-search-container {
   display: flex !important;
   align-items: center !important;
-  gap: 4px;
+  gap: 0;
   position: relative;
-  padding: 0 10px !important;
+  padding: 3px 8px !important;
   box-sizing: border-box !important;
-  width: auto !important;
+  border-bottom: none;
+  background: transparent;
+}
+
+/* 搜索图标 */
+.file-tree-search-container::before {
+  content: '';
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  margin-right: 6px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 16 16'%3E%3Ccircle cx='6.5' cy='6.5' r='4.5' fill='none' stroke='%238e8e93' stroke-width='1.5'/%3E%3Cline x1='10' y1='10' x2='14' y2='14' stroke='%238e8e93' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-size: contain;
+  pointer-events: none;
+  opacity: 0.6;
 }
 
 .file-tree-search-container #fileTreeSearch {
   flex: 1;
-  max-width: calc(100% - 50px);
-  height: 24px;
-  line-height: 14px;
-  padding: 4px 8px;
-  border: 1px solid #d1d5db;
+  width: 100%;
+  height: 20px;
+  line-height: 20px;
+  padding: 0 24px 0 0;
+  border: none;
   border-radius: 4px;
-  font-size: 11px;
+  font-size: 12px;
   outline: none;
-  background: white;
+  background: transparent;
   box-sizing: border-box;
+  text-align: left;
+  color: #1d1d1f;
+}
+
+.file-tree-search-container #fileTreeSearch::placeholder {
+  color: #b0b0b0;
 }
 
 .file-tree-search-container #fileTreeSearch:focus {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  background: rgba(0, 113, 227, 0.04);
 }
 
-/* 🚀 新增：加载模式切换按钮样式 */
-.toggle-load-mode-btn {
-  width: 28px;
-  height: 24px;
-  padding: 0;
-  display: flex;
+/* 搜索清除按钮 */
+.file-tree-search-clear {
+  display: none;
   align-items: center;
   justify-content: center;
-  background: #ffffff;
-  border: 1px solid #d1d5db;
-  border-left: none;
-  border-radius: 0 4px 4px 0;
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.06);
+  color: #6e6e73;
+  font-size: 13px;
   cursor: pointer;
-  transition: all 0.2s;
+  padding: 0;
   flex-shrink: 0;
-  box-sizing: border-box;
-  color: #374151;
-}
-
-.toggle-load-mode-btn:hover {
-  background: #f3f4f6;
-  border-color: #3b82f6;
-  color: #1d4ed8;
-}
-
-/* 过滤模式：琥珀色 */
-.toggle-load-mode-btn.filter-mode {
-  background: #fffbeb;
-  border-color: #f59e0b;
-  color: #b45309;
-}
-
-.toggle-load-mode-btn.filter-mode:hover {
-  background: #fef3c7;
-}
-
-/* 仅内存模式：蓝色 */
-.toggle-load-mode-btn.memory-mode {
-  background: #eff6ff;
-  border-color: #3b82f6;
-  color: #1d4ed8;
-}
-
-.toggle-load-mode-btn.memory-mode:hover {
-  background: #dbeafe;
-}
-
-.toggle-load-mode-btn .mode-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
   line-height: 1;
 }
-
-.toggle-load-mode-btn .mode-icon svg {
-  display: block;
+.file-tree-search-clear:hover {
+  background: rgba(0, 0, 0, 0.1);
+  color: #1d1d1f;
 }
+#fileTreeSearch:not(:placeholder-shown) ~ .file-tree-search-clear {
+  display: flex;
+}
+
 
