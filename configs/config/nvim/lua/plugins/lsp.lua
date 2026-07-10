@@ -7,7 +7,6 @@ return {
     event = { 'BufReadPre', 'BufNewFile' },
     config = function()
       vim.g.coc_global_extensions = {
-        'coc-clangd',
         'coc-sh',
         'coc-git',
       }

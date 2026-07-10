@@ -114,7 +114,7 @@ vim.g.osc52_trim_newline = 1
 vim.g.oscyank_term = 'tmux'
 
 -- python
-vim.g.python3_host_prog = '/usr/bin/python3'
+vim.g.python3_host_prog = '/opt/homebrew/bin/python3'
 
 -- 内部状态
 vim.g.param1 = 0

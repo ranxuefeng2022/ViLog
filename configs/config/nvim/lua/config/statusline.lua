@@ -71,10 +71,10 @@ local function start_anim(base, bright)
   anim_active = true
   local step = 0
   anim_timer = vim.uv.new_timer()
-  anim_timer:start(0, 50, function()
+  anim_timer:start(0, 100, function()
     if not anim_active then return end
     step = step + 1
-    -- 正弦波，周期约 800ms (16 * 50ms)
+    -- 正弦波，周期约 1600ms (16 * 100ms)
     local t = (math.sin(step / 16 * 2 * math.pi) + 1) / 2
     local color = blend(base, bright, t)
     -- nvim_set_hl 必须从主循环调用，uv 回调是 fast context
@@ -126,28 +126,50 @@ local function mode_str()
 end
 
 -- ===================================================================
--- Git 分支（异步）
+-- Git 分支（异步 + 防抖 + 缓存，避免频繁 spawn 子进程）
 -- ===================================================================
+local git_cache = { dir = nil, branch = '' }
+local git_pending = false
+
 local function update_git_branch()
   local dir = vim.fn.expand('%:p:h')
   if dir == '' then return end
+  -- 同目录直接复用缓存（切换 buffer 时常见）
+  if git_cache.dir == dir then
+    vim.b.git_branch = git_cache.branch
+    return
+  end
+  -- 已经在排队，跳过
+  if git_pending then return end
+  git_pending = true
+
   local stdout = {}
-  vim.fn.jobstart(
-    { 'git', '-C', dir, 'rev-parse', '--abbrev-ref', 'HEAD' },
-    {
-      stdout_buffered = true,
-      on_stdout = function(_, data)
-        if data then vim.list_extend(stdout, data) end
-      end,
-      on_exit = function(_, code)
-        if code == 0 then
-          local branch = vim.trim(table.concat(stdout, ''))
-          vim.b.git_branch = (branch ~= '' and branch ~= 'HEAD') and branch or ''
+  vim.defer_fn(function()
+    local cur_dir = vim.fn.expand('%:p:h')
+    git_pending = false
+    if cur_dir == '' then return end
+    vim.fn.jobstart(
+      { 'git', '-C', cur_dir, 'rev-parse', '--abbrev-ref', 'HEAD' },
+      {
+        stdout_buffered = true,
+        on_stdout = function(_, data)
+          if data then vim.list_extend(stdout, data) end
+        end,
+        on_exit = function(_, code)
+          local branch = ''
+          if code == 0 then
+            local raw = vim.trim(table.concat(stdout, ''))
+            branch = (raw ~= '' and raw ~= 'HEAD') and raw or ''
+          end
+          -- 更新缓存
+          git_cache.dir = cur_dir
+          git_cache.branch = branch
+          vim.b.git_branch = branch
           vim.cmd('redrawstatus')
-        end
-      end,
-    }
-  )
+        end,
+      }
+    )
+  end, 150)
 end
 
 local function st_git()

@@ -57,16 +57,6 @@ map('n', 'Z', 'ZZ')
 map('i', 'jj', '<Esc>')
 
 -- ============================================================
--- Neovide 剪贴板
--- ============================================================
-if vim.g.neovide then
-  map('v', 'r', '"+y')
-  map('c', '<S-Space>', '<C-r>+')
-  map('i', '<S-Space>', '<C-r>+')
-  map('', '<S-Leftmouse>', '<Nop>')
-end
-
--- ============================================================
 -- 命令行
 -- ============================================================
 map('c', '<C-A>', '<Home>')
@@ -183,7 +173,6 @@ map('n', ',', function()
       { 'K', 'KwHighlight',  '关键词着色',     'lua require("config.keyword-highlight").pick()' },
       { 'L', 'KwClear',      '清除高亮',       'lua require("config.keyword-highlight").clear_all()' },
       { 'M', 'KwUndo',       '撤销着色',       'lua require("config.keyword-highlight").undo()' },
-      { 'N', 'AIChat',       'AI对话',         'AIChat' },
       { 'O', 'FuncSearch',   '函数内搜索',     function() cmd.search_in_current_func() end },
       { 't', 'Terminal',     '打开终端',       function() vim.cmd('ToggleTerm') end },
       { 'H', 'GenTags',      '生成tags',       function() cmd.generate_tags() end },
@@ -340,15 +329,10 @@ map('n', '<C-k>', function() scroll_lines(-6) end, { desc = 'Scroll up' })
 map('n', '<C-e>', function() scroll_lines(6) end,  { desc = 'Scroll down' })
 
 -- ============================================================
--- 剪贴板（Neovide vs 终端）
+-- 剪贴板（写/读 cvbuf.c）
 -- ============================================================
-if vim.g.neovide then
-  map('v', '<C-c>', ':w! ~/c/.vim/cvbuf.c<CR>')
-  map('n', '<C-v>', ':r ~/c/.vim/cvbuf.c<CR>')
-else
-  map('v', '<C-c>', ':w! ~/.vim/cvbuf.c<CR>')
-  map('n', '<C-v>', ':r ~/.vim/cvbuf.c<CR>')
-end
+map('v', '<C-c>', ':w! ~/.vim/cvbuf.c<CR>')
+map('n', '<C-v>', ':r ~/.vim/cvbuf.c<CR>')
 
 -- ============================================================
 -- Flash 跳转
@@ -468,12 +452,10 @@ map('v', 'c',  '<Nop>')
 map('v', 'C',  '<Nop>')
 map('v', 'C',  '"bp')
 
-if not vim.g.neovide then
-  map('v', 'y', '"by<Cmd>call OSCYank(getreg(\'b\'))<CR>')
-  map('v', 'c', '"by<Cmd>call OSCYank(getreg(\'b\'))<CR>')
-else
-  map('v', 'y', '"by')
-end
+-- 可视模式：y/c 复制选中到 b 寄存器（供下面的 C 粘贴）并写入系统剪贴板
+-- copy_to_clipboard 双写：+寄存器（本地 macOS/WSL/Windows）+ OSC52（SSH 远程/Windows Terminal）
+map('v', 'y', '"by<Cmd>lua require("config.commands").copy_to_clipboard(vim.fn.getreg("b"))<CR>')
+map('v', 'c', '"by<Cmd>lua require("config.commands").copy_to_clipboard(vim.fn.getreg("b"))<CR>')
 
 map('n', 'Y',  've<Plug>OSCYankVisual')
 map('n', 'cc', ':TagbarToggle<CR>',                 { desc = 'Tagbar' })

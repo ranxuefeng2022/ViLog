@@ -23,85 +23,50 @@ local function clear_match()
   match_ids = {}
 end
 
--- 查找配对括号（开闭符不同，使用 stack）
+-- 查找配对括号：用 vim.fn.searchpairpos（C 实现，O(匹配距离)，不拷贝 buffer）
 local function find_bracket_pair(char, pair_char, row, col)
-  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
   local is_open = (char == '(' or char == '[' or char == '{')
-  local stack = 0
+  local save = vim.fn.winsaveview()
+  vim.fn.cursor(row, col + 1)
 
+  local pair
   if is_open then
-    for r = row, #lines do
-      local start_c = (r == row) and (col + 2) or 1
-      local line = lines[r]
-      for c = start_c, #line do
-        local ch = line:sub(c, c)
-        if ch == char then
-          stack = stack + 1
-        elseif ch == pair_char then
-          if stack == 0 then
-            return { r - 1, c - 1 }
-          else
-            stack = stack - 1
-          end
-        end
-      end
-    end
+    -- 向前找闭括号，searchpair() 自带嵌套计数
+    -- 注意：searchpairpos 已返回 {row,col}，不可再包 {}（否则 pair[1] 变成 table，算术会报错）
+    pair = vim.fn.searchpairpos(char, '', pair_char, 'nW', 'synIDattr(synID(line("."),col("."),1),"name") =~? "string\\|comment"')
   else
-    for r = row, 1, -1 do
-      local end_c = (r == row) and col or #lines[r]
-      local line = lines[r]
-      for c = end_c, 1, -1 do
-        local ch = line:sub(c, c)
-        if ch == char then
-          stack = stack + 1
-        elseif ch == pair_char then
-          if stack == 0 then
-            return { r - 1, c - 1 }
-          else
-            stack = stack - 1
-          end
-        end
-      end
-    end
+    -- 闭括号：反向找开括号
+    pair = vim.fn.searchpairpos(pair_char, '', char, 'bnW', 'synIDattr(synID(line("."),col("."),1),"name") =~? "string\\|comment"')
   end
 
-  return nil
+  vim.fn.winrestview(save)
+
+  if pair[1] == 0 then return nil end
+  return { pair[1] - 1, pair[2] - 1 }
 end
 
--- 查找配对引号（开闭符相同，双向搜索取最近）
+-- 查找配对引号：仅扫当前行（绝大多数编辑场景）
 local function find_quote_pair(char, row, col)
-  local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+  local line = vim.api.nvim_buf_get_lines(0, row - 1, row, false)[1] or ''
   local fwd_pos, bwd_pos = nil, nil
 
-  -- 向前搜索
-  for r = row, #lines do
-    local start_c = (r == row) and (col + 2) or 1
-    local line = lines[r]
-    for c = start_c, #line do
-      if line:sub(c, c) == char then
-        fwd_pos = { r - 1, c - 1 }
-        goto fwd_done
-      end
+  for c = col + 2, #line do
+    if line:sub(c, c) == char then
+      fwd_pos = { row - 1, c - 1 }
+      break
     end
   end
-  ::fwd_done::
 
-  -- 向后搜索
-  for r = row, 1, -1 do
-    local end_c = (r == row) and col or #lines[r]
-    local line = lines[r]
-    for c = end_c, 1, -1 do
-      if line:sub(c, c) == char then
-        bwd_pos = { r - 1, c - 1 }
-        goto bwd_done
-      end
+  for c = col, 1, -1 do
+    if line:sub(c, c) == char then
+      bwd_pos = { row - 1, c - 1 }
+      break
     end
   end
-  ::bwd_done::
 
   if fwd_pos and bwd_pos then
-    local fwd_dist = (fwd_pos[1] - row + 1) * 10000 + math.abs(fwd_pos[2] - col)
-    local bwd_dist = (row - 1 - bwd_pos[1]) * 10000 + math.abs(col - bwd_pos[2])
+    local fwd_dist = math.abs(fwd_pos[2] - col)
+    local bwd_dist = math.abs(col - bwd_pos[2])
     return fwd_dist <= bwd_dist and fwd_pos or bwd_pos
   end
   return fwd_pos or bwd_pos
@@ -154,7 +119,7 @@ local function debounced_update()
   local version = timer_version
   vim.defer_fn(function()
     if version == timer_version then
-      update_match()
+      pcall(update_match)  -- 防御：快速滚动/切 buffer 时回调可能瞬态异常，静默避免刷屏报错
     end
   end, 20)
 end

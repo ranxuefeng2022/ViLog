@@ -3,15 +3,26 @@
 local M = {}
 
 -- 追踪当前光标所在的 C/C++ 函数名 (Vimscript 实现，确保 b:current_func 可被 statusline %{...} 读取)
+-- 优化：先尝试用 searchpairpos('{','',b:nr,'bWn') 找到函数体起点，再做小范围正则扫描
 vim.cmd([[
 function! UpdateCurrentFunc()
     let lnum = line('.')
     if exists('b:current_func_lnum') && b:current_func_lnum == lnum
         return
     endif
+
+    " 快速路径：若已记录当前函数起点+终点，且光标仍在范围内，直接返回
+    if exists('b:func_range') && !empty(b:func_range)
+        \ && lnum >= b:func_range[0] && lnum <= b:func_range[1]
+        \ && exists('b:current_func_lnum')
+        let b:current_func_lnum = lnum
+        return
+    endif
+
     let start = max([1, lnum - 2000])
     let fname = ''
     let reserved = ['if', 'else', 'elseif', 'return', 'for', 'while', 'switch']
+    let func_line = 0
     for i in range(lnum, start, -1)
         let line_text = getline(i)
         if line_text =~# '^\s*\(if\|else\>\)'
@@ -22,6 +33,7 @@ function! UpdateCurrentFunc()
             if index(reserved, fname) != -1
                 continue
             endif
+            let func_line = i
             break
         endif
     endfor
@@ -29,6 +41,22 @@ function! UpdateCurrentFunc()
         let b:current_func = fname
         redrawstatus
     endif
+
+    " 缓存函数体范围 [start_line, end_line]，下次光标若在范围内即跳过扫描
+    if func_line > 0
+        let save_view = winsaveview()
+        call cursor(func_line, 1)
+        let end_line = searchpair('{', '', '}', 'nW')
+        call winrestview(save_view)
+        if end_line > 0
+            let b:func_range = [func_line, end_line]
+        else
+            let b:func_range = [func_line, func_line + 500]
+        endif
+    else
+        let b:func_range = []
+    endif
+
     let b:current_func_lnum = lnum
 endfunction
 ]])
@@ -48,6 +76,18 @@ function M.yank_current_func()
   else
     vim.notify('No function found at cursor', vim.log.levels.WARN, { title = 'Function Name' })
   end
+end
+
+-- 复制文本到系统剪贴板（跨平台双写，覆盖本地 + 远程/Windows）
+-- 1) + 寄存器：本地环境（macOS pbcopy / WSL clip.exe / Windows / X11）直接生效
+-- 2) OSC52：SSH 远程或 Windows Terminal，由终端把序列透传回本地剪贴板
+function M.copy_to_clipboard(text)
+  if text == nil or text == '' then return end
+  pcall(vim.fn.setreg, '+', text)
+  pcall(function()
+    local seq = string.format('\x1b]52;c;%s\x07', vim.base64.encode(text))
+    vim.api.nvim_chan_send(vim.v.stderr, seq)
+  end)
 end
 
 -- 删除 visual match
@@ -133,29 +173,6 @@ function M.load_tags(cwd)
   vim.schedule(function() vim.o.tags = val end)
 end
 
--- Manifest: 每行 "mtime path"
-local function load_manifest(cwd)
-  local f = io.open(cwd .. '/.tags_manifest', 'r')
-  if not f then return nil end
-  local m = {}
-  for line in f:lines() do
-    local mt, p = line:match('^(%d+) (.+)$')
-    if mt then m[p] = tonumber(mt) end
-  end
-  f:close()
-  return m
-end
-
-local function save_manifest(cwd, files, mtimes)
-  local f = io.open(cwd .. '/.tags_manifest', 'w')
-  if not f then return end
-  for _, p in ipairs(files) do
-    local mt = mtimes and mtimes[p] or vim.fn.getftime(p)
-    if mt and mt >= 0 then f:write(mt .. ' ' .. p .. '\n') end
-  end
-  f:close()
-end
-
 -- 进度通知（原地刷新，不自动消失）
 local function make_progress()
   local nid = nil
@@ -168,163 +185,6 @@ local function make_progress()
       end
     end)
   end
-end
-
--- 全量生成（首次 / 强制）
-function M._full_generate(cwd, files, n, t0, progress, mtimes)
-  n = math.min(n, #files)
-  local tmpdir = vim.fn.stdpath('cache') .. '/ctags_' .. tostring(os.time())
-  vim.fn.mkdir(tmpdir, 'p')
-
-  progress(string.format('Full: %d files, %d jobs...', #files, n))
-
-  local chunk_sz = math.ceil(#files / n)
-  local chunks = {}
-  for i = 1, n do
-    local cp = tmpdir .. '/chunk_' .. i
-    local f = io.open(cp, 'w')
-    if f then
-      for j = (i - 1) * chunk_sz + 1, math.min(i * chunk_sz, #files) do
-        f:write(files[j] .. '\n')
-      end
-      f:close()
-      chunks[#chunks + 1] = cp
-    end
-  end
-
-  local done = 0
-  local tag_files = {}
-  for i = 1, #chunks do
-    tag_files[i] = tmpdir .. '/tags_' .. i
-    vim.system(
-      { 'ctags', '--languages=C,C++', '--sort=yes', '-L', chunks[i], '-f', tag_files[i] },
-      { stdout = false, stderr = false, env = { LC_ALL = 'C' } },
-      function()
-        done = done + 1
-        if done < n then
-          progress(string.format('Generating tags... %d/%d (%d%%)', done, n, math.floor(done / n * 100)))
-          return
-        end
-
-        progress('Merging...')
-        local tags_path = cwd .. '/tags'
-        local sort_args = { 'sort', '-m', '-o', tags_path }
-        for _, tf in ipairs(tag_files) do sort_args[#sort_args + 1] = tf end
-
-        vim.system(sort_args, { stdout = false, env = { LC_ALL = 'C' } }, function()
-          vim.schedule(function()
-            -- 清理重复的 !_TAG_ 头
-            vim.fn.system(string.format(
-              "sed -i '1{/^!_TAG_FILE_SORTED/!i\\!_TAG_FILE_SORTED\\t1\\t/0=unsorted, 1=sorted, 2=foldcase/\\n}' %s && sed -i '2,${/^!_TAG_/d}' %s",
-              vim.fn.shellescape(tags_path), vim.fn.shellescape(tags_path)
-            ))
-            vim.fn.system('rm -rf ' .. tmpdir)
-            save_manifest(cwd, files, mtimes)
-            local cnt = vim.fn.system(
-              "grep -cv '^!_TAG_' " .. vim.fn.shellescape(tags_path) .. ' 2>/dev/null'
-            ):gsub('\n', '')
-            local elapsed = os.time() - t0
-            M.load_tags(cwd)
-            progress(
-              string.format('Tags done: %s entries, %d files, %d jobs, %ds', cnt, #files, n, elapsed),
-              true
-            )
-          end)
-        end)
-      end
-    )
-  end
-end
-
--- 增量更新
-function M._incremental(cwd, files, changed, removed, n, t0, progress, mtimes)
-  local tmpdir = vim.fn.stdpath('cache') .. '/ctags_' .. tostring(os.time())
-  vim.fn.mkdir(tmpdir, 'p')
-  local tags_path = cwd .. '/tags'
-  local filtered_path = tmpdir .. '/tags_filtered'
-
-  progress(string.format('Incremental: %d changed, %d removed', #changed, #removed))
-
-  -- 写入需要从 tags 中移除的文件列表（changed + removed）
-  local filter_path = tmpdir .. '/filter_files'
-  local ff = io.open(filter_path, 'w')
-  if ff then
-    for _, f in ipairs(changed) do ff:write(f .. '\n') end
-    for _, f in ipairs(removed) do ff:write(f .. '\n') end
-    ff:close()
-  end
-
-  -- Step 1: awk 过滤掉 changed/removed 文件的旧 tag
-  local awk_cmd = string.format(
-    "awk -F'\\t' 'BEGIN{while((getline f < \"%s\") > 0) rm[f]=1} !($2 in rm)' %s > %s",
-    filter_path, vim.fn.shellescape(tags_path), vim.fn.shellescape(filtered_path)
-  )
-
-  vim.system({ 'sh', '-c', awk_cmd }, { stdout = false }, function()
-    if #changed == 0 then
-      -- 仅有删除，直接替换
-      vim.schedule(function()
-        vim.fn.system('mv ' .. vim.fn.shellescape(filtered_path) .. ' ' .. vim.fn.shellescape(tags_path))
-        vim.fn.system('rm -rf ' .. tmpdir)
-        save_manifest(cwd, files, mtimes)
-        M.load_tags(cwd)
-        local elapsed = os.time() - t0
-        progress(
-          string.format('Tags updated: -%d removed, %ds', #removed, elapsed),
-          true
-        )
-      end)
-      return
-    end
-
-    -- Step 2: 对 changed 文件并行生成新 tag
-    local n_jobs = math.min(n, #changed)
-    local chunk_sz = math.ceil(#changed / n_jobs)
-    local chunks = {}
-    for i = 1, n_jobs do
-      local cp = tmpdir .. '/chunk_' .. i
-      local f = io.open(cp, 'w')
-      if f then
-        for j = (i - 1) * chunk_sz + 1, math.min(i * chunk_sz, #changed) do
-          f:write(changed[j] .. '\n')
-        end
-        f:close()
-        chunks[#chunks + 1] = cp
-      end
-    end
-
-    local done = 0
-    local tag_files = {}
-    for i = 1, #chunks do
-      tag_files[i] = tmpdir .. '/tags_' .. i
-      vim.system(
-        { 'ctags', '--languages=C,C++', '--sort=yes', '-L', chunks[i], '-f', tag_files[i] },
-        { stdout = false, stderr = false, env = { LC_ALL = 'C' } },
-        function()
-          done = done + 1
-          if done < n_jobs then return end
-
-          -- Step 3: sort -m 合并 filtered + 新 tag
-          progress('Merging...')
-          local sort_args = { 'sort', '-m', '-o', tags_path, filtered_path }
-          for _, tf in ipairs(tag_files) do sort_args[#sort_args + 1] = tf end
-
-          vim.system(sort_args, { stdout = false, env = { LC_ALL = 'C' } }, function()
-            vim.schedule(function()
-              vim.fn.system('rm -rf ' .. tmpdir)
-              save_manifest(cwd, files, mtimes)
-              M.load_tags(cwd)
-              local elapsed = os.time() - t0
-              progress(
-                string.format('Tags updated: %d changed, %d removed, %ds', #changed, #removed, elapsed),
-                true
-              )
-            end)
-          end)
-        end
-      )
-    end
-  end)
 end
 
 -- 入口：ct — linux-master 单独生成 tags_linux，其余生成 tags
@@ -704,14 +564,6 @@ end, { range = true, nargs = 1 })
 vim.api.nvim_create_user_command('MarkdownToPDF', M.markdown_to_pdf, {})
 vim.api.nvim_create_user_command('MarkdownToHTML', M.markdown_to_html, {})
 
-vim.api.nvim_create_user_command('AIChat', function()
-  require('config.ai-chat').open()
-end, {})
-
-vim.api.nvim_create_user_command('AIChatSelection', function()
-  require('config.ai-chat').open_with_selection()
-end, { range = true })
-
 -- 后台串行 git: reset → pull → status（不阻塞 UI）
 function M.git_reset_pull()
   local root = vim.fn.systemlist('git -C ' .. vim.fn.shellescape(vim.fn.expand('%:p:h')) .. ' rev-parse --show-toplevel 2>/dev/null')[1]
@@ -755,21 +607,6 @@ function M.git_reset_pull()
       })
     end,
   })
-end
-
--- 加载 fzf.vim 后直接调用 fzf#vim#grep（等同 ce 快捷键）
-function M.grep_code()
-  require('lazy').load({ plugins = { 'fzf.vim' } })
-  local rg_cmd = 'rg --threads 8 -L --with-filename --column --line-number --no-heading --color=always --smart-case -- ' .. vim.fn.shellescape('')
-  local func_preview = "sh -c 'file=$(echo \"$1\" | cut -d: -f1); line=$(echo \"$1\" | cut -d: -f2); head -n \"$line\" \"$file\" 2>/dev/null | tac | grep -m1 -E \"^[a-zA-Z_].*\\(\" | sed \"s/^[ \\t]*//\"' _ {}"
-  vim.fn['fzf#vim#grep'](rg_cmd, 1, {
-    options = '--layout=default --preview ' .. vim.fn.shellescape(func_preview) .. ' --preview-window down:1:border-top',
-  }, 1)
-end
-
--- feedkeys 触发 cw（fzf-lua 不怕懒加载）
-function M.buffer_lines()
-  vim.api.nvim_feedkeys('cw', 'm', false)
 end
 
 return M

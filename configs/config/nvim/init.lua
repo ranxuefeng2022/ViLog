@@ -14,7 +14,6 @@ require('config.match-hl').setup()  -- 括号/引号配对高亮
 require('config.commands')
 require('config.keymaps')
 require('config.autocmds')
-require('config.neovide')
 
 -- 默认主题
 vim.cmd('colorscheme tokyonight-night')
