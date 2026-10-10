@@ -96,40 +96,8 @@ return {
             },
           })
         end, mode = 'n', desc = 'Buffer functions' },
-      { 'ce', function()
-          local rg_cmd = 'rg --threads 8 -L --with-filename --column --line-number --no-heading --color=always --smart-case -- ' .. vim.fn.shellescape('')
-          local func_preview = "sh -c 'file=$(echo \"$1\" | cut -d: -f1); line=$(echo \"$1\" | cut -d: -f2); head -n \"$line\" \"$file\" 2>/dev/null | tac | grep -m1 -E \"^[a-zA-Z_].*\\(\" | sed \"s/^[ \\t]*//\"' _ {}"
-          vim.fn['fzf#vim#grep'](rg_cmd, 1, {
-            options = '--layout=default --preview ' .. vim.fn.shellescape(func_preview) .. ' --preview-window down:1:border-top',
-          }, 1)
-        end, mode = 'n', desc = 'Grep code' },
-      { 'cw', function()
-          local file = vim.fn.expand('%:p')
-          if file == '' then return end
-          local func_preview = string.format(
-            "sh -c 'line=$(echo \"$1\" | cut -d: -f1); head -n \"$line\" %s 2>/dev/null | tac | grep -m1 -E \"^[a-zA-Z_].*\\(\" | sed \"s/^[ \\t]*//\"' _ {}",
-            vim.fn.shellescape(file))
-          require('fzf-lua').fzf_exec(
-            'rg --threads 8 --no-filename --line-number --no-heading --color=never --smart-case -- "" '
-            .. vim.fn.shellescape(file),
-            {
-              prompt = 'Lines> ',
-              fzf_opts = {
-                ['--layout'] = 'default',
-                ['--delimiter'] = ':',
-                ['--preview'] = func_preview,
-                ['--preview-window'] = 'down:1:border-top',
-              },
-              actions = {
-                ['default'] = function(sel)
-                  if not sel or #sel == 0 then return end
-                  local lnum = sel[1]:match('^(%d+):')
-                  if lnum then vim.cmd('normal! ' .. lnum .. 'Gzz') end
-                end,
-              },
-            }
-          )
-        end, mode = 'n', desc = 'Buffer lines' },
+      { 'ce', function() require('config.commands').grep_code() end, mode = 'n', desc = 'Grep code' },
+      { 'cw', function() require('config.commands').buffer_lines() end, mode = 'n', desc = 'Buffer lines' },
     },
     cmd = { 'BTags', 'Tags', 'Rg', 'Files', 'Buffers', 'Windows', 'Lines', 'BLines', 'Marks', 'Maps', 'History', 'Commands', 'Helptags', 'Filetypes' },
     config = function()

@@ -89,52 +89,13 @@ map('n', ',', function()
     if root and root ~= '' and vim.v.shell_error == 0 then git_cwd = root end
   end
 
-  -- ce/cw 快捷键的回调函数（直接调用，不走命令行）
-  local ce_fn = function()
-    if vim.fn.exists('*fzf#vim#grep') == 0 then
-      require('lazy').load({ plugins = { 'fzf.vim' } })
-    end
-    local rg_cmd = 'rg --threads 8 -L --with-filename --column --line-number --no-heading --color=always --smart-case -- ' .. vim.fn.shellescape('')
-    local func_preview = "sh -c 'file=$(echo \"$1\" | cut -d: -f1); line=$(echo \"$1\" | cut -d: -f2); head -n \"$line\" \"$file\" 2>/dev/null | tac | grep -m1 -E \"^[a-zA-Z_].*\\(\" | sed \"s/^[ \\t]*//\"' _ {}"
-    vim.fn['fzf#vim#grep'](rg_cmd, 1, {
-      options = '--layout=default --preview ' .. vim.fn.shellescape(func_preview) .. ' --preview-window down:1:border-top',
-    }, 1)
-  end
-  local cw_fn = function()
-    local file = vim.fn.expand('%:p')
-    if file == '' then return end
-    local func_preview = string.format(
-      "sh -c 'line=$(echo \"$1\" | cut -d: -f1); head -n \"$line\" %s 2>/dev/null | tac | grep -m1 -E \"^[a-zA-Z_].*\\(\" | sed \"s/^[ \\t]*//\"' _ {}",
-      vim.fn.shellescape(file))
-    require('fzf-lua').fzf_exec(
-      'rg --threads 8 --no-filename --line-number --no-heading --color=never --smart-case -- "" '
-      .. vim.fn.shellescape(file),
-      {
-        prompt = 'Lines> ',
-        fzf_opts = {
-          ['--layout'] = 'default',
-          ['--delimiter'] = ':',
-          ['--preview'] = func_preview,
-          ['--preview-window'] = 'down:1:border-top',
-        },
-        actions = {
-          ['default'] = function(sel)
-            if not sel or #sel == 0 then return end
-            local lnum = sel[1]:match('^(%d+):')
-            if lnum then vim.cmd('normal! ' .. lnum .. 'Gzz') end
-          end,
-        },
-      }
-    )
-  end
-
   local sections = {
     { title = 'fzf-lua', cmds = {
       { 'a', 'Files',      '搜索文件',     function() require('fzf-lua').files({ winopts = { preview = { hidden = true } } }) end },
       { 'b', 'Colors',     'colorscheme',  'FzfLua colorschemes' },
       { 'c', 'Commands',   '查看命令',     function() require('fzf-lua').commands({ winopts = { preview = { hidden = true } } }) end },
       { 'd', 'Helptags',   '搜索帮助',     'FzfLua helptags' },
-      { 'e', 'GrepCode',   '代码搜索',     ce_fn },
+      { 'e', 'GrepCode',   '代码搜索',     function() cmd.grep_code() end },
       { 'f', 'Files',      '搜索文件',     'Files' },
       { 'g', 'Buffers',    '切换buffer',   function() require('fzf-lua').buffers({ winopts = { preview = { hidden = true } } }) end },
     }},
@@ -150,7 +111,7 @@ map('n', ',', function()
       { 'k', 'BLines',     'buffer行',     'BLines' },
       { 'l', 'BTags',      'buffer tags',  'BTags' },
       { 'm', 'Maps',       '快捷键',       'Maps' },
-      { 'w', 'BufLines',   'buffer行搜索', cw_fn },
+      { 'w', 'BufLines',   'buffer行搜索', function() cmd.buffer_lines() end },
       { 'r', 'Buffers',    '切换buffer',   'Buffers' },
     }},
     { title = 'Git', cmds = {
@@ -361,9 +322,13 @@ map('n', 'a', '<C-]>')
 -- 搜索 (显示所在函数名)
 -- ============================================================
 local function rg_with_func(keyword)
-  local preview_cmd = [[sh -c 'file=$(echo "$1" | cut -d: -f1); line=$(echo "$1" | cut -d: -f2); func=$(head -n "$line" "$file" 2>/dev/null | tac | grep -m1 -E "^[a-zA-Z_].*\(" | sed "s/^[ \t]*//"); if [ -n "$func" ]; then printf "\033[33m[%s]\033[0m\n\n" "$func"; fi; head -n $((line+10)) "$file" | tail -n $((line+10>20?20:line+10)) | GREP_COLORS="mt=01;31" grep --color=always -E -e "]] .. keyword .. [[|^"' _ {}]]
+  if not keyword or keyword:match('^%s*$') then return end
+  -- keyword 嵌入 preview 的双引号上下文,先做 shell 转义(防注入);rg 侧由 shellescape 处理
+  local kw = keyword:gsub('([$"`\\])', '\\%0')
+  local preview_cmd = [[sh -c 'file=$(echo "$1" | cut -d: -f1); line=$(echo "$1" | cut -d: -f2); func=$(head -n "$line" "$file" 2>/dev/null | tac | grep -E "^[a-zA-Z_].*\(" | grep -vE ";[ \t]*$" | grep -vE "^(if|else|for|while|switch|return|do)\b" | head -1 | sed "s/^[ \t]*//"); if [ -n "$func" ]; then printf "\033[33m[%s]\033[0m\n\n" "$func"; fi; head -n $((line+10)) "$file" | tail -n $((line+10>20?20:line+10)) | GREP_COLORS="mt=01;31" grep --color=always -E -e "]] .. kw .. [[|^"' _ {}]]
+  local act = require('fzf-lua.actions')
   require('fzf-lua').fzf_exec(
-    'rg --threads 8 -L --column --line-number --no-heading --color=always --smart-case -- ' .. vim.fn.shellescape(keyword),
+    'rg --threads 8 -L --column --line-number --no-heading --color=always --smart-case -g "!tags*" --max-columns=200 -- ' .. vim.fn.shellescape(keyword),
     {
       prompt = 'Rg> ',
       preview = preview_cmd,
@@ -372,11 +337,10 @@ local function rg_with_func(keyword)
         ['--preview-window'] = 'up:40%:border-bottom',
       },
       actions = {
-        ['default'] = function(sel)
-          if not sel or #sel == 0 then return end
-          local p = vim.split(sel[1], ':')
-          vim.cmd(string.format('e +%s %s', p[2], p[1]))
-        end,
+        ['default'] = act.file_edit,      -- 自动解析 file:line:col 跳转
+        ['ctrl-s']  = act.file_split,
+        ['ctrl-v']  = act.file_vsplit,
+        ['ctrl-q']  = act.file_sel_to_qf, -- 多选/全部发 quickfix
       },
     }
   )

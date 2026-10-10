@@ -413,6 +413,47 @@ function M.grep_current()
   require('fzf-lua').grep({ search = keyword })
 end
 
+-- ce:全局代码搜索(fzf.vim Rg,预览首行显示所在函数名)
+function M.grep_code()
+  if vim.fn.exists('*fzf#vim#grep') == 0 then
+    require('lazy').load({ plugins = { 'fzf.vim' } })
+  end
+  local rg_cmd = 'rg --threads 8 -L --with-filename --column --line-number --no-heading --color=always --smart-case -- ' .. vim.fn.shellescape('')
+  local func_preview = "sh -c 'file=$(echo \"$1\" | cut -d: -f1); line=$(echo \"$1\" | cut -d: -f2); head -n \"$line\" \"$file\" 2>/dev/null | tac | grep -m1 -E \"^[a-zA-Z_].*\\(\" | sed \"s/^[ \\t]*//\"' _ {}"
+  vim.fn['fzf#vim#grep'](rg_cmd, 1, {
+    options = '--layout=default --preview ' .. vim.fn.shellescape(func_preview) .. ' --preview-window down:1:border-top',
+  }, 1)
+end
+
+-- cw:当前 buffer 行搜索(fzf-lua,预览首行显示所在函数名)
+function M.buffer_lines()
+  local file = vim.fn.expand('%:p')
+  if file == '' then return end
+  local func_preview = string.format(
+    "sh -c 'line=$(echo \"$1\" | cut -d: -f1); head -n \"$line\" %s 2>/dev/null | tac | grep -m1 -E \"^[a-zA-Z_].*\\(\" | sed \"s/^[ \\t]*//\"' _ {}",
+    vim.fn.shellescape(file))
+  require('fzf-lua').fzf_exec(
+    'rg --threads 8 --no-filename --line-number --no-heading --color=never --smart-case -- "" '
+    .. vim.fn.shellescape(file),
+    {
+      prompt = 'Lines> ',
+      fzf_opts = {
+        ['--layout'] = 'default',
+        ['--delimiter'] = ':',
+        ['--preview'] = func_preview,
+        ['--preview-window'] = 'down:1:border-top',
+      },
+      actions = {
+        ['default'] = function(sel)
+          if not sel or #sel == 0 then return end
+          local lnum = sel[1]:match('^(%d+):')
+          if lnum then vim.cmd('normal! ' .. lnum .. 'Gzz') end
+        end,
+      },
+    }
+  )
+end
+
 function M.search_in_current_func()
   -- 确保 current_func 已更新
   vim.fn.UpdateCurrentFunc()
@@ -491,6 +532,157 @@ function M.search_in_current_func()
   end
 
   vim.notify('Cannot find function body', vim.log.levels.WARN)
+end
+
+-- ============================================================
+-- rg + fzf 扩展搜索
+-- ============================================================
+
+-- cg:搜当前词的"定义处"(函数/宏/struct/union/enum/typedef)
+function M.grep_definition()
+  local kw = vim.fn.expand('<cword>')
+  if kw == '' then return end
+  local pats = {
+    string.format('^[a-zA-Z_].*\\b%s[ \t]*\\(', kw),                        -- 函数定义(顶层无缩进)
+    string.format('^#[ \t]*define[ \t]+%s\\b', kw),                          -- 宏定义
+    string.format('^(typedef[ \t]+.*)?(struct|union|enum)[ \t]+%s\\b', kw),  -- 类型定义
+  }
+  local cmd_str = 'rg --threads 8 -L --column --line-number --no-heading '
+    .. '--color=always --smart-case -g "!tags*" '
+  for _, p in ipairs(pats) do
+    cmd_str = cmd_str .. '-e ' .. vim.fn.shellescape(p) .. ' '
+  end
+  require('fzf-lua').fzf_exec(cmd_str, {
+    prompt = 'Def> ',
+    fzf_opts = {
+      ['--layout'] = 'default',
+      ['--preview-window'] = 'up:30%',
+    },
+    actions = { ['default'] = require('fzf-lua.actions').file_edit },
+  })
+end
+
+-- cf:列出包含当前词的文件(rg -l),fzf 选择打开
+function M.grep_files()
+  local kw = vim.fn.input('Files containing: ', vim.fn.expand('<cword>'))
+  if kw == '' then return end
+  require('fzf-lua').fzf_exec(
+    'rg --threads 8 -L -l --smart-case -g "!tags*" -- ' .. vim.fn.shellescape(kw),
+    {
+      prompt = 'FilesWith> ',
+      fzf_opts = { ['--layout'] = 'default' },
+      actions = { ['default'] = require('fzf-lua.actions').file_edit },
+    }
+  )
+end
+
+-- cx:项目级搜索替换(字面量)。fzf 预览匹配行,Tab 多选/ctrl-a 全选,
+-- 回车后仅替换选中行(按 文件:行号 精确写回),替换前 confirm
+function M.search_replace()
+  local pat = vim.fn.input('Search (literal): ', vim.fn.expand('<cword>'))
+  if pat == '' then return end
+  local rep = vim.fn.input('Replace with: ', '')
+
+  local function do_replace(selected)
+    if not selected or #selected == 0 then return end
+    -- 按文件归组选中行号(先剥掉 rg 的 ANSI 颜色码)
+    local by_file = {}
+    for _, line in ipairs(selected) do
+      local clean = line:gsub('\x1b%[[0-9;]*m', '')
+      local f, ln = clean:match('^([^:]+):(%d+)')
+      if f and ln then
+        by_file[f] = by_file[f] or {}
+        by_file[f][#by_file[f] + 1] = tonumber(ln)
+      end
+    end
+    local files = {}
+    for f in pairs(by_file) do files[#files + 1] = f end
+    table.sort(files)
+    if #files == 0 then return end
+
+    if vim.fn.confirm(
+        string.format('Replace "%s" -> "%s" in %d file(s)?', pat, rep, #files),
+        '&Yes\n&No', 2) ~= 1 then
+      return
+    end
+
+    local total = 0
+    for _, f in ipairs(files) do
+      local lines = vim.fn.readfile(f)
+      for _, ln in ipairs(by_file[f]) do
+        local c
+        lines[ln], c = lines[ln]:gsub(vim.pesc(pat), function() return rep end)
+        total = total + c
+      end
+      vim.fn.writefile(lines, f)
+    end
+    vim.cmd('checktime')
+    vim.notify(string.format('Replaced %d occurrence(s) in %d file(s)', total, #files),
+      vim.log.levels.INFO, { title = 'Search Replace' })
+  end
+
+  require('fzf-lua').fzf_exec(
+    'rg --threads 8 -L --column --line-number --no-heading --color=always '
+      .. '--smart-case -g "!tags*" -F -- ' .. vim.fn.shellescape(pat),
+    {
+      prompt = 'Replace> ',
+      fzf_opts = {
+        ['--multi'] = '',
+        ['--layout'] = 'default',
+        ['--bind'] = 'ctrl-a:toggle-all',
+        ['--preview-window'] = 'up:30%',
+      },
+      actions = { ['default'] = do_replace },
+    }
+  )
+end
+
+-- cT:项目 TODO/FIXME/XXX/HACK 汇总(--nth 4.. 只按文本列过滤)
+function M.todo_list()
+  require('fzf-lua').fzf_exec(
+    'rg --threads 8 -L --column --line-number --no-heading --color=always '
+      .. '--smart-case -g "!tags*" -e TODO -e FIXME -e XXX -e HACK',
+    {
+      prompt = 'TODO> ',
+      fzf_opts = {
+        ['--layout'] = 'default',
+        ['--preview-window'] = 'up:30%',
+        ['--delimiter'] = ':',
+        ['--nth'] = '4..',
+      },
+      actions = { ['default'] = require('fzf-lua.actions').file_edit },
+    }
+  )
+end
+
+-- cG:当前词的提交历史(git log -S pickaxe),选中 commit 打开 Diffview
+function M.git_pickaxe()
+  local kw = vim.fn.expand('<cword>')
+  if kw == '' then return end
+  local root = vim.fn.systemlist(
+    'git -C ' .. vim.fn.shellescape(vim.fn.expand('%:p:h'))
+    .. ' rev-parse --show-toplevel 2>/dev/null')[1]
+  if not root or root == '' then
+    vim.notify('Not in a git repo', vim.log.levels.WARN)
+    return
+  end
+  local log = vim.fn.systemlist(
+    'git -C ' .. vim.fn.shellescape(root) .. ' log --oneline -S ' .. vim.fn.shellescape(kw) .. ' --')
+  if vim.v.shell_error ~= 0 or #log == 0 then
+    vim.notify('No commits touching "' .. kw .. '"', vim.log.levels.WARN)
+    return
+  end
+  require('fzf-lua').fzf_exec(log, {
+    prompt = 'Pickaxe> ',
+    fzf_opts = { ['--layout'] = 'default' },
+    actions = {
+      ['default'] = function(sel)
+        if not sel or #sel == 0 then return end
+        local hash = sel[1]:match('^([0-9a-f]+)')
+        if hash then vim.cmd('DiffviewOpen ' .. hash) end
+      end,
+    },
+  })
 end
 
 -- 删除包含关键词的行
