@@ -19,35 +19,41 @@ function! UpdateCurrentFunc()
         return
     endif
 
+    " 用 search() 向上找函数签名行：C 实现的正则引擎扫到即停，
+    " 替代原先最多 2000 次 getline+match 的 VimL 逐行循环（快一个数量级）
     let start = max([1, lnum - 2000])
     let fname = ''
     let reserved = ['if', 'else', 'elseif', 'return', 'for', 'while', 'switch']
     let func_line = 0
-    for i in range(lnum, start, -1)
-        let line_text = getline(i)
+    let save_view = winsaveview()
+    " 从行尾起回搜，保证光标所在行本身也能被匹配（与原 range(lnum, start, -1) 一致）
+    call cursor(lnum, col('$'))
+    while search('\v^\s*(\w+\s+)+\w+\s*\(', 'bW', start) > 0
+        let line_text = getline('.')
         if line_text =~# '^\s*\(if\|else\>\)'
             continue
         endif
-        if line_text =~# '^\s*\%(\w\+\s\+\)\+\w\+\s*('
-            let fname = matchstr(line_text, '\v\w+\ze\s*\(')
-            if index(reserved, fname) != -1
-                continue
-            endif
-            let func_line = i
-            break
+        let fname = matchstr(line_text, '\v\w+\ze\s*\(')
+        if index(reserved, fname) != -1
+            continue
         endif
-    endfor
+        let func_line = line('.')
+        break
+    endwhile
     if !exists('b:current_func') || b:current_func !=# fname
         let b:current_func = fname
         redrawstatus
     endif
 
     " 缓存函数体范围 [start_line, end_line]，下次光标若在范围内即跳过扫描
+    " searchpair 需光标位于开括号上/内；直接从签名行起调会把函数体自身的
+    " { 计为嵌套层导致配对失败（旧实现因此一直走 +500 兜底），先跳到 {
     if func_line > 0
-        let save_view = winsaveview()
         call cursor(func_line, 1)
-        let end_line = searchpair('{', '', '}', 'nW')
-        call winrestview(save_view)
+        let end_line = 0
+        if search('{', 'W') > 0
+            let end_line = searchpair('{', '', '}', 'nW')
+        endif
         if end_line > 0
             let b:func_range = [func_line, end_line]
         else
@@ -56,15 +62,11 @@ function! UpdateCurrentFunc()
     else
         let b:func_range = []
     endif
+    call winrestview(save_view)
 
     let b:current_func_lnum = lnum
 endfunction
 ]])
-
--- Lua wrapper（供 keymap 调用）
-function M.update_current_func()
-  vim.fn.UpdateCurrentFunc()
-end
 
 -- 复制当前函数名
 function M.yank_current_func()
@@ -163,14 +165,7 @@ function M.load_tags(cwd)
   cwd = cwd or vim.fn.getcwd()
   if tags_loaded_dirs[cwd] then return end
   tags_loaded_dirs[cwd] = true
-  local tags_opt = {}
-  if vim.fn.filereadable(cwd .. '/tags_linux') == 1 then
-    tags_opt[#tags_opt + 1] = './tags_linux'
-  end
-  tags_opt[#tags_opt + 1] = './tags'
-  tags_opt[#tags_opt + 1] = 'tags;'
-  local val = table.concat(tags_opt, ',')
-  vim.schedule(function() vim.o.tags = val end)
+  vim.schedule(function() vim.o.tags = './tags,tags;' end)
 end
 
 -- 进度通知（原地刷新，不自动消失）
@@ -187,31 +182,23 @@ local function make_progress()
   end
 end
 
--- 入口：ct — linux-master 单独生成 tags_linux，其余生成 tags
+-- 入口：panel H — 并行生成项目全部源文件的 tags（不做目录分流）
 function M.generate_tags()
   local cwd = vim.fn.getcwd()
   tags_loaded_dirs[cwd] = nil
   local t0 = os.time()
   local progress = make_progress()
-  local has_linux = vim.fn.isdirectory(cwd .. '/linux-master') == 1
-  local ncpu = tonumber(vim.fn.system('nproc')) or 4
+  -- 跨平台核数:nproc 在 macOS 不存在,vim.uv.cpu_info() 全平台可用且免子进程
+  local ncpu = math.max(1, #vim.uv.cpu_info())
 
   -- 构建任务列表
   local tasks = {}
   tasks[#tasks + 1] = {
     name = 'tags',
     fd = string.format(
-      'fd -L -e c -e h -e cpp -e hpp -e cxx -e hxx -e S --exclude linux-master . %s',
+      'fd -L -e c -e h -e cpp -e hpp -e cxx -e hxx -e S . %s',
       vim.fn.shellescape(cwd)),
   }
-  if has_linux and vim.fn.filereadable(cwd .. '/tags_linux') ~= 1 then
-    tasks[#tasks + 1] = {
-      name = 'tags_linux',
-      fd = string.format(
-        'fd -L -e c -e h -e cpp -e hpp -e cxx -e hxx -e S . %s/linux-master',
-        vim.fn.shellescape(cwd)),
-    }
-  end
 
   progress(string.format('Scanning %d tag tasks...', #tasks))
 
@@ -288,11 +275,16 @@ function M.generate_tags()
               for _, tf in ipairs(tag_files) do sort_args[#sort_args + 1] = tf end
               vim.system(sort_args, { stdout = false, env = { LC_ALL = 'C' } }, function()
                 vim.schedule(function()
-                  -- 清理重复的 !_TAG_ 头，只保留一个
-                  vim.fn.system(string.format(
-                    "sed -i '1{/^!_TAG_FILE_SORTED/!i\\!_TAG_FILE_SORTED\\t1\\t/0=unsorted, 1=sorted, 2=foldcase/\\n}' %s && sed -i '2,${/^!_TAG_/d}' %s",
-                    vim.fn.shellescape(tag_path), vim.fn.shellescape(tag_path)
-                  ))
+                  -- 清理各块 ctags 带入的重复 !_TAG_ 头，只保留一个 SORTED 头
+                  -- (保证 tagbsearch 二分查找生效)。原 sed -i 写法在 macOS
+                  -- BSD sed 上会失败，改用 awk 流式重写，无平台方言差异;
+                  -- LC_ALL=C 按字节处理,防止内核源码里的非 UTF-8 字节
+                  -- 让 macOS awk 中途 multibyte conversion failure 崩溃
+                  local esc = vim.fn.shellescape(tag_path)
+                  vim.fn.system(
+                    "env LC_ALL=C awk 'BEGIN{print \"!_TAG_FILE_SORTED\\t1\\t/0=unsorted, 1=sorted, 2=foldcase/\"} /^!_TAG_/{next} {print}' "
+                    .. esc .. ' > ' .. esc .. '.tmp && mv ' .. esc .. '.tmp ' .. esc
+                  )
                   vim.fn.system({ 'rm', '-rf', tmpdir })
                   task_done = task_done + 1
                   local cnt = vim.fn.system("grep -cv '^!_TAG_' " .. vim.fn.shellescape(tag_path) .. ' 2>/dev/null'):gsub('\n', '')
@@ -315,8 +307,8 @@ end
 -- 删除 tags 文件：cT
 function M.generate_tags_full()
   local cwd = vim.fn.getcwd()
-  vim.fn.system('rm -f ' .. cwd .. '/tags ' .. cwd .. '/tags_linux ' .. cwd .. '/.tags_manifest*')
-  vim.notify('Deleted tags + tags_linux', vim.log.levels.INFO, { title = 'Tags' })
+  vim.fn.system('rm -f ' .. vim.fn.shellescape(cwd .. '/tags'))
+  vim.notify('Deleted tags', vim.log.levels.INFO, { title = 'Tags' })
 end
 
 -- 状态栏开关
@@ -532,157 +524,6 @@ function M.search_in_current_func()
   end
 
   vim.notify('Cannot find function body', vim.log.levels.WARN)
-end
-
--- ============================================================
--- rg + fzf 扩展搜索
--- ============================================================
-
--- cg:搜当前词的"定义处"(函数/宏/struct/union/enum/typedef)
-function M.grep_definition()
-  local kw = vim.fn.expand('<cword>')
-  if kw == '' then return end
-  local pats = {
-    string.format('^[a-zA-Z_].*\\b%s[ \t]*\\(', kw),                        -- 函数定义(顶层无缩进)
-    string.format('^#[ \t]*define[ \t]+%s\\b', kw),                          -- 宏定义
-    string.format('^(typedef[ \t]+.*)?(struct|union|enum)[ \t]+%s\\b', kw),  -- 类型定义
-  }
-  local cmd_str = 'rg --threads 8 -L --column --line-number --no-heading '
-    .. '--color=always --smart-case -g "!tags*" '
-  for _, p in ipairs(pats) do
-    cmd_str = cmd_str .. '-e ' .. vim.fn.shellescape(p) .. ' '
-  end
-  require('fzf-lua').fzf_exec(cmd_str, {
-    prompt = 'Def> ',
-    fzf_opts = {
-      ['--layout'] = 'default',
-      ['--preview-window'] = 'up:30%',
-    },
-    actions = { ['default'] = require('fzf-lua.actions').file_edit },
-  })
-end
-
--- cf:列出包含当前词的文件(rg -l),fzf 选择打开
-function M.grep_files()
-  local kw = vim.fn.input('Files containing: ', vim.fn.expand('<cword>'))
-  if kw == '' then return end
-  require('fzf-lua').fzf_exec(
-    'rg --threads 8 -L -l --smart-case -g "!tags*" -- ' .. vim.fn.shellescape(kw),
-    {
-      prompt = 'FilesWith> ',
-      fzf_opts = { ['--layout'] = 'default' },
-      actions = { ['default'] = require('fzf-lua.actions').file_edit },
-    }
-  )
-end
-
--- cx:项目级搜索替换(字面量)。fzf 预览匹配行,Tab 多选/ctrl-a 全选,
--- 回车后仅替换选中行(按 文件:行号 精确写回),替换前 confirm
-function M.search_replace()
-  local pat = vim.fn.input('Search (literal): ', vim.fn.expand('<cword>'))
-  if pat == '' then return end
-  local rep = vim.fn.input('Replace with: ', '')
-
-  local function do_replace(selected)
-    if not selected or #selected == 0 then return end
-    -- 按文件归组选中行号(先剥掉 rg 的 ANSI 颜色码)
-    local by_file = {}
-    for _, line in ipairs(selected) do
-      local clean = line:gsub('\x1b%[[0-9;]*m', '')
-      local f, ln = clean:match('^([^:]+):(%d+)')
-      if f and ln then
-        by_file[f] = by_file[f] or {}
-        by_file[f][#by_file[f] + 1] = tonumber(ln)
-      end
-    end
-    local files = {}
-    for f in pairs(by_file) do files[#files + 1] = f end
-    table.sort(files)
-    if #files == 0 then return end
-
-    if vim.fn.confirm(
-        string.format('Replace "%s" -> "%s" in %d file(s)?', pat, rep, #files),
-        '&Yes\n&No', 2) ~= 1 then
-      return
-    end
-
-    local total = 0
-    for _, f in ipairs(files) do
-      local lines = vim.fn.readfile(f)
-      for _, ln in ipairs(by_file[f]) do
-        local c
-        lines[ln], c = lines[ln]:gsub(vim.pesc(pat), function() return rep end)
-        total = total + c
-      end
-      vim.fn.writefile(lines, f)
-    end
-    vim.cmd('checktime')
-    vim.notify(string.format('Replaced %d occurrence(s) in %d file(s)', total, #files),
-      vim.log.levels.INFO, { title = 'Search Replace' })
-  end
-
-  require('fzf-lua').fzf_exec(
-    'rg --threads 8 -L --column --line-number --no-heading --color=always '
-      .. '--smart-case -g "!tags*" -F -- ' .. vim.fn.shellescape(pat),
-    {
-      prompt = 'Replace> ',
-      fzf_opts = {
-        ['--multi'] = '',
-        ['--layout'] = 'default',
-        ['--bind'] = 'ctrl-a:toggle-all',
-        ['--preview-window'] = 'up:30%',
-      },
-      actions = { ['default'] = do_replace },
-    }
-  )
-end
-
--- cT:项目 TODO/FIXME/XXX/HACK 汇总(--nth 4.. 只按文本列过滤)
-function M.todo_list()
-  require('fzf-lua').fzf_exec(
-    'rg --threads 8 -L --column --line-number --no-heading --color=always '
-      .. '--smart-case -g "!tags*" -e TODO -e FIXME -e XXX -e HACK',
-    {
-      prompt = 'TODO> ',
-      fzf_opts = {
-        ['--layout'] = 'default',
-        ['--preview-window'] = 'up:30%',
-        ['--delimiter'] = ':',
-        ['--nth'] = '4..',
-      },
-      actions = { ['default'] = require('fzf-lua.actions').file_edit },
-    }
-  )
-end
-
--- cG:当前词的提交历史(git log -S pickaxe),选中 commit 打开 Diffview
-function M.git_pickaxe()
-  local kw = vim.fn.expand('<cword>')
-  if kw == '' then return end
-  local root = vim.fn.systemlist(
-    'git -C ' .. vim.fn.shellescape(vim.fn.expand('%:p:h'))
-    .. ' rev-parse --show-toplevel 2>/dev/null')[1]
-  if not root or root == '' then
-    vim.notify('Not in a git repo', vim.log.levels.WARN)
-    return
-  end
-  local log = vim.fn.systemlist(
-    'git -C ' .. vim.fn.shellescape(root) .. ' log --oneline -S ' .. vim.fn.shellescape(kw) .. ' --')
-  if vim.v.shell_error ~= 0 or #log == 0 then
-    vim.notify('No commits touching "' .. kw .. '"', vim.log.levels.WARN)
-    return
-  end
-  require('fzf-lua').fzf_exec(log, {
-    prompt = 'Pickaxe> ',
-    fzf_opts = { ['--layout'] = 'default' },
-    actions = {
-      ['default'] = function(sel)
-        if not sel or #sel == 0 then return end
-        local hash = sel[1]:match('^([0-9a-f]+)')
-        if hash then vim.cmd('DiffviewOpen ' .. hash) end
-      end,
-    },
-  })
 end
 
 -- 删除包含关键词的行

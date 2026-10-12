@@ -120,7 +120,7 @@ vim.api.nvim_create_autocmd('FileType', {
   group = cgroup,
   pattern = { 'c', 'cpp' },
   callback = function()
-    vim.api.nvim_create_autocmd({ 'CursorHold', 'CursorHoldI' }, {
+    vim.api.nvim_create_autocmd({ 'CursorHold' }, {
       group = cgroup,
       buffer = 0,
       callback = function()

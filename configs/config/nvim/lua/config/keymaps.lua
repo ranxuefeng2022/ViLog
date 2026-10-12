@@ -7,15 +7,16 @@ local map = vim.keymap.set
 -- Leader 快捷键 (fzf-lua 相关键位在 plugins/fzf.lua 的 keys 中定义)
 -- ============================================================
 
+-- flash 跳转:<leader>j/k/i 即按即开
+-- 不映射 <leader>l,否则会与 <leader>la/lf/lh 前缀竞争,每次多等 timeoutlen
 map('n', '<leader>j',  function() require('flash').jump() end, { desc = 'Flash jump' })
 map('n', '<leader>k',  function() require('flash').jump() end, { desc = 'Flash jump' })
-map('n', '<leader>l',  function() require('flash').jump() end, { desc = 'Flash jump' })
 map('n', '<leader>i',  function() require('flash').jump() end, { desc = 'Flash jump' })
 
-map('n', '<leader>ba', ':bufdo bd<CR>',                        { desc = 'Close all buffers' })
-map('n', '<leader>pp', ':setlocal paste!<CR>',                 { desc = 'Toggle paste' })
+map('n', '<leader>ba', '<Cmd>bufdo bd<CR>',                    { desc = 'Close all buffers' })
+map('n', '<leader>pp', '<Cmd>setlocal paste!<CR>',             { desc = 'Toggle paste' })
 map('n', '<leader>L',  function() cmd.load_tags() end,         { desc = 'Load tags' })
-map('n', '<leader>cd', ':cd %:p:h<CR>:pwd<CR>',               { desc = 'CD to file dir' })
+map('n', '<leader>cd', '<Cmd>cd %:p:h<Bar>pwd<CR>',            { desc = 'CD to file dir' })
 map('n', '<leader>e',  function() cmd.toggle_statusline() end, { desc = 'Toggle statusline' })
 map('n', '<leader>g',  function() cmd.grep_current() end,      { desc = 'Grep current word' })
 map('x', '<leader>g',  function() cmd.grep_current() end,      { desc = 'Grep selection' })
@@ -41,7 +42,7 @@ map('i', '<A-k>', '<up>')
 -- ============================================================
 -- 撤销 + 自动保存
 -- ============================================================
-map('n', 'u', ':u<CR>:w<CR>', { silent = true })
+map('n', 'u', '<Cmd>undo<Bar>write<CR>', { silent = true })
 
 -- ============================================================
 -- 可视模式
@@ -264,26 +265,21 @@ end)
 
 -- ============================================================
 -- 窗口大小调整
+-- <Cmd> 形式不进入命令行，避免 noice 在底部闪现 cmdline 浮窗
+-- 终端按 Shift+字母 发送的就是大写字节，nvim 也会把 <S-k> 规范化成 K，
+-- 直接写大写字母，避免与 coc 等插件的 K 映射隐式撞键
 -- ============================================================
-map('n', '<S-h>', ':vertical resize -3<CR>')
-map('n', '<S-l>', ':vertical resize +3<CR>')
-map('n', '<S-j>', ':resize +3<CR>')
-map('n', '<S-k>', ':resize -3<CR>')
+map('n', 'H', '<Cmd>vertical resize -5<CR>')
+map('n', 'L', '<Cmd>vertical resize +5<CR>')
+map('n', 'J', '<Cmd>resize +5<CR>')
+map('n', 'K', '<Cmd>resize -5<CR>')
 
 -- ============================================================
 -- 平滑滚动
 -- ============================================================
 local function scroll_lines(lines)
-  local view = vim.fn.winsaveview()
-  local height = vim.fn.winheight(0)
-  local max_top = math.max(1, vim.fn.line('$') - height + 1)
-  view.topline = math.max(1, math.min(view.topline + lines, max_top))
-  if view.lnum < view.topline then
-    view.lnum = view.topline
-  elseif view.lnum > view.topline + height - 1 then
-    view.lnum = view.topline + height - 1
-  end
-  vim.fn.winrestview(view)
+  local key = lines > 0 and '\\<C-e>' or '\\<C-y>'
+  vim.cmd(('execute "normal! %d%s"'):format(math.abs(lines), key))
 end
 map('n', '<C-j>', function() scroll_lines(6) end,  { desc = 'Scroll down' })
 map('n', '<C-k>', function() scroll_lines(-6) end, { desc = 'Scroll up' })
@@ -292,8 +288,13 @@ map('n', '<C-e>', function() scroll_lines(6) end,  { desc = 'Scroll down' })
 -- ============================================================
 -- 剪贴板（写/读 cvbuf.c）
 -- ============================================================
-map('v', '<C-c>', ':w! ~/.vim/cvbuf.c<CR>')
-map('n', '<C-v>', ':r ~/.vim/cvbuf.c<CR>')
+-- <Cmd> 不自动加 '<,'> 范围，visual 写文件需显式行号
+map('v', '<C-c>', function()
+  local s = math.min(vim.fn.line('v'), vim.fn.line('.'))
+  local e = math.max(vim.fn.line('v'), vim.fn.line('.'))
+  vim.cmd(s .. ',' .. e .. 'w! ~/.vim/cvbuf.c')
+end)
+map('n', '<C-v>', '<Cmd>r ~/.vim/cvbuf.c<CR>')
 
 -- ============================================================
 -- Flash 跳转
@@ -304,10 +305,10 @@ map('n', 's', function() require('flash').jump() end,       { desc = 'Flash jump
 map('n', 'S', function() require('flash').treesitter() end, { desc = 'Flash treesitter' })
 
 -- ============================================================
--- 可视模式行移动
+-- 可视模式行移动（Shift+j / Shift+k）
 -- ============================================================
-map('v', '<S-j>', ":m '>+1<CR>gv=gv")
-map('v', '<S-k>', ":m '<-2<CR>gv=gv")
+map('v', 'J', ":m '>+1<CR>gv=gv")
+map('v', 'K', ":m '<-2<CR>gv=gv")
 
 -- ============================================================
 -- 跳转
@@ -319,43 +320,26 @@ map('n', 'F', '[[k2wzz')
 map('n', 'a', '<C-]>')
 
 -- ============================================================
--- 搜索 (显示所在函数名)
+-- 搜索(取光标词/选区 → :Rg 命令,commands.lua 定义)
+-- 用 nvim_cmd 的 args 列表传参,带空格/引号的选区也能干净送达;
+-- 不要用 shellescape 拼 :命令 参数——那是 shell 转义,引号会混进搜索词
 -- ============================================================
-local function rg_with_func(keyword)
-  if not keyword or keyword:match('^%s*$') then return end
-  -- keyword 嵌入 preview 的双引号上下文,先做 shell 转义(防注入);rg 侧由 shellescape 处理
-  local kw = keyword:gsub('([$"`\\])', '\\%0')
-  local preview_cmd = [[sh -c 'file=$(echo "$1" | cut -d: -f1); line=$(echo "$1" | cut -d: -f2); func=$(head -n "$line" "$file" 2>/dev/null | tac | grep -E "^[a-zA-Z_].*\(" | grep -vE ";[ \t]*$" | grep -vE "^(if|else|for|while|switch|return|do)\b" | head -1 | sed "s/^[ \t]*//"); if [ -n "$func" ]; then printf "\033[33m[%s]\033[0m\n\n" "$func"; fi; head -n $((line+10)) "$file" | tail -n $((line+10>20?20:line+10)) | GREP_COLORS="mt=01;31" grep --color=always -E -e "]] .. kw .. [[|^"' _ {}]]
-  local act = require('fzf-lua.actions')
-  require('fzf-lua').fzf_exec(
-    'rg --threads 8 -L --column --line-number --no-heading --color=always --smart-case -g "!tags*" --max-columns=200 -- ' .. vim.fn.shellescape(keyword),
-    {
-      prompt = 'Rg> ',
-      preview = preview_cmd,
-      fzf_opts = {
-        ['--layout'] = 'default',
-        ['--preview-window'] = 'up:40%:border-bottom',
-      },
-      actions = {
-        ['default'] = act.file_edit,      -- 自动解析 file:line:col 跳转
-        ['ctrl-s']  = act.file_split,
-        ['ctrl-v']  = act.file_vsplit,
-        ['ctrl-q']  = act.file_sel_to_qf, -- 多选/全部发 quickfix
-      },
-    }
-  )
+local function run_rg(kw)
+  if kw and kw ~= '' then
+    vim.api.nvim_cmd({ cmd = 'Rg', args = { kw } }, {})
+  end
 end
 
-map('n', 'R', function() rg_with_func(vim.fn.expand('<cword>')) end)
+map('n', 'R', function() run_rg(vim.fn.expand('<cword>')) end)
 map('v', 'R', function()
   vim.cmd('normal! "zy')
-  rg_with_func(vim.fn.getreg('z'):gsub('\n', ''))
+  run_rg(vim.fn.getreg('z'):gsub('\n', ''))
 end)
 
-map('n', '<leader>s', function() rg_with_func(vim.fn.expand('<cword>') .. ' = ') end, { desc = 'Grep cword + " = "' })
+map('n', '<leader>s', function() run_rg(vim.fn.expand('<cword>') .. ' = ') end, { desc = 'Grep cword + " = "' })
 map('v', '<leader>s', function()
   vim.cmd('normal! "zy')
-  rg_with_func(vim.fn.getreg('z'):gsub('\n', '') .. ' = ')
+  run_rg(vim.fn.getreg('z'):gsub('\n', '') .. ' = ')
 end, { desc = 'Grep selection + " = "' })
 
 -- ============================================================
@@ -375,8 +359,6 @@ map('n', '<F2>', '15zl')
 -- ============================================================
 -- z 映射
 -- ============================================================
-map('n', 'z', 'z')
-map('v', 'z', 'z')
 map('v', 'zf', 'zfzf')
 
 -- ============================================================
@@ -412,8 +394,6 @@ map('n', 'q', function() cmd.execute_command() end, { desc = 'Command menu' })
 -- c 前缀快捷键
 -- ============================================================
 map('n', 'c',  '<Nop>')
-map('v', 'c',  '<Nop>')
-map('v', 'C',  '<Nop>')
 map('v', 'C',  '"bp')
 
 -- 可视模式：y/c 复制选中到 b 寄存器（供下面的 C 粘贴）并写入系统剪贴板
@@ -422,11 +402,11 @@ map('v', 'y', '"by<Cmd>lua require("config.commands").copy_to_clipboard(vim.fn.g
 map('v', 'c', '"by<Cmd>lua require("config.commands").copy_to_clipboard(vim.fn.getreg("b"))<CR>')
 
 map('n', 'Y',  've<Plug>OSCYankVisual')
-map('n', 'cc', ':TagbarToggle<CR>',                 { desc = 'Tagbar' })
-map('n', 'cs', ':sp<CR>')
-map('n', 'cv', ':vsp<CR>')
-map('n', 'ca', ':Yazi<CR>',                         { desc = 'Yazi' })
-map('n', 'cq', ':copen 20<CR>')
+map('n', 'cc', '<Cmd>TagbarToggle<CR>',             { desc = 'Tagbar' })
+map('n', 'cs', '<Cmd>sp<CR>')
+map('n', 'cv', '<Cmd>vsp<CR>')
+map('n', 'ca', '<Cmd>Yazi<CR>',                     { desc = 'Yazi' })
+map('n', 'cq', '<Cmd>copen 20<CR>')
 map('n', 'e',  '<Plug>(expand_region_expand)')
 map('n', '0',  '^')
 
@@ -436,8 +416,8 @@ map('n', 'cl', function() cmd.yank_current_func() end, { desc = 'Yank function n
 -- ============================================================
 -- Markdown
 -- ============================================================
-map('n', 'cmp', ':MarkdownToPDF<CR>',  { desc = 'MD → PDF' })
-map('n', 'cmh', ':MarkdownToHTML<CR>', { desc = 'MD → HTML' })
+map('n', 'cmp', '<Cmd>MarkdownToPDF<CR>',  { desc = 'MD → PDF' })
+map('n', 'cmh', '<Cmd>MarkdownToHTML<CR>', { desc = 'MD → HTML' })
 
 -- ============================================================
 -- Alt + 滚轮 水平滚动

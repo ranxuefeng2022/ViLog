@@ -71,10 +71,10 @@ local function start_anim(base, bright)
   anim_active = true
   local step = 0
   anim_timer = vim.uv.new_timer()
-  anim_timer:start(0, 100, function()
+  anim_timer:start(0, 250, function()
     if not anim_active then return end
     step = step + 1
-    -- 正弦波，周期约 1600ms (16 * 100ms)
+    -- 正弦波，周期约 4000ms (16 * 250ms)；250ms 间隔降低常驻重绘开销
     local t = (math.sin(step / 16 * 2 * math.pi) + 1) / 2
     local color = blend(base, bright, t)
     -- nvim_set_hl 必须从主循环调用，uv 回调是 fast context
@@ -187,16 +187,44 @@ function M.git_branch()
 end
 
 -- 搜索计数：仅 hlsearch 激活且有匹配时显示 ?N/M
-function M.search_info()
-  if vim.v.hlsearch ~= 1 then return '' end
+-- searchcount 在大文件上单次可达 50ms；状态栏 %{...} 每次重绘都会求值，
+-- 滚动时会逐帧计算导致卡顿。改为事件驱动 + 去抖缓存，滚动期间零计算。
+local search_cache = ''
+local search_version = 0
+
+local function compute_search()
+  if vim.v.hlsearch ~= 1 then
+    search_cache = ''
+    return
+  end
   local ok, sc = pcall(vim.fn.searchcount, { maxcount = 9999, timeout = 50 })
-  if not ok or not sc or sc.total == 0 then return '' end
+  if not ok or not sc or sc.total == 0 then
+    search_cache = ''
+    return
+  end
   local cur = sc.current or 0
   local total = sc.total or 0
   if sc.incomplete == 1 then
-    return string.format(' %d/>%d', cur, sc.maxcount)
+    search_cache = string.format(' %d/>%d', cur, sc.maxcount)
+  else
+    search_cache = string.format(' %d/%d', cur, total)
   end
-  return string.format(' %d/%d', cur, total)
+end
+
+-- 80ms 去抖：连续滚动/n/N 期间不触发计算，停顿后算一次并刷新状态栏
+local function recompute_search()
+  search_version = search_version + 1
+  local version = search_version
+  vim.defer_fn(function()
+    if version ~= search_version then return end
+    compute_search()
+    vim.cmd('redrawstatus')
+  end, 80)
+end
+
+function M.search_info()
+  if vim.v.hlsearch ~= 1 then return '' end
+  return search_cache
 end
 
 -- ===================================================================
@@ -238,11 +266,20 @@ vim.api.nvim_create_autocmd({ 'BufEnter', 'FocusGained', 'BufReadPost' }, {
   callback = update_git_branch,
 })
 
--- 搜索后刷新（n/N 跳转已通过 CursorMoved 自动触发）
+-- 新搜索：立即重算计数（新搜索）并重绘
 vim.api.nvim_create_autocmd('CmdlineLeave', {
   group = group,
   pattern = { '/', '?' },
-  callback = function() vim.cmd('redrawstatus') end,
+  callback = function()
+    compute_search()
+    vim.cmd('redrawstatus')
+  end,
+})
+
+-- 光标移动/切 buffer 后去抖重算搜索计数（滚动期间不触发计算）
+vim.api.nvim_create_autocmd({ 'CursorMoved', 'BufEnter' }, {
+  group = group,
+  callback = recompute_search,
 })
 
 -- 退出时清理动画
@@ -252,8 +289,5 @@ vim.api.nvim_create_autocmd('VimLeavePre', {
 })
 
 M.update()
-
--- 兼容旧接口
-M.update_git_branch = update_git_branch
 
 return M

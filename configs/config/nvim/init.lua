@@ -27,6 +27,6 @@ vim.opt.fillchars:append({ vert = '│', horiz = '─', verthoriz = '┼', horiz
 -- yank 闪烁确认
 vim.api.nvim_create_autocmd('TextYankPost', {
   callback = function()
-    vim.highlight.on_yank({ higroup = 'IncSearch', timeout = 300 })
+    vim.highlight.on_yank({ higroup = 'IncSearch', timeout = 2 })
   end,
 })

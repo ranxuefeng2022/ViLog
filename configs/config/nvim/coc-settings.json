@@ -1,7 +1,6 @@
 {
   "suggest.noselect": false,
   "suggest.enablePreselect": true,
-  "suggest.completionItemKindLabels": {},
   "suggest.autoTrigger": "always",
   "inlayHint.enable": false,
   "diagnostic.virtualText": false,
@@ -10,5 +9,6 @@
   "hover.floatConfig": { "border": true, "rounded": true },
   "git.enableGutters": false,
   "git.addGBlameToVirtualText": true,
-  "git.virtualTextPrefix": "  "
+  "git.virtualTextPrefix": "  ",
+  "snippets.ultisnips.pythonPrompt": false
 }

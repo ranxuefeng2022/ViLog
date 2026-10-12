@@ -7,10 +7,7 @@ return {
     config = function()
       local anim = require('mini.animate')
       anim.setup({
-        cursor = {
-          enable = true,
-          timing = anim.gen_timing.cubic({ easing = 'out', duration = 40, unit = 'total' }),
-        },
+        cursor = { enable = false },  -- 光标动画：每次移动多帧重绘，是滚动卡顿主因之一
         scroll = { enable = false },
         resize = {
           enable = true,

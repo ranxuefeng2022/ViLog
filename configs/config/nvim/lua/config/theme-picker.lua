@@ -80,15 +80,8 @@ function M.open()
     ['<Down>'] = function() vim.api.nvim_win_set_cursor(win, { math.min(#tp.entries, tp.idx + 1), 0 }) end,
     ['<Up>'] = function() vim.api.nvim_win_set_cursor(win, { math.max(1, tp.idx - 1), 0 }) end,
     ['<CR>'] = function()
+      -- 仅当前会话生效，不持久化到 init.lua
       preview_current()
-      local theme = vim.g.colors_name or ''
-      if theme ~= '' then
-        local vimrc = vim.fn.stdpath('config') .. '/init.lua'
-        vim.fn.system(string.format(
-          "sed -i \"s/^vim.cmd('colorscheme .*/vim.cmd('colorscheme %s')/\" %s",
-          theme, vim.fn.shellescape(vimrc)
-        ))
-      end
       vim.api.nvim_win_close(win, true)
     end,
     q = function()

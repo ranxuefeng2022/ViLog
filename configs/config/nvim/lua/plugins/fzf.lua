@@ -37,7 +37,8 @@ return {
           cmd = 'fd --type f --hidden --follow --exclude .git',
         },
         grep = {
-          rg_opts = '--threads 8 -L --column --line-number --no-heading --color=always --smart-case',
+          rg_opts = '--threads 8 -L --column --line-number --no-heading --color=always --smart-case -g "!tags*"',
+          filename_first = true,  -- 文件名前置到行首并单独高亮,便于扫读
         },
         lsp = {
           symbols = {

@@ -22,18 +22,16 @@ lua/plugins/
   editor.lua              # mini.animate, flash.nvim
   fzf.lua                 # fzf + fzf-lua + fzf.vim
   git.lua                 # gitsigns, neogit, diffview, vim-fugitive, gv.vim, blame.nvim
-  lsp.lua                 # coc.nvim (release) + LuaSnip  [file named lsp.lua but uses coc, not lspconfig]
+  lsp.lua                 # coc.nvim (release)  [file named lsp.lua but uses coc, not lspconfig]
   nav.lua                 # tagbar, vim-signature
   terminal.lua            # toggleterm, yazi.nvim
   themes.lua              # tokyonight, catppuccin, kanagawa
   treesitter.lua          # nvim-treesitter, render-markdown, vim-markdown
   ui.lua                  # noice, notify, dressing, nui, web-devicons
   util.lua                # plenary, asyncrun
-lua/snippets/             # LuaSnip snippets loaded via from_lua: c.lua (kernel-oriented), cpp.lua, lua.lua
 after/
   syntax/c.vim            # Custom C syntax: function names, ANSI C library funcs, booleans (POSIX optional)
   syntax/cpp.vim          # runtime! after/syntax/c.vim (reuses C extensions)
-  ftplugin/cpp.vim        # runtime! after/syntax/c.vim
 coc-settings.json         # coc.nvim config: coc-sh, coc-git (clangd removed)
 ```
 
@@ -43,7 +41,7 @@ coc-settings.json         # coc.nvim config: coc-sh, coc-git (clangd removed)
 - **Tab style**: tabstop=4, noexpandtab (kernel/Linux C convention)
 - **Line numbers**: relative only (`number=false`, `relativenumber=true`); current line shown via `CursorLineNr`
 - **Plugin manager**: lazy.nvim with `concurrency=2`, timeout 600s (34 plugins in lazy-lock.json)
-- **Completion**: **coc.nvim** (Tab/CR/C-j/C-k navigation) + LuaSnip snippets
+- **Completion**: **coc.nvim** (Tab/CR/C-j/C-k navigation)
 - **LSP**: **coc.nvim** with coc-sh, coc-git (clangd removed — was causing `fatal_too_many_errors`)
 - **Search**: fzf-lua + fzf.vim + fd + ripgrep (8 threads)
 - **Git**: gitsigns + neogit + diffview + fugitive + gv + blame
@@ -69,13 +67,12 @@ Then, after the requires: `colorscheme tokyonight-night` → `_G.apply_highlight
 
 ## C/C++ Specific
 
-- `commands.lua` defines Vimscript `UpdateCurrentFunc()` (Lua wrapper `M.update_current_func()`); tracks nearest function name (scans up to 2000 lines up, with `b:func_range` caching via `searchpairpos`)
-- Updated on `CursorHold`/`CursorHoldI` (300ms debounce per `updatetime`); result in `b:current_func`, shown in statusline
+- `commands.lua` defines Vimscript `UpdateCurrentFunc()`; tracks nearest function name (backward `search()` scan up to 2000 lines, with `b:func_range` caching via `searchpair` from the body's `{`)
+- Updated on `CursorHold` (300ms per `updatetime`); result in `b:current_func`, shown in statusline
 - `cl` yanks current function name via OSC52
 - Custom syntax in `after/syntax/c.vim`: function names (`cCustomFunc`), full ANSI C library functions (`cAnsiFunction`), `cAnsiName`, booleans; POSIX functions gated on `g:cpp_posix_standard`
-- Tree-sitter enabled with `additional_vim_regex_highlighting` empty (TS only for c/cpp; regex syntax still active via after/syntax)
-- LuaSnip C snippets (`lua/snippets/c.lua`): `modinit`, `platdrv`, `fops`, `ofmatch`, `mutex`, `spinlock`, `deverr`, `goterr`, `cof`, etc. (kernel/embedded oriented)
-- Tags: `BufRead` auto-sets the `tags` option (`load_tags`, prefers `tags_linux` then `tags`); generation is manual via `ct`/panel `H` (`generate_tags`: fd list → chunk by nproc → parallel ctags → `sort -m` merge, with progress notifications)
+- Tree-sitter started only for markdown (`FileType` autocmd calls `vim.treesitter.start`, for render-markdown); C/C++ keep regex syntax via after/syntax, no TS
+- Tags: `BufRead` auto-sets the `tags` option (`load_tags` → `./tags,tags;` with upward search); generation is manual via panel `H` (`generate_tags`: fd list → chunk by `cpu_info` → parallel ctags → `sort -m` merge + awk header fix, no per-directory branching)
 - clangd/coc-clangd removed (caused `fatal_too_many_errors` on code without compile_commands.json); C/C++ navigation relies on tags + Tree-sitter + custom syntax, not an LSP
 
 ## Editing Philosophy

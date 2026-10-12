@@ -42,7 +42,7 @@ vim.o.relativenumber = true
 vim.o.cursorline = true
 vim.o.cursorlineopt = 'number'
 vim.o.numberwidth = 2
-vim.o.signcolumn = 'auto'
+vim.o.signcolumn = 'yes:1'
 vim.o.showcmd = true
 vim.o.ruler = false
 vim.o.updatetime = 300
@@ -51,7 +51,7 @@ vim.o.timeoutlen = 300
 vim.o.splitbelow = true
 vim.o.splitright = true
 vim.o.showmatch = true
-vim.o.matchtime = 10
+vim.o.matchtime = 2
 vim.o.foldenable = true
 vim.o.foldmethod = 'manual'
 vim.o.foldcolumn = '0'
@@ -61,8 +61,7 @@ vim.o.synmaxcol = 500
 -- Tags 性能优化
 vim.o.tagbsearch = true   -- 二分查找（默认开启，显式确保）
 vim.o.tagrelative = true  -- tags 文件中的路径相对于文件本身
-vim.o.tagcase = 'followscs' -- 搜索跟随 smartcase
-vim.opt.fillchars = { vert = '│', horiz = '─' }
+vim.o.tagcase = 'match' -- 大小写敏感匹配:tag 查找才能走二分(followscs+ignorecase 会退化为全文件线性扫描)
 
 -- 补全
 vim.o.completeopt = 'menu,menuone,noselect'
@@ -99,32 +98,22 @@ vim.g.tagbar_singleclick = 1
 vim.g.tagbar_autoclose = 0
 vim.g.tagbar_width = 70
 
--- vim-move
-vim.g.move_key_modifier_visualmode = 'S'
-
--- 括号匹配
-vim.g.matchparen_timeout = 300
-vim.g.matchparen_insert_timeout = 300
-
--- c.vim (禁用 Ctrl-J 切换 .c/.h)
-vim.g.C_Ctrl_j = 'off'
-
 -- oscyank
 vim.g.osc52_trim_newline = 1
 vim.g.oscyank_term = 'tmux'
 
--- python
-vim.g.python3_host_prog = '/opt/homebrew/bin/python3'
+-- python3 provider:固定指向装有 pynvim 的 3.13
+-- (brew 装依赖时会连带升级并把 /opt/homebrew/bin/python3 软链指到新版本,
+--  新解释器没有 pynvim 就会报 "Failed to load python3 host")
+vim.g.python3_host_prog = '/opt/homebrew/opt/python@3.13/bin/python3'
 
 -- 内部状态
 vim.g.param1 = 0
-vim.g.initial_directory_set = 0
 
--- fzf 环境变量 + fzf.vim 预览窗口
+-- fzf 环境变量 + fzf.vim 窗口布局（预览窗口由 plugins/fzf.lua 统一设置）
 vim.env.FZF_DEFAULT_OPTS = '--height 100% --layout=default'
 vim.env.FZF_DEFAULT_COMMAND = 'fd --type f --type l --hidden --follow --exclude .git'
 vim.g.fzf_layout = { window = { width = 1.0, height = 1.0 } }
-vim.g.fzf_preview_window = { 'right:50%', 'ctrl-/' }
 
 -- leader 键
 vim.g.mapleader = ' '

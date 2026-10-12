@@ -3,10 +3,8 @@
 return {
   {
     'preservim/tagbar',
+    -- cc 键位在 config/keymaps.lua 中定义，这里只保留 cmd 懒加载入口
     cmd = 'TagbarToggle',
-    keys = {
-      { 'cc', '<cmd>TagbarToggle<CR>', mode = 'n', desc = 'Toggle tagbar' },
-    },
   },
   {
     'kshenoy/vim-signature',

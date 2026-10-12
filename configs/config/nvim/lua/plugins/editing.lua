@@ -79,7 +79,7 @@ return {
         },
         highlight = {
           on_put = true,
-          on_yank = true,
+          on_yank = false,  -- yank 闪烁由 init.lua 的 TextYankPost 提供，避免双高亮
           timer = 200,
         },
       })

@@ -58,7 +58,9 @@ return {
           map('n', '<leader>hb', function() gs.blame_line({ full = true }) end, { desc = 'Blame line' })
           map('n', '<leader>hd', gs.diffthis,          { desc = 'Diff this' })
           map('n', '<leader>hD', function() gs.diffthis('~') end, { desc = 'Diff this ~' })
-          map('n', '<leader>td', gs.toggle_deleted,    { desc = 'Toggle deleted' })
+          -- 原 <leader>td 会让 <leader>t(终端)每次多等 timeoutlen,
+          -- 挪进 h 键组,terminal 的 <leader>t 变为即按即开
+          map('n', '<leader>ht', gs.toggle_deleted,    { desc = 'Toggle deleted' })
         end,
       })
     end,
