@@ -12,6 +12,9 @@ vim.g.vim_markdown_toc_autofit = 1
 
 -- Neovim 专属
 vim.o.cmdheight = 0
+-- 自定义高亮（statusline/gitsigns/主题覆盖）全是 #hex 真彩色；
+-- 不开时 nvim 把 RGB 近似折算成 256 色，精心调的颜色有偏差
+vim.o.termguicolors = true
 
 -- 编辑行为
 vim.o.tabstop = 4

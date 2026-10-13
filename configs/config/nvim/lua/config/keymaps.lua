@@ -132,9 +132,6 @@ map('n', ',', function()
     }},
     { title = 'Misc', cmds = {
       { 'J', 'ThemePicker',  '主题选择',       'ThemePicker' },
-      { 'K', 'KwHighlight',  '关键词着色',     'lua require("config.keyword-highlight").pick()' },
-      { 'L', 'KwClear',      '清除高亮',       'lua require("config.keyword-highlight").clear_all()' },
-      { 'M', 'KwUndo',       '撤销着色',       'lua require("config.keyword-highlight").undo()' },
       { 'O', 'FuncSearch',   '函数内搜索',     function() cmd.search_in_current_func() end },
       { 't', 'Terminal',     '打开终端',       function() vim.cmd('ToggleTerm') end },
       { 'H', 'GenTags',      '生成tags',       function() cmd.generate_tags() end },
@@ -360,11 +357,6 @@ map('n', '<F2>', '15zl')
 -- z 映射
 -- ============================================================
 map('v', 'zf', 'zfzf')
-
--- ============================================================
--- 删除 visual match
--- ============================================================
-map('v', '<leader>dm', function() cmd.delete_visual_match() end)
 
 -- ============================================================
 -- 插入模式片段

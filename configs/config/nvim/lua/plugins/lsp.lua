@@ -74,10 +74,15 @@ return {
       bufmap('n', '[d', '<Plug>(coc-diagnostic-prev)', 'Previous diagnostic')
       bufmap('n', ']d', '<Plug>(coc-diagnostic-next)', 'Next diagnostic')
 
-      -- Tab / S-Tab / CR 补全导航
+      -- Tab / S-Tab / CR 补全导航;片段内 Tab/S-Tab 跳占位符(菜单可见时优先 coc)
       vim.keymap.set('i', '<Tab>', function()
         if vim.fn['coc#pum#visible']() == 1 then
           return vim.fn['coc#pum#next'](1)
+        end
+        local ok, ls = pcall(require, 'luasnip')
+        if ok and ls.jumpable(1) then
+          ls.jump(1)
+          return ''
         end
         return vim.api.nvim_replace_termcodes('<Tab>', true, true, true)
       end, { expr = true, silent = true })
@@ -85,6 +90,11 @@ return {
       vim.keymap.set('i', '<S-Tab>', function()
         if vim.fn['coc#pum#visible']() == 1 then
           return vim.fn['coc#pum#prev'](1)
+        end
+        local ok, ls = pcall(require, 'luasnip')
+        if ok and ls.jumpable(-1) then
+          ls.jump(-1)
+          return ''
         end
         return vim.api.nvim_replace_termcodes('<S-Tab>', true, true, true)
       end, { expr = true, silent = true })

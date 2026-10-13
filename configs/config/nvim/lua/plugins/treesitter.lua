@@ -9,7 +9,8 @@ return {
     'nvim-treesitter/nvim-treesitter',
     branch = 'main',
     build = ':TSUpdate',
-    event = { 'BufReadPre', 'BufNewFile' },
+    -- 只为 markdown 服务，按 ft 懒加载；C/C++ 打开时完全不加载本插件
+    ft = { 'markdown' },
     config = function()
       local nt = require('nvim-treesitter')
 
@@ -30,6 +31,11 @@ return {
           pcall(vim.treesitter.start, args.buf)
         end,
       })
+      -- ft 懒加载触发时，当前 buffer 的 FileType 事件先于上面的 autocmd 注册，
+      -- 直接补启动一次（若 lazy 重放了事件导致二次 start，pcall 兜底）
+      if vim.bo.filetype == 'markdown' then
+        pcall(vim.treesitter.start, 0)
+      end
     end,
   },
   {

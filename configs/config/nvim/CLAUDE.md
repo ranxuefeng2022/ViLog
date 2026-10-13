@@ -16,7 +16,7 @@ lua/config/
   theme-picker.lua        # Interactive theme selector with live preview (11 themes)
   match-hl.lua            # Bracket/quote match highlight (replaces built-in matchparen)
   indent-guide.lua        # Minimal indent viz via listchars (subtle style)
-  keyword-highlight.lua   # Color-picker word highlighting (20 colors)
+  keyword-highlight.lua   # 256-color XTerm palette picker (10 group-rows a-j × 26 cells a-z, blank lines between rows; cells are two-letter labels fg-rendered via KwCell groups, no underline; default selection aa; selected cell is the sole bg chip + only underline via KwHLCur, gaps preserved; card styling: KwPanel bg #1a1b26 + KwBorder #565f89 via winhl, plain ' Highlight ' title, dimmed separator & preview prefix; first key a-j jumps to group's first color + live preview, Backspace undoes it (restores prior cursor), Enter applies it; second key a-z (no timeout) jumps and applies after 150ms flash; u/x commands only as first key; q closes (Esc does not); keys normalized via norm_key since getcharstr(0) returns raw K_SPECIAL bytes or numbers; getcharstr(0) poll + vim.wait pump + forced :redraw; re-color replaces; synced to all tab windows via WinNew/WinEnter replay)
 lua/plugins/
   editing.lua             # vim-visual-multi, vim-move, vim-expand-region, vim-oscyank, yanky.nvim
   editor.lua              # mini.animate, flash.nvim
@@ -29,6 +29,8 @@ lua/plugins/
   treesitter.lua          # nvim-treesitter, render-markdown, vim-markdown
   ui.lua                  # noice, notify, dressing, nui, web-devicons
   util.lua                # plenary, asyncrun
+  snippets.lua            # LuaSnip (InsertEnter lazy) + lua/snippets/ loaders
+lua/snippets/            # Lua-format snippets: c (kernel templates modinit/platdrv/fops...), cpp, lua
 after/
   syntax/c.vim            # Custom C syntax: function names, ANSI C library funcs, booleans (POSIX optional)
   syntax/cpp.vim          # runtime! after/syntax/c.vim (reuses C extensions)
@@ -41,14 +43,14 @@ coc-settings.json         # coc.nvim config: coc-sh, coc-git (clangd removed)
 - **Tab style**: tabstop=4, noexpandtab (kernel/Linux C convention)
 - **Line numbers**: relative only (`number=false`, `relativenumber=true`); current line shown via `CursorLineNr`
 - **Plugin manager**: lazy.nvim with `concurrency=2`, timeout 600s (34 plugins in lazy-lock.json)
-- **Completion**: **coc.nvim** (Tab/CR/C-j/C-k navigation)
+- **Completion**: **coc.nvim** (Tab/CR/C-j/C-k navigation); **LuaSnip** snippets (`<C-l>` expand/jump, Tab/S-Tab jump placeholders when pum not visible)
 - **LSP**: **coc.nvim** with coc-sh, coc-git (clangd removed — was causing `fatal_too_many_errors`)
 - **Search**: fzf-lua + fzf.vim + fd + ripgrep (8 threads)
 - **Git**: gitsigns + neogit + diffview + fugitive + gv + blame
 - **Terminal**: toggleterm (floating, 40%), yazi file manager
 - **Encodings**: UTF-8 + Chinese (fileencodings: utf-8,ucs-bom,gb18030,latin1)
 - **Clipboard**: OSC52; `copy_to_clipboard()` dual-writes (+register + OSC52)
-- **matchparen**: disabled (`loaded_matchparen=1`), replaced by `match-hl.lua`
+- **matchparen**: disabled (`loaded_matchparen=1`), replaced by `match-hl.lua`; **matchit** enabled — `%`/`g%` jump `#if/#ifdef/#else/#elif/#endif` (b:match_words from built-in ftplugin/c.vim)
 
 ## Load Order
 
@@ -67,7 +69,7 @@ Then, after the requires: `colorscheme tokyonight-night` → `_G.apply_highlight
 
 ## C/C++ Specific
 
-- `commands.lua` defines Vimscript `UpdateCurrentFunc()`; tracks nearest function name (backward `search()` scan up to 2000 lines, with `b:func_range` caching via `searchpair` from the body's `{`)
+- `commands.lua` defines Vimscript `UpdateCurrentFunc()`; **block-structural analysis, not line-regex** — walks outward from the cursor via `searchpair('{','','}','bnW')` (syntax-aware: braces in comments/strings are skipped), and accepts a block as a function body when its `{` is preceded by a parameter-list `)` with only whitespace / K&R declarations / `__attr` annotations in between (`= {` initializers, `({` statement expressions, and `if/for/while/switch/do` blocks are rejected); the name is the identifier before the matching `(`. Handles pointer returns, split multi-line signatures (type on its own line), `__must_check`/`__acquires` suffixes, K&R definitions, and arbitrary body content (`return ERR_PTR(...)` can't fool it). Fallbacks: enclosing `(` when the cursor is inside the parameter list; nearest function above for file-scope dead zones (EXPORT lines, enums, initializers). `b:func_range` = [signature start (absorbed upward), closing brace line], used as a fast path and by `search_in_current_func` (panel `O`)
 - Updated on `CursorHold` (300ms per `updatetime`); result in `b:current_func`, shown in statusline
 - `cl` yanks current function name via OSC52
 - Custom syntax in `after/syntax/c.vim`: function names (`cCustomFunc`), full ANSI C library functions (`cAnsiFunction`), `cAnsiName`, booleans; POSIX functions gated on `g:cpp_posix_standard`

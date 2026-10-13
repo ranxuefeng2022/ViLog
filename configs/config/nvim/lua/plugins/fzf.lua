@@ -20,8 +20,20 @@ return {
       require('fzf-lua').setup({
         fzf_opts = {
           ['--layout'] = 'default',
-          ['--preview-window'] = 'up:30%',
           ['--tiebreak'] = 'length,begin,index',
+        },
+        -- 预览窗口固定显示:fzf-lua 默认在面板内绑 F4=toggle-preview(误按会让
+        -- 预览消失)、F2=toggle-fullscreen(F1/F2 在面板外是水平滚动,肌肉记忆
+        -- 容易误触)。设 false 解绑;预览位置由 winopts.preview 控制
+        keymap = {
+          builtin = {
+            ['<F2>'] = false,
+            ['<F4>'] = false,
+          },
+          fzf = {
+            ['f2'] = false,
+            ['f4'] = false,
+          },
         },
         winopts = {
           height = 1,

@@ -3,15 +3,114 @@
 local M = {}
 
 -- 追踪当前光标所在的 C/C++ 函数名 (Vimscript 实现，确保 b:current_func 可被 statusline %{...} 读取)
--- 优化：先尝试用 searchpairpos('{','',b:nr,'bWn') 找到函数体起点，再做小范围正则扫描
+-- 算法：块结构分析，不用正则"猜"签名行——由内向外找包裹光标的最近未配对 {，
+-- 验证它是否函数体开头；不是(if/for/初始化/枚举...)就跳到外层块继续，最多 60 层。
+-- 因此函数体内写什么(return ERR_PTR(...)、宏、goto 标签)都不影响结果。
 vim.cmd([[
+" 光标位于 ( 上：取其左侧的函数名标识符，'' 表示不像函数定义
+function! UCFWordBefore()
+    if search('\v\w+', 'bW', max([1, line('.') - 3])) == 0
+        return ''
+    endif
+    let w = expand('<cword>')
+    if w ==# '' || index(['if','for','while','switch','do','else','return','sizeof','case'], w) != -1
+        return ''
+    endif
+    " 名字前是 = . -> & 一类取值上下文 → 表达式调用而非定义
+    if col('.') > 1 && getline('.')[col('.') - 2] =~# '[=.>&]'
+        return ''
+    endif
+    return w
+endfunction
+
+" 判断 open(=[lnum,col]) 处的 { 是否函数体开头；是则返回函数名，否则 ''
+function! UCFBlockName(open, skip)
+    call cursor(a:open[0], a:open[1])
+
+    " 1) { 前最后一个非空白字符
+    let before = strpart(getline(a:open[0]), 0, a:open[1] - 1)
+    if before =~# '\S'
+        let p = matchstrpos(before, '\S\ze\s*$')
+        let tl = a:open[0]
+        let tc = p[1] + 1
+    else
+        call cursor(a:open[0], 1)
+        if search('\v\S', 'bW') == 0
+            return ''
+        endif
+        let tl = line('.')
+        let tc = col('.')
+    endif
+    let ch = getline(tl)[tc - 1]
+
+    " ({ GNU 语句表达式(宏里常见) → 非函数体
+    if ch ==# '('
+        return ''
+    endif
+
+    " 2) 定位参数表的右括号 )
+    if ch ==# ')'
+        call cursor(tl, tc)
+    else
+        " { 前是标识符或 ; ：K&R 参数声明、__must_check 一类后缀注解，
+        " 或 enum/struct/= 等非函数块。向上 10 行内找 )
+        call cursor(tl, tc)
+        if search('\v\)', 'bW', max([1, tl - 10])) == 0
+            return ''
+        endif
+        " ) 后紧跟 ; → 独立调用语句 foo(x); → 非函数体
+        if getline('.')[col('.')] ==# ';'
+            return ''
+        endif
+        " ) 到 { 之间的文本：剥掉注释后不允许 =(排除 = { 初始化)；
+        " 无 ; 时(非 K&R)只允许 __attr 注解标识符(排除 do {、enum x {)
+        let rl = line('.')
+        let rc = col('.')
+        let seg = strpart(getline(rl), rc)
+        if a:open[0] > rl
+            let seg = seg . "\n" . join(getline(rl + 1, a:open[0] - 1), "\n")
+            let seg = seg . "\n" . strpart(getline(a:open[0]), 0, a:open[1] - 1)
+        endif
+        let seg = substitute(seg, '/\*\_.\{-}\*/', '', 'g')
+        let seg = substitute(seg, '//.*', '', 'g')
+        if seg =~# '='
+            return ''
+        endif
+        if seg !~# ';'
+            let flat = substitute(seg, '\_s\+', '', 'g')
+            if flat !~# '^__\w\+\%(,__\w\+\)*$'
+                return ''
+            endif
+        endif
+    endif
+
+    " 3) ) 配对回 ( 取名字；__acquires/__releases 注解在中间时跳过一次
+    for _ in range(2)
+        let pp = searchpairpos('(', '', ')', 'bnW', a:skip, max([1, line('.') - 3000]))
+        if pp == [0, 0]
+            return ''
+        endif
+        call cursor(pp[0], pp[1])
+        let w = UCFWordBefore()
+        if w ==# '__acquires' || w ==# '__releases'
+            " 注解宏的参数不是函数参数表：找它前面真正的 )
+            if search('\v\)', 'bW', max([1, line('.') - 10])) == 0
+                return ''
+            endif
+            continue
+        endif
+        return w
+    endfor
+    return ''
+endfunction
+
 function! UpdateCurrentFunc()
     let lnum = line('.')
     if exists('b:current_func_lnum') && b:current_func_lnum == lnum
         return
     endif
 
-    " 快速路径：若已记录当前函数起点+终点，且光标仍在范围内，直接返回
+    " 快速路径：光标仍在缓存的函数范围(含签名行)内
     if exists('b:func_range') && !empty(b:func_range)
         \ && lnum >= b:func_range[0] && lnum <= b:func_range[1]
         \ && exists('b:current_func_lnum')
@@ -19,51 +118,116 @@ function! UpdateCurrentFunc()
         return
     endif
 
-    " 用 search() 向上找函数签名行：C 实现的正则引擎扫到即停，
-    " 替代原先最多 2000 次 getline+match 的 VimL 逐行循环（快一个数量级）
-    let start = max([1, lnum - 2000])
-    let fname = ''
-    let reserved = ['if', 'else', 'elseif', 'return', 'for', 'while', 'switch']
-    let func_line = 0
+    " skip 同时排除 cppout(#if 0 死代码区,文本上只开不闭的 { 会把配对推过
+    " 函数尾,范围吞进下一个函数)与 define(#define 宏体里的 {})
+    let skip = 'synIDattr(synID(line("."),col("."),1),"name") =~? "string\\|comment\\|character\\|cppout\\|define"'
+    let stop = max([1, lnum - 3000])
     let save_view = winsaveview()
-    " 从行尾起回搜，保证光标所在行本身也能被匹配（与原 range(lnum, start, -1) 一致）
-    call cursor(lnum, col('$'))
-    while search('\v^\s*(\w+\s+)+\w+\s*\(', 'bW', start) > 0
-        let line_text = getline('.')
-        if line_text =~# '^\s*\(if\|else\>\)'
-            continue
+    let ocol = col('.')
+    " 光标恰在 { 或 ( 上时，后退搜索不匹配光标自身：
+    " 搜索起点右移一列；{ 在行尾则移到下一行行首
+    let slnum = lnum
+    let scol = ocol
+    if getline(slnum)[scol - 1] =~# '[{(]'
+        if scol >= len(getline(slnum))
+            let slnum += 1
+            let scol = 1
+        else
+            let scol += 1
         endif
-        let fname = matchstr(line_text, '\v\w+\ze\s*\(')
-        if index(reserved, fname) != -1
-            continue
+        call cursor(slnum, scol)
+    endif
+    let fname = ''
+    let frange = []
+
+    for _ in range(60)
+        " 包裹光标的最近未配对 {（searchpair 自带嵌套配对，且跳过注释/字符串）
+        let open = searchpairpos('{', '', '}', 'bnW', skip, stop)
+        if open == [0, 0]
+            break
         endif
-        let func_line = line('.')
-        break
-    endwhile
+
+        let w = UCFBlockName(open, skip)
+        if w !=# ''
+            let fname = w
+            " 函数体结束行（searchpair 从 { 上取配对 }）
+            " 注意: 嵌套下标后紧跟右括号的写法会产生双右方括号序列,
+            " 会终止外层 Lua 长字符串,故先取到临时变量再组列表
+            call cursor(open[0], open[1])
+            let bend = searchpairpos('{', '', '}', 'nW', skip)
+            let bl = open[0]
+            let el = bend != [0, 0] ? bend[0] : bl + 500
+            let frange = [bl, el]
+            " 范围向上吸收签名行(跨行返回类型/参数表)：
+            " 遇空行、# 行、; { } 结尾的行即停，最多 8 行
+            let ext = 0
+            while ext < 8
+                let pl = open[0] - 1 - ext
+                if pl < 1
+                    break
+                endif
+                let t = getline(pl)
+                if t =~# '^\s*$' || t =~# '^\s*#' || t =~# '[;{}]\s*$'
+                    break
+                endif
+                let ext += 1
+            endwhile
+            let frange[0] -= ext
+            break
+        endif
+
+        " 非函数体 → 光标移到该 { 之前，继续上溯外层块
+        if open[1] > 1
+            call cursor(open[0], open[1] - 1)
+        elseif open[0] > 1
+            call cursor(open[0] - 1, 2000000)
+        else
+            break
+        endif
+    endfor
+
+    " 兜底：光标还在签名的参数括号内(尚无包围它的 {)时，直接取包裹 ( 前的名字
+    if fname == ''
+        call cursor(slnum, scol)
+        let pp = searchpairpos('(', '', ')', 'bnW', skip, stop)
+        if pp != [0, 0]
+            call cursor(pp[0], pp[1])
+            let fname = UCFWordBefore()
+        endif
+    endif
+
+    " 二次兜底：光标在函数之外的"死区"(EXPORT 行/枚举/初始化器/文件作用域)时，
+    " 与旧正则版行为一致——显示上方最近函数的名字。逐个检查上方 { 是否函数体。
+    " 从光标行行尾起搜：同行光标右侧的 { (void fast(void) { 行首) 也能覆盖
+    if fname == ''
+        call cursor(slnum, 2000000)
+        for _ in range(30)
+            if search('\v\{', 'bW') == 0
+                break
+            endif
+            let ob = [line('.'), col('.')]
+            let w = UCFBlockName(ob, skip)
+            if w !=# ''
+                let fname = w
+                let frange = []   " 死区不缓存范围,避免误吞下一个函数
+                break
+            endif
+            if ob[1] > 1
+                call cursor(ob[0], ob[1] - 1)
+            elseif ob[0] > 1
+                call cursor(ob[0] - 1, 2000000)
+            else
+                break
+            endif
+        endfor
+    endif
+
     if !exists('b:current_func') || b:current_func !=# fname
         let b:current_func = fname
         redrawstatus
     endif
-
-    " 缓存函数体范围 [start_line, end_line]，下次光标若在范围内即跳过扫描
-    " searchpair 需光标位于开括号上/内；直接从签名行起调会把函数体自身的
-    " { 计为嵌套层导致配对失败（旧实现因此一直走 +500 兜底），先跳到 {
-    if func_line > 0
-        call cursor(func_line, 1)
-        let end_line = 0
-        if search('{', 'W') > 0
-            let end_line = searchpair('{', '', '}', 'nW')
-        endif
-        if end_line > 0
-            let b:func_range = [func_line, end_line]
-        else
-            let b:func_range = [func_line, func_line + 500]
-        endif
-    else
-        let b:func_range = []
-    endif
+    let b:func_range = frange
     call winrestview(save_view)
-
     let b:current_func_lnum = lnum
 endfunction
 ]])
@@ -90,72 +254,6 @@ function M.copy_to_clipboard(text)
     local seq = string.format('\x1b]52;c;%s\x07', vim.base64.encode(text))
     vim.api.nvim_chan_send(vim.v.stderr, seq)
   end)
-end
-
--- 删除 visual match
-function M.delete_visual_match()
-  local line_start = vim.fn.getpos("'<")[2]
-  local col_start = vim.fn.getpos("'<")[3]
-  local line_end = vim.fn.getpos("'>")[2]
-  local col_end = vim.fn.getpos("'>")[3]
-  local lines = vim.fn.getline(line_start, line_end)
-  if #lines == 0 then return end
-  lines[#lines] = lines[#lines]:sub(1, col_end)
-  lines[1] = lines[1]:sub(col_start)
-  local selected = table.concat(lines, '\n')
-  for _, match in ipairs(vim.fn.getmatches()) do
-    if match.pattern == selected then
-      vim.fn.matchdelete(match.id)
-      print('Deleted match ID: ' .. match.id)
-      return
-    end
-  end
-  print('No match found for selected text.')
-end
-
--- XTerm 256 色高亮
-local xterm_colors = nil
-
-local function ensure_xterm_colors()
-  if xterm_colors then return end
-  xterm_colors = {
-    '#000000','#800000','#008000','#808000','#000080','#800080','#008080','#c0c0c0',
-    '#808080','#ff0000','#00ff00','#ffff00','#0000ff','#ff00ff','#00ffff','#ffffff',
-  }
-  local cube = { 0, 95, 135, 175, 215, 255 }
-  for r = 0, 5 do
-    for g = 0, 5 do
-      for b = 0, 5 do
-        xterm_colors[#xterm_colors + 1] = string.format('#%02x%02x%02x', cube[r + 1], cube[g + 1], cube[b + 1])
-      end
-    end
-  end
-  for i = 0, 23 do
-    local v = 8 + i * 10
-    xterm_colors[#xterm_colors + 1] = string.format('#%02x%02x%02x', v, v, v)
-  end
-end
-
-function M.highlight_with_color_code(color_code, opts)
-  opts = opts or {}
-  ensure_xterm_colors()
-  color_code = tonumber(color_code)
-  if not color_code or color_code < 0 or color_code >= #xterm_colors then
-    vim.api.nvim_err_writeln('Invalid color code: ' .. tostring(color_code))
-    return
-  end
-  local start_line = opts.firstline or vim.fn.line("'<")
-  local end_line = opts.lastline or vim.fn.line("'>")
-  local start_col = vim.fn.col("'<") - 1
-  local end_col = vim.fn.col("'>") - 1
-  local text = vim.fn.getline(start_line):sub(start_col + 1, end_col + 1)
-  local hl_group = 'MyColor' .. color_code
-  if vim.o.termguicolors then
-    vim.cmd('highlight ' .. hl_group .. ' guibg=' .. xterm_colors[color_code + 1])
-  else
-    vim.cmd('highlight ' .. hl_group .. ' ctermbg=' .. color_code)
-  end
-  vim.fn.matchadd(hl_group, text)
 end
 
 -- Tags
@@ -446,8 +544,8 @@ function M.buffer_lines()
   )
 end
 
+-- panel O:函数体内搜索(直接复用 UpdateCurrentFunc 维护的 b:func_range,不再自行扫签名)
 function M.search_in_current_func()
-  -- 确保 current_func 已更新
   vim.fn.UpdateCurrentFunc()
   local func_name = vim.b.current_func
   if not func_name or func_name == '' then
@@ -455,75 +553,43 @@ function M.search_in_current_func()
     return
   end
 
-  local cursor = vim.api.nvim_win_get_cursor(0)
-
-  -- 从光标位置向上搜索函数签名行
-  local saved = vim.fn.getcurpos()
-  vim.fn.cursor(cursor[1], #vim.fn.getline(cursor[1]))
-  local sig_line = nil
-  while true do
-    if vim.fn.search([[\v^\s*(\w+\s+)+\w+\s*\(]], 'bW') == 0 then break end
-    local lt = vim.fn.getline('.')
-    if not lt:find('^%s*#') and not lt:find(';%s*$') and lt:find(func_name .. '%s*%(') then
-      sig_line = vim.fn.line('.')
-      break
-    end
+  local range = vim.b.func_range
+  -- range[2] == range[1] 合法:单行函数 void f(void) { ... } 的范围就是 [l, l]
+  if not range or #range ~= 2 or range[2] < range[1] then
+    vim.notify('Cannot resolve function range', vim.log.levels.WARN)
+    return
   end
-  vim.fn.setpos('.', saved)
 
-  if not sig_line then
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  if cursor[1] < range[1] or cursor[1] > range[2] then
     vim.notify('Not inside a function', vim.log.levels.WARN)
     return
   end
 
-  -- 在签名行或往下最多 30 行找 {，利用 Vim 的 % 跳转到匹配的 }
-  for scan = sig_line, math.min(sig_line + 30, vim.fn.line('$')) do
-    local text = vim.fn.getline(scan)
-    local col = text:find('{', 1, true)
-    if col then
-      vim.fn.cursor(scan, col)
-      vim.cmd('normal! %')
-      local end_line = vim.fn.line('.')
-
-      -- 恢复光标
-      vim.api.nvim_win_set_cursor(0, cursor)
-
-      local start_0 = sig_line - 1
-      local end_0 = end_line - 1
-
-      if start_0 > end_0 or cursor[1] - 1 < start_0 or cursor[1] - 1 > end_0 then
-        vim.notify('Function range does not contain cursor', vim.log.levels.WARN)
-        return
-      end
-
-      local lines = vim.api.nvim_buf_get_lines(0, start_0, end_0 + 1, false)
-      if #lines == 0 then
-        vim.notify('Empty function body', vim.log.levels.WARN)
-        return
-      end
-
-      local fzf_items = {}
-      for i, text in ipairs(lines) do
-        fzf_items[i] = string.format('%d: %s', start_0 + i, text)
-      end
-
-      require('fzf-lua').fzf_exec(fzf_items, {
-        prompt = 'FuncSearch> ',
-        actions = {
-          ['default'] = function(selected)
-            local lnum = tonumber(selected[1]:match('^(%d+)'))
-            if lnum then
-              vim.api.nvim_win_set_cursor(0, { lnum, 0 })
-              vim.cmd('normal! zz')
-            end
-          end,
-        },
-      })
-      return
-    end
+  local start_0 = range[1] - 1
+  local lines = vim.api.nvim_buf_get_lines(0, start_0, range[2], false)
+  if #lines == 0 then
+    vim.notify('Empty function body', vim.log.levels.WARN)
+    return
   end
 
-  vim.notify('Cannot find function body', vim.log.levels.WARN)
+  local fzf_items = {}
+  for i, text in ipairs(lines) do
+    fzf_items[i] = string.format('%d: %s', start_0 + i, text)
+  end
+
+  require('fzf-lua').fzf_exec(fzf_items, {
+    prompt = 'FuncSearch [' .. func_name .. ']> ',
+    actions = {
+      ['default'] = function(selected)
+        local lnum = tonumber(selected[1]:match('^(%d+)'))
+        if lnum then
+          vim.api.nvim_win_set_cursor(0, { lnum, 0 })
+          vim.cmd('normal! zz')
+        end
+      end,
+    },
+  })
 end
 
 -- 删除包含关键词的行
@@ -589,10 +655,6 @@ vim.api.nvim_create_user_command('Rg', function(opts)
     require('fzf-lua').grep({ search = query })
   end
 end, { bang = true, nargs = '*' })
-
-vim.api.nvim_create_user_command('HighlightWithColorCode', function(opts)
-  M.highlight_with_color_code(opts.args)
-end, { range = true, nargs = 1 })
 
 vim.api.nvim_create_user_command('MarkdownToPDF', M.markdown_to_pdf, {})
 vim.api.nvim_create_user_command('MarkdownToHTML', M.markdown_to_html, {})
