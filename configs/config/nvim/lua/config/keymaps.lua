@@ -13,7 +13,7 @@ map('n', '<leader>j',  function() require('flash').jump() end, { desc = 'Flash j
 map('n', '<leader>k',  function() require('flash').jump() end, { desc = 'Flash jump' })
 map('n', '<leader>i',  function() require('flash').jump() end, { desc = 'Flash jump' })
 
-map('n', '<leader>ba', '<Cmd>bufdo bd<CR>',                    { desc = 'Close all buffers' })
+map('n', '<leader>B',  '<Cmd>bufdo bd<CR>',                    { desc = 'Close all buffers' })
 map('n', '<leader>pp', '<Cmd>setlocal paste!<CR>',             { desc = 'Toggle paste' })
 map('n', '<leader>L',  function() cmd.load_tags() end,         { desc = 'Load tags' })
 map('n', '<leader>cd', '<Cmd>cd %:p:h<Bar>pwd<CR>',            { desc = 'CD to file dir' })
@@ -32,12 +32,21 @@ map('v', 'd', '"_d')
 map('v', 'x', '"_x')
 
 -- ============================================================
--- 插入模式移动 (Alt + hjkl)
+-- 插入模式:Alt+h/l 左右移动;Alt+t/y 输入 (),Alt+u/i 与 Alt+,/. 输入 {}
+-- (macOS 的 Option+U/I/K 是死键(¨/ˆ/˚),部分终端送不进 nvim;
+--  t/y/逗号/句号不是死键,保证可用)
 -- ============================================================
 map('i', '<A-h>', '<left>')
 map('i', '<A-l>', '<right>')
 map('i', '<A-j>', '<down>')
 map('i', '<A-k>', '<up>')
+
+map('i', '<A-u>', '{')
+map('i', '<A-i>', '}')
+
+map('i', '<A-e>', '[')
+map('i', '<A-r>', ']')
+
 
 -- ============================================================
 -- 撤销 + 自动保存

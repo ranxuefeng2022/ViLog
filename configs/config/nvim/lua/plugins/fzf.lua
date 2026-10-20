@@ -11,8 +11,6 @@ return {
     dependencies = { 'junegunn/fzf' },
     keys = {
       { '<leader>f',  function() require('fzf-lua').files({ winopts = { preview = { hidden = true } } }) end, mode = 'n', desc = 'Find files' },
-      { '<leader>b',  '<Cmd>FzfLua buffers<CR>',            mode = 'n', desc = 'Find buffers' },
-      { '<leader>r',  '<Cmd>FzfLua buffers<CR>',            mode = 'n', desc = 'Switch buffer' },
       { '<leader>hk', '<Cmd>FzfLua keymaps<CR>',            mode = 'n', desc = 'Keymaps' },
     },
     cmd = { 'FzfLua' },
@@ -71,6 +69,8 @@ return {
     'junegunn/fzf.vim',
     dependencies = { 'junegunn/fzf' },
     keys = {
+      { '<leader>b',  '<Cmd>Buffers<CR>', mode = 'n', desc = 'Find buffers (fzf.vim)' },
+      { '<leader>r',  '<Cmd>Buffers<CR>', mode = 'n', desc = 'Switch buffer (fzf.vim)' },
       { '<leader><leader>', function()
           local file = vim.fn.expand('%:p')
           if file == '' then return end

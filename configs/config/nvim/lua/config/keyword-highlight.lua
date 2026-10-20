@@ -2,7 +2,7 @@
 -- visual `,` 打开:纯圆点网格(● 前景色渲染);hjkl/方向键移动光标
 -- (从正中间出发),鼠标单击圆点跳转、双击直接生效;移动即实时预览
 -- (该词背景色效果,buffer 内同步临时高亮);Enter 上色,q 撤销
--- 预览关窗;u 取消该词,x 全部清除;换色替换旧色不叠加;高亮同步到
+-- 预览关窗;x 取消该词,X 全部清除;换色替换旧色不叠加;高亮同步到
 -- 当前 tab 所有普通窗口。
 
 local M = {}
@@ -195,7 +195,7 @@ function M._render(text, cursor, pending)
   -- 每格 3 显示宽(标记 2 + 间隔 1);26 列 → 78 宽
   local content_w = 26 * 3
   -- footer 只留必要提示,居中(与预览行呼应)
-  local footer = 'u=unhl x=clear q=close'
+  local footer = 'x=unhl X=clear q=close'
   local fpad = math.floor((content_w - #footer) / 2)
   footer = string.rep(' ', fpad) .. footer
     .. string.rep(' ', content_w - fpad - #footer)
@@ -327,7 +327,8 @@ function M.pick()
   -- 输入:getcharstr(0) 轮询读 typeahead + vim.wait 泵事件(定时器/重绘
   -- 不冻结)。交互:首键 a-j 跳到该组首色(预览同步),Enter 直接应用;
   -- 次键 a-z 跳到该组对应色并直接应用(150ms 停留展示过程);
-  -- u/x/q 仅在无 pending 时作为命令(pending 中是组内位字母);
+  -- x(取消该词)/X(全清)/q 仅在无 pending 时作为命令(pending 中
+  -- 小写字母是组内位字母);
   -- pending 无超时,任意间隔的次键都完成跳转;pending 中按退格撤销首键
   local done = false
   local function close()
@@ -358,7 +359,8 @@ function M.pick()
           end
         end
       end
-    elseif not pending and key == 'u' then
+    elseif not pending and key == 'x' then
+      -- x = 取消该词高亮(原 u)
       preview_clear()
       local n = M.delete_word(text)
       if n > 0 then
@@ -367,7 +369,8 @@ function M.pick()
         vim.notify('No highlight on ' .. text, vim.log.levels.WARN)
       end
       done = true
-    elseif not pending and key == 'x' then
+    elseif not pending and key == 'X' then
+      -- X = 全部清除(原 x)
       preview_clear()
       local n = M.clear_all()
       vim.notify(('Cleared %d highlight%s'):format(n, n == 1 and '' or 's'), vim.log.levels.INFO)

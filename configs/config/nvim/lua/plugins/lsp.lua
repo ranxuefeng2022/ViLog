@@ -50,7 +50,7 @@ return {
           native('K')  -- 回退:原生 K(keywordprg → man 手册)
         end
       end, 'Hover (fallback: man page)')
-      bufmap('n', '<leader>rn', function()
+      bufmap('n', '<leader>lr', function()
         if has_provider('rename') then
           vim.fn.CocAction('rename')
         else

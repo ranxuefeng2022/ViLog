@@ -16,9 +16,9 @@ lua/config/
   theme-picker.lua        # Interactive theme selector with live preview (11 themes)
   match-hl.lua            # Bracket/quote match highlight (replaces built-in matchparen)
   indent-guide.lua        # Minimal indent viz via listchars (subtle style)
-  keyword-highlight.lua   # 256-color XTerm palette picker (10 group-rows a-j × 26 cells a-z, blank lines between rows; cells are two-letter labels fg-rendered via KwCell groups, no underline; default selection aa; selected cell is the sole bg chip + only underline via KwHLCur, gaps preserved; card styling: KwPanel bg #1a1b26 + KwBorder #565f89 via winhl, plain ' Highlight ' title, dimmed separator & preview prefix; first key a-j jumps to group's first color + live preview, Backspace undoes it (restores prior cursor), Enter applies it; second key a-z (no timeout) jumps and applies after 150ms flash; u/x commands only as first key; q closes (Esc does not); keys normalized via norm_key since getcharstr(0) returns raw K_SPECIAL bytes or numbers; getcharstr(0) poll + vim.wait pump + forced :redraw; re-color replaces; synced to all tab windows via WinNew/WinEnter replay)
+  keyword-highlight.lua   # 256-color XTerm palette picker (10 group-rows a-j × 26 cells a-z, blank lines between rows; cells are two-letter labels fg-rendered via KwCell groups, no underline; default selection aa; selected cell is the sole bg chip + only underline via KwHLCur, gaps preserved; card styling: KwPanel bg #1a1b26 + KwBorder #565f89 via winhl, plain ' Highlight ' title, dimmed separator & preview prefix; first key a-j jumps to group's first color + live preview, Backspace undoes it (restores prior cursor), Enter applies it; second key a-z (no timeout) jumps and applies after 150ms flash; x = unhighlight word, X = clear all, q closes — commands only as first key; keys normalized via norm_key since getcharstr(0) returns raw K_SPECIAL bytes or numbers; getcharstr(0) poll + vim.wait pump + forced :redraw; re-color replaces; synced to all tab windows via WinNew/WinEnter replay)
 lua/plugins/
-  editing.lua             # vim-visual-multi, vim-move, vim-expand-region, vim-oscyank, yanky.nvim
+  editing.lua             # vim-visual-multi, vim-expand-region, vim-oscyank, yanky.nvim (vim-move removed)
   editor.lua              # mini.animate, flash.nvim
   fzf.lua                 # fzf + fzf-lua + fzf.vim
   git.lua                 # gitsigns, neogit, diffview, vim-fugitive, gv.vim, blame.nvim
@@ -80,6 +80,7 @@ Then, after the requires: `colorscheme tokyonight-night` → `_G.apply_highlight
 ## Editing Philosophy
 
 This is a heavily personalized config — most default letter keys are remapped for muscle memory, not Vim convention.
+- Alt+j/k in insert mode type `{`/`}`; Alt+h/l move cursor left/right (normal-mode Alt+j/k unmapped — vim-move removed, use visual J/K)
 - Heavy single-key remappings: `a`=`<C-]>` (go-to-def), `f`=`<C-o>zz`, `W`=`<C-i>zz`, `s`/`S`=flash, `R`=rg current word, `t`=CD menu, `q`=command menu, `e`=expand-region, `0`=`^`, `Z`=`ZZ`, `u`=undo+save
 - `,` opens a multi-column floating super-panel: press a letter to run, or `/`/`<Tab>` for fzf fuzzy search across all commands (fzf-lua / fzf.vim / Git / Misc sections)
 - `c` prefix = coding tools, `ce`/`cw` = fzf-lua grep/buffer-line search

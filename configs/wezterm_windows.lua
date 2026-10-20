@@ -176,8 +176,6 @@ local keys = {
   { key = 'Tab', mods = 'CTRL', action = wezterm.action.ActivateTabRelative(1) },
   { key = 'Tab', mods = 'CTRL|SHIFT', action = wezterm.action.ActivateTabRelative(-1) },
 
-  -- 清屏
-  { key = 'k', mods = 'ALT', action = wezterm.action.ClearScrollback 'ScrollbackAndViewport' },
   -- 复制
   { key = 'c', mods = 'ALT', action = wezterm.action.CopyTo 'Clipboard' },
   -- 搜索模式
