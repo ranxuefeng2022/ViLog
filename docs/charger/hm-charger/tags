@@ -1,0 +1,124 @@
+!_TAG_FILE_SORTED	1	/0=unsorted, 1=sorted, 2=foldcase/
+BC12_TIMEOUT_MS	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^#define BC12_TIMEOUT_MS	/;"	d	file:
+CHARGE_POLL_INTERVAL_DFLT_MS	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^#define CHARGE_POLL_INTERVAL_DFLT_MS	/;"	d	file:
+CHARGE_POLL_INTERVAL_MIN_MS	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^#define CHARGE_POLL_INTERVAL_MIN_MS	/;"	d	file:
+DEFALUT_VOTER	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^#define DEFALUT_VOTER "DEFALUT_VOTER"/;"	d	file:
+DET_BC12	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	DET_BC12,		\/* BC1.2 D+\/D- detection running *\/$/;"	e	enum:charge_det_st	file:
+DET_DONE	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	DET_DONE,		\/* concluded, chg_type\/caps valid *\/$/;"	e	enum:charge_det_st	file:
+DET_HVDCP	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	DET_HVDCP,		\/* QC (HVDCP) probe running, DCP only *\/$/;"	e	enum:charge_det_st	file:
+DET_IDLE	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	DET_IDLE,		\/* no adapter *\/$/;"	e	enum:charge_det_st	file:
+DET_POLL_MS	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^#define DET_POLL_MS	/;"	d	file:
+DET_PWR	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	DET_PWR,		\/* adapter power detection running *\/$/;"	e	enum:charge_det_st	file:
+HM_BC12_CDP	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	HM_BC12_CDP,$/;"	e	enum:hm_bc12_type	file:
+HM_BC12_DCP	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	HM_BC12_DCP,$/;"	e	enum:hm_bc12_type	file:
+HM_BC12_SDP	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	HM_BC12_SDP,$/;"	e	enum:hm_bc12_type	file:
+HM_BC12_UNKNOWN	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	HM_BC12_UNKNOWN,$/;"	e	enum:hm_bc12_type	file:
+HVDCP_TIMEOUT_MS	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^#define HVDCP_TIMEOUT_MS	/;"	d	file:
+POWER_SUPPLY_PROP_CURRENT_MAX	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	POWER_SUPPLY_PROP_CURRENT_MAX,$/;"	e	enum:charge_usb_props	file:
+POWER_SUPPLY_PROP_CURRENT_NOW	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	POWER_SUPPLY_PROP_CURRENT_NOW,$/;"	e	enum:charge_usb_props	file:
+POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT,$/;"	e	enum:charge_usb_props	file:
+POWER_SUPPLY_PROP_ONLINE	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	POWER_SUPPLY_PROP_ONLINE,$/;"	e	enum:charge_usb_props	file:
+POWER_SUPPLY_PROP_VOLTAGE_MAX	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	POWER_SUPPLY_PROP_VOLTAGE_MAX,$/;"	e	enum:charge_usb_props	file:
+POWER_SUPPLY_PROP_VOLTAGE_NOW	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	POWER_SUPPLY_PROP_VOLTAGE_NOW,$/;"	e	enum:charge_usb_props	file:
+PRIMARY_CHG_PSY_NAME	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^#define PRIMARY_CHG_PSY_NAME /;"	d	file:
+PWR_DET_CAP_CDP_MA	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^#define PWR_DET_CAP_CDP_MA	/;"	d	file:
+PWR_DET_CAP_DCP_MA	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^#define PWR_DET_CAP_DCP_MA	/;"	d	file:
+PWR_DET_START_MA	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^#define PWR_DET_START_MA	/;"	d	file:
+PWR_DET_STEP_SETTLE_MS	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^#define PWR_DET_STEP_SETTLE_MS	/;"	d	file:
+USB_OFFLINE_DEBOUNCE_DFLT_MS	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^#define USB_OFFLINE_DEBOUNCE_DFLT_MS	/;"	d	file:
+USB_ONLINE_DEBOUNCE_DFLT_MS	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^#define USB_ONLINE_DEBOUNCE_DFLT_MS	/;"	d	file:
+__HM_CHARGER_H__	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.h	/^#define __HM_CHARGER_H__$/;"	d
+adapter_max_ma	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	unsigned int		adapter_max_ma;	\/* selected mode's ICL *\/$/;"	m	struct:charge_chip	typeref:typename:unsigned int	file:
+adapter_max_mv	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	unsigned int		adapter_max_mv;	\/* selected mode's max voltage *\/$/;"	m	struct:charge_chip	typeref:typename:unsigned int	file:
+bc12_result	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	int			bc12_result;	\/* enum hm_bc12_type *\/$/;"	m	struct:charge_chip	typeref:typename:int	file:
+charge_bc12_poll	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static int charge_bc12_poll(struct charge_chip *chip, int *result)$/;"	f	typeref:typename:int	file:
+charge_bc12_start	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static int charge_bc12_start(struct charge_chip *chip)$/;"	f	typeref:typename:int	file:
+charge_chg_desc	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static const struct power_supply_desc charge_chg_desc = {$/;"	v	typeref:typename:const struct power_supply_desc	file:
+charge_chg_external_power_changed	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static void charge_chg_external_power_changed(struct power_supply *psy)$/;"	f	typeref:typename:void	file:
+charge_chg_get_prop	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static int charge_chg_get_prop(struct power_supply *psy,$/;"	f	typeref:typename:int	file:
+charge_chg_set_prop	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static int charge_chg_set_prop(struct power_supply *psy,$/;"	f	typeref:typename:int	file:
+charge_chip	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^struct charge_chip {$/;"	s	file:
+charge_create_votables	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static int charge_create_votables(struct charge_chip *chip)$/;"	f	typeref:typename:int	file:
+charge_debounce_work	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static void charge_debounce_work(struct work_struct *ws)$/;"	f	typeref:typename:void	file:
+charge_destroy_votables	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static void charge_destroy_votables(struct charge_chip *chip)$/;"	f	typeref:typename:void	file:
+charge_det_complete	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static void charge_det_complete(struct charge_chip *chip)$/;"	f	typeref:typename:void	file:
+charge_det_set_st	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static void charge_det_set_st(struct charge_chip *chip,$/;"	f	typeref:typename:void	file:
+charge_det_st	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^enum charge_det_st {$/;"	g	file:
+charge_det_stage_enter	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static bool charge_det_stage_enter(struct charge_chip *chip)$/;"	f	typeref:typename:bool	file:
+charge_det_start	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static void charge_det_start(struct charge_chip *chip)$/;"	f	typeref:typename:void	file:
+charge_det_stop	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static void charge_det_stop(struct charge_chip *chip)$/;"	f	typeref:typename:void	file:
+charge_det_work	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static void charge_det_work(struct work_struct *ws)$/;"	f	typeref:typename:void	file:
+charge_evt_notify	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static int charge_evt_notify(struct notifier_block *nb, unsigned long event,$/;"	f	typeref:typename:int	file:
+charge_fv_callback	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static int charge_fv_callback(struct votable *votable, void *data,$/;"	f	typeref:typename:int	file:
+charge_hvdcp_probe_poll	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static int charge_hvdcp_probe_poll(struct charge_chip *chip, bool *ok)$/;"	f	typeref:typename:int	file:
+charge_hvdcp_probe_start	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static int charge_hvdcp_probe_start(struct charge_chip *chip)$/;"	f	typeref:typename:int	file:
+charge_ichg_callback	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static int charge_ichg_callback(struct votable *votable, void *data,$/;"	f	typeref:typename:int	file:
+charge_icl_callback	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static int charge_icl_callback(struct votable *votable, void *data,$/;"	f	typeref:typename:int	file:
+charge_info_driver	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static struct platform_driver charge_info_driver = {$/;"	v	typeref:struct:platform_driver	file:
+charge_iterm_callback	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static int charge_iterm_callback(struct votable *votable, void *data,$/;"	f	typeref:typename:int	file:
+charge_nb	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	struct notifier_block	charge_nb;$/;"	m	struct:charge_chip	typeref:struct:notifier_block	file:
+charge_of_match	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static const struct of_device_id charge_of_match[] = {$/;"	v	typeref:typename:const struct of_device_id[]	file:
+charge_parse_dt	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static void charge_parse_dt(struct charge_chip *chip)$/;"	f	typeref:typename:void	file:
+charge_pd_event	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static void charge_pd_event(struct charge_chip *chip, bool pps,$/;"	f	typeref:typename:void	file:
+charge_poll_work	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static void charge_poll_work(struct work_struct *ws)$/;"	f	typeref:typename:void	file:
+charge_polling_work	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	struct delayed_work	charge_polling_work;$/;"	m	struct:charge_chip	typeref:struct:delayed_work	file:
+charge_probe	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static int charge_probe(struct platform_device *pdev)$/;"	f	typeref:typename:int	file:
+charge_protocol_apply	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static int charge_protocol_apply(struct charge_chip *chip, int proto)$/;"	f	typeref:typename:int	file:
+charge_protocol_select	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static int charge_protocol_select(struct charge_chip *chip, int proto)$/;"	f	typeref:typename:int	file:
+charge_psy_changed	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static void charge_psy_changed(struct charge_chip *chip)$/;"	f	typeref:typename:void	file:
+charge_pwr_detect	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static void charge_pwr_detect(struct charge_chip *chip,$/;"	f	typeref:typename:void	file:
+charge_pwr_next_step	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static unsigned int charge_pwr_next_step(unsigned int cur)$/;"	f	typeref:typename:unsigned int	file:
+charge_pwr_qc_enter	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static int charge_pwr_qc_enter(struct charge_chip *chip)$/;"	f	typeref:typename:int	file:
+charge_pwr_sweep_phase	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static unsigned int charge_pwr_sweep_phase(struct charge_chip *chip,$/;"	f	typeref:typename:unsigned int	file:
+charge_pwr_vindpm_hit	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static bool charge_pwr_vindpm_hit(struct charge_chip *chip)$/;"	f	typeref:typename:bool	file:
+charge_remove	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static int charge_remove(struct platform_device *pdev)$/;"	f	typeref:typename:int	file:
+charge_reset_voters	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static void charge_reset_voters(struct charge_chip *chip, bool online)$/;"	f	typeref:typename:void	file:
+charge_response_cable_cb	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static void charge_response_cable_cb(struct charge_chip *chip, bool online)$/;"	f	typeref:typename:void	file:
+charge_resume	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static int __maybe_unused charge_resume(struct device *dev)$/;"	f	typeref:typename:int __maybe_unused	file:
+charge_set_prop_to_primary_chg	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static int charge_set_prop_to_primary_chg(struct charge_chip *chip,$/;"	f	typeref:typename:int	file:
+charge_supplied_to	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static char *charge_supplied_to[] = {$/;"	v	typeref:typename:char * []	file:
+charge_suspend	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static int __maybe_unused charge_suspend(struct device *dev)$/;"	f	typeref:typename:int __maybe_unused	file:
+charge_usb_desc	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static const struct power_supply_desc charge_usb_desc = {$/;"	v	typeref:typename:const struct power_supply_desc	file:
+charge_usb_get_prop	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static int charge_usb_get_prop(struct power_supply *psy,$/;"	f	typeref:typename:int	file:
+charge_usb_prop_is_writeable	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static int charge_usb_prop_is_writeable(struct power_supply *psy,$/;"	f	typeref:typename:int	file:
+charge_usb_props	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static enum power_supply_property charge_usb_props[] = {$/;"	g	file:
+charge_usb_set_prop	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static int charge_usb_set_prop(struct power_supply *psy,$/;"	f	typeref:typename:int	file:
+charge_vbus_irq_cb	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static void charge_vbus_irq_cb(struct charge_chip *chip)$/;"	f	typeref:typename:void	file:
+charge_vindpm_callback	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static int charge_vindpm_callback(struct votable *votable, void *data,$/;"	f	typeref:typename:int	file:
+chg_psy	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	struct power_supply	*chg_psy;$/;"	m	struct:charge_chip	typeref:struct:power_supply *	file:
+chg_type	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	int chg_type;	\/* concluded type, enum hm_power_supply_type *\/$/;"	m	struct:charge_chip	typeref:typename:int	file:
+debounce_offline_ms	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	unsigned int		debounce_offline_ms;$/;"	m	struct:charge_chip	typeref:typename:unsigned int	file:
+debounce_online_ms	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	unsigned int		debounce_online_ms;$/;"	m	struct:charge_chip	typeref:typename:unsigned int	file:
+debounce_work	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	struct delayed_work	debounce_work;$/;"	m	struct:charge_chip	typeref:struct:delayed_work	file:
+det_retries	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	int			det_retries;$/;"	m	struct:charge_chip	typeref:typename:int	file:
+det_st	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	enum charge_det_st	det_st;$/;"	m	struct:charge_chip	typeref:enum:charge_det_st	file:
+det_st_text	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static const char * const det_st_text[] = {$/;"	v	typeref:typename:const char * const[]	file:
+det_stage_started	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	bool			det_stage_started;$/;"	m	struct:charge_chip	typeref:typename:bool	file:
+det_work	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	struct delayed_work	det_work;$/;"	m	struct:charge_chip	typeref:struct:delayed_work	file:
+dev	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	struct device		*dev;$/;"	m	struct:charge_chip	typeref:struct:device *	file:
+fv_votable	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	struct votable		*fv_votable;	\/* charge float voltage, mV *\/$/;"	m	struct:charge_chip	typeref:struct:votable *	file:
+hm_bc12_type	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^enum hm_bc12_type {$/;"	g	file:
+hvdcp_ok	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	bool			hvdcp_ok;$/;"	m	struct:charge_chip	typeref:typename:bool	file:
+ibus_ma	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	unsigned int		ibus_ma;$/;"	m	struct:charge_chip	typeref:typename:unsigned int	file:
+ichg_votable	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	struct votable		*ichg_votable;	\/* charge current, mA *\/$/;"	m	struct:charge_chip	typeref:struct:votable *	file:
+icl_5v_ma	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	unsigned int		icl_5v_ma;	\/* measured 5V (DCP mode) ICL *\/$/;"	m	struct:charge_chip	typeref:typename:unsigned int	file:
+icl_hvdcp_ma	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	unsigned int		icl_hvdcp_ma;	\/* measured QC mode ICL, 0 = n\/a *\/$/;"	m	struct:charge_chip	typeref:typename:unsigned int	file:
+icl_votable	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	struct votable		*icl_votable;	\/* input current limit, mA *\/$/;"	m	struct:charge_chip	typeref:struct:votable *	file:
+input_ilim_ma	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	unsigned int		input_ilim_ma;$/;"	m	struct:charge_chip	typeref:typename:unsigned int	file:
+iterm_votable	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	struct votable		*iterm_votable;	\/* charge termination current, mA *\/$/;"	m	struct:charge_chip	typeref:struct:votable *	file:
+lock	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	struct mutex		lock;$/;"	m	struct:charge_chip	typeref:struct:mutex	file:
+pd_capable	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	bool			pd_capable;$/;"	m	struct:charge_chip	typeref:typename:bool	file:
+pd_max_ma	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	unsigned int		pd_max_ma;$/;"	m	struct:charge_chip	typeref:typename:unsigned int	file:
+pd_max_mv	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	unsigned int		pd_max_mv;$/;"	m	struct:charge_chip	typeref:typename:unsigned int	file:
+poll_interval_ms	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	unsigned int		poll_interval_ms;$/;"	m	struct:charge_chip	typeref:typename:unsigned int	file:
+pps_capable	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	bool			pps_capable;$/;"	m	struct:charge_chip	typeref:typename:bool	file:
+primary_chg_psy	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	struct power_supply	*primary_chg_psy;$/;"	m	struct:charge_chip	typeref:struct:power_supply *	file:
+pwr_det_steps	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^static const unsigned int pwr_det_steps[] = {$/;"	v	typeref:typename:const unsigned int[]	file:
+secondery_chg_psy	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	struct power_supply	*secondery_chg_psy;$/;"	m	struct:charge_chip	typeref:struct:power_supply *	file:
+sel_protocol	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	int			sel_protocol;	\/* selected input protocol, enum hm_chg_proto *\/$/;"	m	struct:charge_chip	typeref:typename:int	file:
+usb_last_present	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	bool				usb_last_present;$/;"	m	struct:charge_chip	typeref:typename:bool	file:
+usb_present	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	bool				usb_present;$/;"	m	struct:charge_chip	typeref:typename:bool	file:
+usb_psy	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	struct power_supply	*usb_psy;$/;"	m	struct:charge_chip	typeref:struct:power_supply *	file:
+usb_raw	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	bool				usb_raw;$/;"	m	struct:charge_chip	typeref:typename:bool	file:
+vbus_mv	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	unsigned int		vbus_mv; \/\/VBUS voltage at the device, after adapter cable drop$/;"	m	struct:charge_chip	typeref:typename:unsigned int	file:
+vindpm_votable	/Users/ranxuefeng/xuefeng/ViLog/docs/charger/hm-charger/hm_charger.c	/^	struct votable		*vindpm_votable; \/* input voltage droop protection threshold, mV *\/$/;"	m	struct:charge_chip	typeref:struct:votable *	file:

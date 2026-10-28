@@ -1,0 +1,8 @@
+# Kconfig of the hm framework parent directory.
+# When moving this tree into a kernel tree, adjust the source paths
+# below to the real location; if this directory lands in drivers/hm/,
+# keep them as is and append to the end of drivers/Kconfig:
+#   source "drivers/hm/Kconfig"
+source "drivers/hm/hm-common/Kconfig"
+source "drivers/hm/hm-charger/Kconfig"
+source "drivers/hm/hm-battery/Kconfig"

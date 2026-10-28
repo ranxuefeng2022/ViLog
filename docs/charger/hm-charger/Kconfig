@@ -1,0 +1,14 @@
+config HM_CHARGER
+	bool "HM charger info hub (poll work + notifier + usb psy)"
+	depends on OF && POWER_SUPPLY && HM_COMMON
+	help
+	  HM charging info hub driver: periodic polling + event bus
+	  broadcast + usb power supply. The usb psy supplies power to
+	  several other psys (supplied_to) and supports user space
+	  writes to ONLINE / INPUT_CURRENT_LIMIT.
+
+	  Note: this is bool, not tristate -- the driver may only be
+	  built into the kernel image (=y), it cannot be loaded as a
+	  module (.ko). The menu only offers the builtin option, no
+	  <M>; even if the Makefile were changed to obj-m by hand,
+	  Kconfig would never generate CONFIG_HM_CHARGER=m.

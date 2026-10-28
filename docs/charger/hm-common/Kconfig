@@ -1,0 +1,18 @@
+config HM_COMMON
+	bool "HM common support library (voter, event bus)"
+	help
+	  Shared support library of the hm modules: the voter voting
+	  framework and the hm_event inter-module event bus.
+
+	  Notes:
+	  - This is bool, not tristate, matching the all-builtin policy of
+	    the hm modules (a =m library with =y consumers would fail to
+	    link; do not create that trap);
+	  - voter.o and hm_event.o are built exactly once for the whole
+	    kernel; modules use them through the headers and exported
+	    symbols, and must NEVER compile the sources of this directory
+	    again in their own Makefiles (duplicate copies would split the
+	    votable name registry and find_votable() would never find the
+	    votables created by other modules).
+
+	  Each hm module's Kconfig should depend on HM_COMMON.

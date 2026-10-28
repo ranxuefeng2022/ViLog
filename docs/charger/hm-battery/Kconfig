@@ -1,0 +1,13 @@
+config HM_BATTERY
+	bool "HM battery psy (status/health/capacity + JEITA)"
+	depends on OF && POWER_SUPPLY && HM_COMMON
+	help
+	  HM 电池侧 psy 驱动: 注册名为 "battery" 的 power supply
+	  (Android health HAL 按名查找), 暴露电池正在经历的
+	  status / health / capacity / 电压 / 电流 / 温度等; 充电
+	  状态由电池侧数据 + hm-charger 的输入侧证据(私有 psy
+	  协议 + 事件总线)合成。内置 JEITA 保护: 经 hm-charger 的
+	  chg_disable / fv votable 投票。
+
+	  注意: bool 而非 tristate, 只允许内建 (=y), 与全部 hm
+	  模块的内建策略一致。
