@@ -1,0 +1,20 @@
+# 调整模块顺序
+format = "$directory$character"
+
+[directory]
+format = "[$path](fg:#87CEEB) "  # 浅蓝色路径
+truncation_length =0 #禁止截断路径长度  
+truncate_to_repo =false #不自动截断到git仓库根目录  
+fish_style_pwd_dir_length =1 #每级目录显示完整名称
+
+[character]
+# 成功状态符号（绿色加粗）
+success_symbol = "[>>](bold green)"
+
+# 错误状态符号（红色加粗）
+error_symbol = "[>>](bold green)"
+
+# Vim 模式符号（蓝色加粗）
+vicmd_symbol = "[>>](bold green)"
+
+
