@@ -19,57 +19,53 @@
 #include "hm_power_supply.h"
 #include "voter.h"
 
-#define USB_ONLINE_DEBOUNCE_DFLT_MS	100	/* rising edge: contact bounce */
-#define USB_OFFLINE_DEBOUNCE_DFLT_MS	500	/* falling edge: absorb vbus glitches */
-/* charger detection state machine tuning */
-#define DET_POLL_MS		100	/* detection result poll interval */
-#define BC12_TIMEOUT_MS		600	/* BC1.2 detection timeout */
-#define HVDCP_TIMEOUT_MS	800	/* QC (HVDCP) probe timeout */
-/* power detection tuning (single blocking implementation) */
-#define PWR_DET_START_MA	200	/* first step, also the floor */
-/* per-step settle default; DT-tunable ("pwr-det-step-settle-ms") so it
- * can be tightened per board after bench validation. Two-sided
- * tradeoff, do not guess: too short FALSELY fails a step on the
- * adapter's load-step transient dip (underestimates the adapter);
- * too long only costs sweep time (a slow soft overload sag is caught
- * one step later either way). Typical adapters need 50-150ms. Also
- * CONSTRAINT: 2x settle must stay <= the offline debounce window
- * (rescue window, see chg_parse_dt) */
+#define USB_ONLINE_DEBOUNCE_DFLT_MS	100	/* 上升沿: 吸收接触抖动 */
+#define USB_OFFLINE_DEBOUNCE_DFLT_MS	500	/* 下降沿: 吸收 vbus 毛刺 */
+/* 检测状态机节奏 */
+#define DET_POLL_MS		100	/* 检测轮询间隔 */
+#define BC12_TIMEOUT_MS		600	/* BC1.2 检测超时 */
+#define HVDCP_TIMEOUT_MS	800	/* QC 探测超时 */
+/* 功率扫描参数 (单次阻塞实现) */
+#define PWR_DET_START_MA	200	/* 首档, 同时是安全下限 */
+/* 每档 settle 缺省, 可 DT 调 ("pwr-det-step-settle-ms"), 上机台
+ * 验证后按板收紧. 双向权衡, 别拍脑袋: 太短会把适配器负载瞬态
+ * 下探误判成该档失败(低估适配器); 太长只多花扫描时间(缓慢的
+ * 软过载下沉早晚只差一档). 典型适配器 50-150ms.
+ * 约束: 2x settle 不得超过离线防抖窗(营救窗, 见 chg_parse_dt) */
 #define PWR_DET_STEP_SETTLE_DFLT_MS	200
 #define PWR_DET_STEP_SETTLE_MIN_MS	50
-#define PWR_DET_CAP_CDP_MA	1500	/* type-based caps */
+#define PWR_DET_CAP_CDP_MA	1500	/* 按类型的扫描上限 */
 #define PWR_DET_CAP_DCP_MA	2000
-#define PWR_DET_VINDPM_HEADROOM_MV	300	/* buck converter headroom */
-#define PWR_DET_VBAT_FALLBACK_MV	4400	/* assumed when no battery psy */
-#define PWR_DET_STEP_MA		100	/* linear step of the sweep */
-#define PWR_DET_START_DFLT_MA	500	/* DT default start value, all types */
+#define PWR_DET_VINDPM_HEADROOM_MV	300	/* buck 变换余量 */
+#define PWR_DET_VBAT_FALLBACK_MV	4400	/* 电池 psy 读不到时的假设值 */
+#define PWR_DET_STEP_MA		100	/* 扫描步进 */
+#define PWR_DET_START_DFLT_MA	500	/* 各类型 DT 缺省起点 */
 #define DEFALUT_VOTER "DEFALUT_VOTER"
-/* primary charger psy name; must match the name the peer module
- * registers its psy with */
+/* 主充 psy 名, 须与对端模块注册的 psy 名一致 */
 #define PRIMARY_CHG_PSY_NAME "primary_chg_psy"
 
 static char *chg_supplied_to[] = {
-	"battery",		/* canonical usb->battery supply relation;
-				 * power_supply_changed(usb) cascades the
-				 * battery psy's external_power_changed */
+	"battery",		/* usb -> battery 供电关系:
+					 * power_supply_changed(usb) 会级联触发
+					 * battery psy 的 external_power_changed */
 	"cms_psy",
 };
 
-/* charger detection state machine */
+/* 充电检测状态机 */
 enum chg_det_st {
-	DET_IDLE,		/* no adapter */
-	DET_BC12,		/* BC1.2 D+/D- detection running */
-	DET_PWR,		/* 5V power detection (CDP/DCP, after BC12) */
-	DET_HVDCP,		/* QC probe (after the 5V sweep, DCP only) */
-	DET_PWR_QC,		/* QC mode power detection (probe hit) */
-	DET_DONE,		/* concluded, chg_type/caps valid */
+	DET_IDLE,		/* 无适配器 */
+	DET_BC12,		/* BC1.2 D+/D- 检测中 */
+	DET_PWR,		/* 5V 功率扫描 (BC12 后) */
+	DET_HVDCP,		/* QC 探测 (5V 扫描后, 仅 DCP) */
+	DET_PWR_QC,		/* QC 模式功率扫描 (探测命中) */
+	DET_DONE,		/* 收尾, chg_type/能力值有效 */
 };
 
 static const char * const det_st_text[] = {
 	"IDLE", "BC12", "PWR", "HVDCP", "PWR_QC", "DONE",
 };
 
-/* BC1.2 detection result */
+/* BC1.2 检测结果 */
 enum hm_bc12_type {
 	HM_BC12_UNKNOWN,
 	HM_BC12_SDP,
@@ -82,22 +78,20 @@ struct chg_chip {
 
 	struct mutex		lock;
 	bool				usb_present;
-	unsigned int		vbus_mv; //VBUS voltage at the device, after adapter cable drop
+	unsigned int		vbus_mv;	/* 设备端 VBUS 电压, 已含适配器与线损 */
 	unsigned int		ibus_ma;
 	unsigned int		input_ilim_ma;
 
 	bool				usb_last_present;
 
-	/* vbus online debounce: usb_present is the committed (debounced)
-	 * state the framework sees; usb_raw is the latest sample pushed
-	 * by the detector, committed only after the confirmation window */
+	/* 防抖: usb_present 是确认后的状态, usb_raw 是检测器推入的
+	 * 最新采样, 确认窗口到期才提交 */
 	struct delayed_work	debounce_work;
 	bool				usb_raw;
 	unsigned int		debounce_online_ms;
 	unsigned int		debounce_offline_ms;
 
-	/* wakes the power sweep the instant the detector pushes a
-	 * vbus drop sample (vs sleeping the whole settle window) */
+	/* 掉线采样立即唤醒正在 settle 的功率扫描 */
 	struct completion	sweep_drop;
 
 	struct power_supply	*usb_psy;
@@ -108,46 +102,45 @@ struct chg_chip {
 
 	struct notifier_block	chg_nb;
 
-	struct votable		*icl_votable;	/* input current limit, mA */
-	struct votable		*ichg_votable;	/* charge current, mA */
-	struct votable		*fv_votable;	/* charge float voltage, mV */
-	struct votable		*iterm_votable;	/* charge termination current, mA */
-	struct votable		*vindpm_votable; /* input voltage droop protection threshold, mV */
-	struct votable		*chg_disable_votable;	/* SET_ANY: any true = battery charging off */
-	struct votable		*chg_suspend_votable;	/* SET_ANY: any true = input suspended */
+	struct votable		*icl_votable;	/* 输入限流, mA */
+	struct votable		*ichg_votable;	/* 充电电流, mA */
+	struct votable		*fv_votable;	/* 浮充电压, mV */
+	struct votable		*iterm_votable;	/* 终止电流, mA */
+	struct votable		*vindpm_votable; /* 输入压降保护门限, mV */
+	struct votable		*chg_disable_votable;	/* SET_ANY: 任一 true 即关电池充电 */
+	struct votable		*chg_suspend_votable;	/* SET_ANY: 任一 true 即挂起输入 */
 
-	int chg_type;	/* concluded type, enum hm_power_supply_type */
+	int chg_type;	/* 收尾的检测类型, enum hm_power_supply_type */
 
-	/* charger detection state machine (see chg_det_*) */
+	/* 充电检测状态机 (见 chg_det_*) */
 	enum chg_det_st	det_st;
 	struct delayed_work	det_work;
-	struct work_struct	pd_work;	/* PD evidence -> arbitration */
+	struct work_struct	pd_work;	/* PD 证据 -> 仲裁 */
 	int			det_retries;
-	unsigned long		det_jiffies;	/* start time, duration log */
+	unsigned long		det_jiffies;	/* 起始时刻, 时长日志用 */
 	bool			det_stage_started;
 	int			bc12_result;	/* enum hm_bc12_type */
 	bool			hvdcp_ok;
-	/* PD listener results, fed by chg_pd_event() from the tcpc
-	 * notifier; preempt every other source at any state */
+	/* PD 监听结果, 由 chg_pd_event() 从 tcpc notifier 喂入;
+	 * 任意状态下都压过其它证据 */
 	bool			pd_capable;
 	bool			pps_capable;
 	unsigned int		pd_max_mv;
 	unsigned int		pd_max_ma;
-	/* concluded adapter capability */
-	unsigned int		adapter_max_mv;	/* selected mode's max voltage */
-	unsigned int		adapter_max_ma;	/* selected mode's ICL */
-	/* power detection results, one per input mode: HVDCP adapters
-	 * switch 9V <-> 5V (DCP mode) mid-charge (taper / thermal), each
-	 * switch re-applies the ICL measured for that mode */
-	unsigned int		icl_5v_ma;	/* measured 5V (DCP mode) ICL */
-	unsigned int		icl_hvdcp_ma;	/* measured QC mode ICL, 0 = n/a */
-	/* power detection start values, one per type; DT-configurable,
-	 * always clamped to the type's standard cap at parse time */
+	/* 收尾后的适配器能力 */
+	unsigned int		adapter_max_mv;	/* 选定模式的最高电压 */
+	unsigned int		adapter_max_ma;	/* 选定模式的 ICL */
+	/* 功率扫描结果, 按输入模式一份: HVDCP 适配器充电中会在
+	 * 9V <-> 5V(DCP 模式)之间切换(taper/温降), 每次切换按该模式
+	 * 实测的 ICL 重投 */
+	unsigned int		icl_5v_ma;	/* 5V(DCP 模式) 实测 ICL */
+	unsigned int		icl_hvdcp_ma;	/* QC 模式实测 ICL, 0 = 无 */
+	/* 各类型扫描起点; 可 DT 配, 解析时钳到类型规范上限 */
 	unsigned int		pwr_start_cdp_ma;
 	unsigned int		pwr_start_dcp_ma;
 	unsigned int		pwr_start_hvdcp_ma;
-	unsigned int		pwr_step_settle_ms;	/* per-step settle, DT-tunable */
-	int			sel_protocol;	/* selected input protocol, enum hm_chg_proto */
+	unsigned int		pwr_step_settle_ms;	/* 每档 settle, 可 DT 调 */
+	int			sel_protocol;	/* 选定的输入协议, enum hm_chg_proto */
 };
 
 static void chg_reset_voters(struct chg_chip *chip, bool online)
@@ -157,122 +150,58 @@ static void chg_reset_voters(struct chg_chip *chip, bool online)
 }
 
 /* ------------------------------------------------------------------ */
-/* charger detection state machine                                     */
+/* 充电检测状态机                                                      */
 /* ------------------------------------------------------------------ */
-/*
- * Two fully independent detectors, one arbitration:
- *
- *   pipeline (chg_det_work): BC12 -> 5V sweep -> QC probe -> QC
- *     sweep, always runs to completion, never disturbed by PD
- *   PD listener (chg_pd_event): records the contract evidence at
- *     any time, from the tcpc notifier
- *
- *   IDLE --insert--> BC12 --SDP--> COMPLETE (capability fixed by spec)
- *                        |--CDP--> PWR (5V sweep) ------------> COMPLETE
- *                        |--DCP--> PWR (5V sweep) --> HVDCP (QC probe)
- *                                                    |--miss-> COMPLETE
- *                                                    |--hit--> PWR_QC --> COMPLETE
- *   any state --unplug--> IDLE
- *
- * Both sides only record EVIDENCE; chg_arbitrate() recomputes the
- * classification (priority PD > QC > BC1.2) at every commit point --
- * pipeline completion, or a PD contract arriving/being lost at any
- * time -- and publishes only when the conclusion actually changed.
- *
- * The 5V sweep runs while the adapter is still at its post-BC1.2 idle
- * state and the QC-mode sweep reuses the voltage the probe itself
- * raised -- exactly one voltage transition in the whole pipeline.
- *
- * Power detection produces one ICL per input mode (5V/DCP mode and
- * QC mode). chg_det_complete() only publishes the results and
- * settles into the safe 5V default; WHICH protocol to charge with is
- * a policy decision made through chg_protocol_select() (exposed
- * to other modules as the PROTOCOL_SELECT property on usb psy).
- * Each selection re-votes the ICL measured for that mode -- the vote
- * is the programming path to the primary charger (chg_icl_callback
- * -> chg_set_prop_to_primary_chg), so switching protocols never
- * re-detects.
- */
-
-/* ---- detection hooks: the only hardware boundary, replace the
- * bodies when porting; the machine itself never changes ---- */
-
-/* kick the BC1.2 detector in the charger IC / transceiver */
 static int chg_bc12_start(struct chg_chip *chip)
 {
 	return 0;
 }
 
-/* read the BC1.2 detector status; -EAGAIN while still running */
+/* 读 BC1.2 检测结果; -EAGAIN = 还在跑 */
 static int chg_bc12_poll(struct chg_chip *chip, int *result)
 {
-	/* placeholder: report DCP immediately so the pipeline advances */
+	/* 占位: 直接报 DCP, 让管线前进 */
 	*result = HM_BC12_DCP;
 	return 0;
 }
 
-/* start the QC probe: drive D+/D- per the QC spec, watch whether VBUS
- * rises; harmless no-op when the adapter is not QC capable */
+/* 启动 QC 探测: 按 QC 规范驱动 D+/D- 摆压, 看 VBUS 是否升起;
+ * 非 QC 适配器上是安全空操作 */
 static int chg_hvdcp_probe_start(struct chg_chip *chip)
 {
 	return 0;
 }
 
-/* read the QC probe result; -EAGAIN while still running */
+/* 读 QC 探测结果; -EAGAIN = 还在跑 */
 static int chg_hvdcp_probe_poll(struct chg_chip *chip, bool *ok)
 {
-	/* placeholder: no QC adapter */
+	/* 占位: 无 QC 适配器 */
 	*ok = false;
 	return 0;
 }
 
-/*
- * Adapter power detection sweeps. Always invoked from
- * chg_det_work() (a sleepable context), so msleep() below is legal
- * and the event chain is never blocked; each sweep is bounded by the
- * step ladder x settle time (<= ~1s).
- *
- * Method: step the ICL up the coarse ladder through the icl votable
- * (the vote IS the programming path to the primary charger), watch
- * the vindpm fold-back after each step and settle at the last step
- * that passed. Two sweeps: 5V right after BC1.2 (adapter idle state),
- * QC mode after a successful QC probe (which already raised VBUS).
- */
-
-/* sensor hook: did the primary charger fold back the input current
- * since the last call? Replace the body when porting */
 static bool chg_pwr_vindpm_hit(struct chg_chip *chip)
 {
-	/* TODO: read the primary charger's vindpm fold-back status */
+	/* TODO: 读主充的 vindpm 折返状态 */
 	return false;
 }
 
-/* hook: command the adapter into QC mode for the second phase.
- * Replace the body when porting */
+/* 钩子: 命令适配器进入 QC 模式(第二阶段扫描). 移植时替换 */
 static int chg_pwr_qc_enter(struct chg_chip *chip)
 {
-	/* TODO: QC handshake to the operating voltage */
+	/* TODO: QC 握手到工作电压 */
 	return 0;
 }
 
-/*
- * Arm the sweep's fold-back threshold, relative to the battery
- * voltage: the threshold must sit above VBAT + converter headroom,
- * otherwise a sag first pushes the buck out of regulation and the
- * "fold-back" we detect is the converter's dropout, not the adapter's
- * current limit (which would badly underestimate the adapter).
- * Falls back to a near-full battery assumption when the battery psy
- * is not readable yet.
- */
 static void chg_pwr_arm_vindpm(struct chg_chip *chip)
 {
 	union power_supply_propval val = { };
 	unsigned int vbat_mv = PWR_DET_VBAT_FALLBACK_MV;
 
 	if (!hm_psy_get_by_name(&chip->bat_psy, "battery") &&
-	    !HM_PSY_GET_PROP(chip->bat_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW,
+			!HM_PSY_GET_PROP(chip->bat_psy, POWER_SUPPLY_PROP_VOLTAGE_NOW,
 				&val) &&
-	    val.intval > 0)
+			val.intval > 0)
 		vbat_mv = val.intval / 1000;	/* uV -> mV */
 
 	hm_vote(chip->vindpm_votable, DEFALUT_VOTER, true,
@@ -281,18 +210,10 @@ static void chg_pwr_arm_vindpm(struct chg_chip *chip)
 			vbat_mv + PWR_DET_VINDPM_HEADROOM_MV, vbat_mv);
 }
 
-/*
- * Apply one sweep step and report whether it survived its settle
- * window. Event-driven: a vbus drop pushed by the detector completes
- * early (worst-case reaction latency ~0 instead of a whole settle
- * period); a timed-out window is then confirmed against the vindpm
- * fold-back sensor (a sag to the threshold need not produce a drop
- * sample), and finally against usb_raw as a late-race belt.
- */
 static bool chg_pwr_step_passes(struct chg_chip *chip,
 		unsigned int step)
 {
-	/* fail fast without waiting: the input is already gone */
+	/* 输入已消失, 不等直接判败 */
 	if (!chip->usb_raw)
 		return false;
 
@@ -300,38 +221,20 @@ static bool chg_pwr_step_passes(struct chg_chip *chip,
 	hm_vote(chip->icl_votable, DEFALUT_VOTER, true, step);
 
 	if (wait_for_completion_timeout(&chip->sweep_drop,
-			msecs_to_jiffies(chip->pwr_step_settle_ms)))
-		return false;			/* drop signaled in window */
+				msecs_to_jiffies(chip->pwr_step_settle_ms)))
+		return false;			/* 窗口内收到掉线信号 */
 
 	if (chg_pwr_vindpm_hit(chip))
-		return false;			/* folded back, no drop */
+		return false;			/* 已折返, 只是没有掉线 */
 
 	return chip->usb_raw;
 }
 
-/*
- * One linear sweep: start at the type's DT-configured start value and
- * walk up in PWR_DET_STEP_MA increments; the FIRST step that folds
- * back (vindpm) or drops vbus settles the result at the PREVIOUS
- * step. Reaching the cap without a fold-back settles at the cap.
- * When even the first step fails there is no tested previous value:
- * the result falls back to the insertion-safe floor (an untested
- * start-minus-step would just be a guess).
- */
 static unsigned int chg_pwr_sweep_phase(struct chg_chip *chip,
 		unsigned int cap, unsigned int start_ma)
 {
 	unsigned int stable = 0, cur = start_ma;
 
-	/*
-	 * Any PD source has its power fixed by the contract (fixed PDO or
-	 * PPS APDO): skip the whole sweep -- sweeping would waste ~1.5s
-	 * and pull past the default current allowed before a contract.
-	 * Reading the evidence here is a decision input only; the pipeline
-	 * itself stays independent of PD traffic. Return 0 = "not
-	 * applicable"; every consumer already falls back to the SDP-class
-	 * default for an unmeasured value.
-	 */
 	if (chip->pd_capable)
 		return 0;
 
@@ -339,7 +242,7 @@ static unsigned int chg_pwr_sweep_phase(struct chg_chip *chip,
 
 	while (cur <= cap) {
 		if (!chg_pwr_step_passes(chip, cur))
-			break;			/* settle at the previous step */
+			break;			/* 停在上一档 */
 
 		stable = cur;
 		cur += PWR_DET_STEP_MA;
@@ -347,22 +250,13 @@ static unsigned int chg_pwr_sweep_phase(struct chg_chip *chip,
 
 	stable = max(stable, PWR_DET_START_MA);
 
-	/* settle at the result and hand the vindpm threshold back */
+	/* 落在结果上, 归还 vindpm 门限 */
 	hm_vote(chip->icl_votable, DEFALUT_VOTER, true, stable);
 	hm_vote(chip->vindpm_votable, DEFALUT_VOTER, false, 0);
 	hm_dbg("sweep result %umA\n", stable);
 	return stable;
 }
 
-/*
- * PD capability ingestion point -- call this from the tcpc notifier
- * callback with the parsed SRC_CAP result (best fixed PDO or best PPS
- * APDO), or with capable=false on contract loss (hard reset).
- * Atomic-safe: it only records the data under the lock and kicks the
- * machine; (re)classification happens in the work context. SRC_CAP may
- * arrive before the debounce commits online -- which is exactly why
- * chg_det_start() must NOT clear these fields.
- */
 static void chg_pd_event(struct chg_chip *chip, bool capable,
 		bool pps, unsigned int max_mv, unsigned int max_ma)
 {
@@ -373,74 +267,57 @@ static void chg_pd_event(struct chg_chip *chip, bool capable,
 	chip->pd_max_ma = capable ? max_ma : 0;
 	mutex_unlock(&chip->lock);
 
-	/* Hand the evidence to the arbitration; the detection pipeline
-	 * itself is never disturbed by PD traffic */
+	/* 证据交给仲裁; 检测管线本身不受 PD 流量打扰 */
 	schedule_work(&chip->pd_work);
 }
 
-/*
- * Program a selected protocol into the hardware (PD Request for a
- * fixed PDO or PPS APDO, QC voltage class, nothing for plain 5V):
- * the only place protocol requests are issued.
- */
 static int chg_protocol_apply(struct chg_chip *chip, int proto)
 {
 	/*
-	 * TODO: issue the request for the selected protocol:
-	 *  - HM_CHG_PROTO_5V: drop the adapter back to 5V -- the QC sweep
-	 *    leaves it at the high voltage, this MUST command it down;
-	 *  - HM_CHG_PROTO_HVDCP: QC handshake to the voltage class;
-	 *  - HM_CHG_PROTO_PD/PPS: PD Request for the chosen (A)PDO.
+	 * TODO (移植): 发出选定协议的请求:
+	 *  - HM_CHG_PROTO_5V: 命令适配器降回 5V -- QC 扫描后适配器
+	 *    停在高压, 必须显式降回;
+	 *  - HM_CHG_PROTO_HVDCP: QC 握手到电压档;
+	 *  - HM_CHG_PROTO_PD/PPS: 对选定的 (A)PDO 发 PD Request.
 	 */
 	return 0;
 }
 
-/*
- * Protocol selection interface -- the policy layer (this driver or
- * any module through the HM_POWER_SUPPLY_PROP_PROTOCOL_SELECT
- * property on usb psy) picks the input protocol. Detection results
- * are only the menu: a request for a capability that was not
- * detected is rejected. Each selection re-votes the ICL measured for
- * that mode (the vote is the programming path to the primary
- * charger), so switching protocols never re-detects.
- */
 static int chg_protocol_select(struct chg_chip *chip, int proto)
 {
 	int rc;
 
-	/* The menu is published only at DET_DONE: refuse selections while
-	 * the detection pipeline is still running (an early HVDCP pick
-	 * would vote an unmeasured -- possibly zero -- ICL and stop
-	 * charging). complete()'s own safe-default call runs after the
-	 * state was set to DONE, so it is unaffected. */
+	/* 菜单只在 DET_DONE 发布: 管线运行期间拒绝选择(过早选
+	 * HVDCP 会投下未测(可能为 0)的 ICL 而停充). complete() 自己
+	 * 的安全缺省调用发生在置 DONE 之后, 不受影响 */
 	if (chip->det_st != DET_DONE)
 		return -EAGAIN;
 
 	switch (proto) {
-	case HM_CHG_PROTO_5V:
-		chip->adapter_max_mv = 5000;
-		chip->adapter_max_ma = chip->icl_5v_ma ? : 500;
-		break;
-	case HM_CHG_PROTO_HVDCP:
-		if (!chip->hvdcp_ok)
+		case HM_CHG_PROTO_5V:
+			chip->adapter_max_mv = 5000;
+			chip->adapter_max_ma = chip->icl_5v_ma ? : 500;
+			break;
+		case HM_CHG_PROTO_HVDCP:
+			if (!chip->hvdcp_ok)
+				return -EINVAL;
+			/* adapter_max_mv: QC 电压档, 由钩子设置 */
+			chip->adapter_max_ma = chip->icl_hvdcp_ma;
+			break;
+		case HM_CHG_PROTO_PD:
+			if (!chip->pd_capable)
+				return -EINVAL;
+			chip->adapter_max_mv = chip->pd_max_mv;
+			chip->adapter_max_ma = chip->pd_max_ma;
+			break;
+		case HM_CHG_PROTO_PPS:
+			if (!chip->pps_capable)
+				return -EINVAL;
+			chip->adapter_max_mv = chip->pd_max_mv;
+			chip->adapter_max_ma = chip->pd_max_ma;
+			break;
+		default:
 			return -EINVAL;
-		/* adapter_max_mv: QC voltage class, set by the hook */
-		chip->adapter_max_ma = chip->icl_hvdcp_ma;
-		break;
-	case HM_CHG_PROTO_PD:
-		if (!chip->pd_capable)
-			return -EINVAL;
-		chip->adapter_max_mv = chip->pd_max_mv;
-		chip->adapter_max_ma = chip->pd_max_ma;
-		break;
-	case HM_CHG_PROTO_PPS:
-		if (!chip->pps_capable)
-			return -EINVAL;
-		chip->adapter_max_mv = chip->pd_max_mv;
-		chip->adapter_max_ma = chip->pd_max_ma;
-		break;
-	default:
-		return -EINVAL;
 	}
 
 	rc = chg_protocol_apply(chip, proto);
@@ -456,20 +333,6 @@ static int chg_protocol_select(struct chg_chip *chip, int proto)
 	return 0;
 }
 
-/*
- * ---- Arbitration: evidence in, one answer out ----
- *
- * The detection pipeline (chg_det_work) and the PD listener
- * (chg_pd_event) run fully independent and never disturb each
- * other; both only record EVIDENCE (pd_capable/pps_capable,
- * bc12_result, hvdcp_ok, icl_*). Whenever either side has something
- * new -- pipeline completion, or a PD contract arriving / being lost
- * at any time -- arbitration recomputes the classification from the
- * evidence and publishes it if (and only if) the conclusion changed.
- */
-
-/* classification: pure function of the evidence, priority PD > QC >
- * BC1.2; no state machine of its own */
 static int chg_classify(struct chg_chip *chip)
 {
 	if (chip->pd_capable)
@@ -482,35 +345,34 @@ static int chg_classify(struct chg_chip *chip)
 		return HM_POWER_SUPPLY_TYPE_USB_DCP;
 	if (chip->bc12_result == HM_BC12_CDP)
 		return HM_POWER_SUPPLY_TYPE_USB_CDP;
-	return HM_POWER_SUPPLY_TYPE_USB;	/* SDP / unknown */
+	return HM_POWER_SUPPLY_TYPE_USB;	/* SDP / 未知 */
 }
 
-/* recompute and publish on change; idempotent */
+/* 重算并在变化时发布; 幂等 */
 static void chg_arbitrate(struct chg_chip *chip)
 {
 	struct hm_evt_chg_type_data evt;
 	int t;
 
-	/* nothing to classify before the pipeline finished; PD evidence
-	 * recorded in the meantime is picked up at completion */
+	/* 管线没收尾没有可分类的; 期间记录的 PD 证据在收尾时被拾起 */
 	if (chip->det_st != DET_DONE || !chip->usb_present)
 		return;
 
 	t = chg_classify(chip);
 	if (t == chip->chg_type)
-		return;				/* conclusion unchanged */
+		return;				/* 结论没变 */
 
 	chip->chg_type = t;
 	hm_info("arbitrated type=%d\n", t);
 
-	/* safe default until the policy layer decides */
+	/* 策略层决策前的安全缺省 */
 	chg_protocol_select(chip, HM_CHG_PROTO_5V);
 
 	if (chip->pd_capable) {
 		evt.max_mv = chip->pd_max_mv;
 		evt.max_ma = chip->pd_max_ma;
 	} else if (chip->hvdcp_ok) {
-		evt.max_mv = 0;			/* QC class voltage set at select */
+		evt.max_mv = 0;			/* QC 电压档在选择时定 */
 		evt.max_ma = chip->icl_hvdcp_ma;
 	} else {
 		evt.max_mv = 5000;
@@ -540,13 +402,6 @@ static void chg_det_set_st(struct chg_chip *chip,
 	chip->det_st = st;
 }
 
-/*
- * Entry half of a stage: kick the stage's start hook exactly once
- * per state, always from chg_det_work() context (sleepable), so a
- * blocking hook never stalls the event chain that led here. Returns
- * true on the entry run -- the caller reschedules and starts polling
- * on the next tick.
- */
 static bool chg_det_stage_enter(struct chg_chip *chip)
 {
 	if (chip->det_stage_started)
@@ -554,37 +409,30 @@ static bool chg_det_stage_enter(struct chg_chip *chip)
 
 	chip->det_stage_started = true;
 	switch (chip->det_st) {
-	case DET_BC12:
-		chg_bc12_start(chip);
-		break;
-	case DET_HVDCP:
-		chg_hvdcp_probe_start(chip);
-		break;
-	default:
-		break;
+		case DET_BC12:
+			chg_bc12_start(chip);
+			break;
+		case DET_HVDCP:
+			chg_hvdcp_probe_start(chip);
+			break;
+		default:
+			break;
 	}
 
 	return true;
 }
 
-/*
- * Detection pipeline finished: mark DONE and hand the accumulated
- * evidence (including whatever PD contract arrived meanwhile) to the
- * arbitration, which classifies, publishes and settles the safe
- * default -- see chg_arbitrate().
- */
 static void chg_det_complete(struct chg_chip *chip)
 {
 	if (!chip->usb_present) {
-		/* adapter went away mid-detection: the offline path
-		 * (cable cb -> chg_det_stop) is already tearing the
-		 * machine down and waits for this run -- publish nothing,
-		 * its cleanup has the last word */
+		/* 检测中途拔出: 离线路径(cable cb -> chg_det_stop)
+		 * 正在拆机并等本次运行 -- 什么都不发布, 清理有最终
+		 * 话语权 */
 		return;
 	}
 
-	/* DONE first: protocol selections are only accepted from a
-	 * finished detection (see chg_protocol_select) */
+	/* 先置 DONE: 只接受已完成检测之后的协议选择
+	 * (见 chg_protocol_select) */
 	chg_det_set_st(chip, DET_DONE);
 	hm_info("pipeline took %lums\n",
 			jiffies_to_msecs(jiffies - chip->det_jiffies));
@@ -600,115 +448,112 @@ static void chg_det_work(struct work_struct *ws)
 
 	pm_stay_awake(chip->dev);
 
-	/* adapter went away: the offline path is tearing the machine
-	 * down (chg_det_stop's cancel_work_sync waits for this run);
-	 * stop here without advancing the state machine any further */
+	/* 拔出: 离线路径正在拆机(chg_det_stop 的 cancel_work_sync
+	 * 在等本次运行), 到此为止, 不再推进状态机 */
 	if (!chip->usb_present && chip->det_st != DET_IDLE)
 		goto out;
 
-	/* entry run of a state: kick its start hook here (this sleepable
-	 * context), poll from the next tick on */
+	/* 状态入口当次: 在此 kick start 钩子(本上下文可睡眠),
+	 * 下一 tick 起转入轮询 */
 	if (chg_det_stage_enter(chip))
 		goto resched;
 
 	switch (chip->det_st) {
-	case DET_BC12: {
-		int r;
+		case DET_BC12: 
+			{
+				int r;
 
-		rc = chg_bc12_poll(chip, &r);
-		if (rc == -EAGAIN) {
-			if (++chip->det_retries * DET_POLL_MS < BC12_TIMEOUT_MS)
+				rc = chg_bc12_poll(chip, &r);
+				if (rc == -EAGAIN) {
+					if (++chip->det_retries * DET_POLL_MS < BC12_TIMEOUT_MS)
+						goto resched;
+
+					hm_warn("BC1.2 detect timeout, assuming DCP\n");
+					r = HM_BC12_DCP;
+				}
+
+				chip->bc12_result = r;
+				if (r == HM_BC12_DCP || r == HM_BC12_CDP) {
+					/* 两者都先扫 5V 能力(适配器还在 BC1.2 后的
+					 * 空闲态); QC 探测只跟 DCP, 在扫描之后 */
+					chg_det_set_st(chip, DET_PWR);
+					goto resched;
+				}
+
+				/* SDP/未知: 能力由规范固定, 直接收尾 */
+				chg_det_complete(chip);
+				break;
+			}
+
+		case DET_HVDCP: 
+			{
+				bool ok;
+
+				rc = chg_hvdcp_probe_poll(chip, &ok);
+				if (rc == -EAGAIN) {
+					if (++chip->det_retries * DET_POLL_MS <
+							HVDCP_TIMEOUT_MS)
+						goto resched;
+
+					hm_warn("HVDCP probe timeout\n");
+					ok = false;
+				}
+
+				chip->hvdcp_ok = ok;
+				if (ok) {
+					/* 探测命中: 转 QC 模式扫描 */
+					chg_det_set_st(chip, DET_PWR_QC);
+				} else {
+					/* 普通 DCP: 5V 扫描已测过它 */
+					chg_det_complete(chip);
+				}
 				goto resched;
+			}
 
-			hm_warn("BC1.2 detect timeout, assuming DCP\n");
-			r = HM_BC12_DCP;
-		}
+		case DET_PWR: 
+			{
+				bool is_cdp = (chip->bc12_result == HM_BC12_CDP);
+				unsigned int cap = is_cdp ?
+					PWR_DET_CAP_CDP_MA : PWR_DET_CAP_DCP_MA;
+				unsigned int start = is_cdp ?
+					chip->pwr_start_cdp_ma : chip->pwr_start_dcp_ma;
 
-		chip->bc12_result = r;
-		if (r == HM_BC12_DCP || r == HM_BC12_CDP) {
-			/* both sweep the 5V capability first, while the
-			 * adapter is still at its post-BC1.2 idle state;
-			 * the QC probe follows only for a DCP, afterwards */
-			chg_det_set_st(chip, DET_PWR);
-			goto resched;
-		}
+				/* 一次阻塞式线性扫描, 耗时上界 = 档数 x settle;
+				 * stage_enter 机制保证跑在可睡眠的 det_work 上下文 */
+				chip->icl_5v_ma = chg_pwr_sweep_phase(chip, cap, start);
 
-		/* SDP/unknown: capability fixed by the spec, conclude */
-		chg_det_complete(chip);
-		break;
-	}
+				if (!chip->usb_present)
+					break;		/* 拔出在别处处理 */
 
-	case DET_HVDCP: {
-		bool ok;
+				if (chip->bc12_result == HM_BC12_CDP) {
+					/* CDP: 不做 QC 探测, 收尾 */
+					chip->icl_hvdcp_ma = 0;
+					chg_det_complete(chip);
+					break;
+				}
 
-		rc = chg_hvdcp_probe_poll(chip, &ok);
-		if (rc == -EAGAIN) {
-			if (++chip->det_retries * DET_POLL_MS <
-					HVDCP_TIMEOUT_MS)
+				/* DCP: 接着 QC 探测 */
+				chg_det_set_st(chip, DET_HVDCP);
 				goto resched;
+			}
 
-			hm_warn("HVDCP probe timeout\n");
-			ok = false;
-		}
+		case DET_PWR_QC:
+			/* 进入 QC 模式(探测后适配器仍在 5V)再扫 QC 模式能力;
+			 * 失败则只有 5V 结果可用 */
+			if (chg_pwr_qc_enter(chip)) {
+				hm_warn("QC mode enter failed, 5V result only\n");
+				chip->icl_hvdcp_ma = 0;
+				chg_det_complete(chip);
+				break;
+			}
 
-		chip->hvdcp_ok = ok;
-		if (ok) {
-			/* adapter already at 9V from the probe: sweep the
-			 * QC-mode capability right here */
-			chg_det_set_st(chip, DET_PWR_QC);
-		} else {
-			/* plain DCP: the 5V sweep already measured it */
-			chg_det_complete(chip);
-		}
-		goto resched;
-	}
-
-	case DET_PWR: {
-		bool is_cdp = (chip->bc12_result == HM_BC12_CDP);
-		unsigned int cap = is_cdp ?
-				PWR_DET_CAP_CDP_MA : PWR_DET_CAP_DCP_MA;
-		unsigned int start = is_cdp ?
-				chip->pwr_start_cdp_ma : chip->pwr_start_dcp_ma;
-
-		/* one blocking linear sweep, bounded by steps x settle; the
-		 * stage_enter mechanism guarantees this runs in the
-		 * sleepable det_work context */
-		chip->icl_5v_ma = chg_pwr_sweep_phase(chip, cap, start);
-
-		if (!chip->usb_present)
-			break;		/* offline is being handled elsewhere */
-
-		if (chip->bc12_result == HM_BC12_CDP) {
-			/* CDP: no QC probe, done */
-			chip->icl_hvdcp_ma = 0;
+			chip->icl_hvdcp_ma = chg_pwr_sweep_phase(chip,
+					PWR_DET_CAP_DCP_MA, chip->pwr_start_hvdcp_ma);
 			chg_det_complete(chip);
 			break;
-		}
 
-		/* DCP: QC probe next (PD absence was checked at the top
-		 * of this run) */
-		chg_det_set_st(chip, DET_HVDCP);
-		goto resched;
-	}
-
-	case DET_PWR_QC:
-		/* enter QC mode (the probe left the adapter at 5V) and
-		 * sweep the QC-mode capability; failure degrades to the
-		 * 5V result only */
-		if (chg_pwr_qc_enter(chip)) {
-			hm_warn("QC mode enter failed, 5V result only\n");
-			chip->icl_hvdcp_ma = 0;
-			chg_det_complete(chip);
+		default:
 			break;
-		}
-
-		chip->icl_hvdcp_ma = chg_pwr_sweep_phase(chip,
-				PWR_DET_CAP_DCP_MA, chip->pwr_start_hvdcp_ma);
-		chg_det_complete(chip);
-		break;
-
-	default:
-		break;
 	}
 
 out:
@@ -721,14 +566,8 @@ resched:
 			msecs_to_jiffies(DET_POLL_MS));
 }
 
-/* adapter confirmed online: run the detection pipeline; icl already
- * holds the insertion-safe 500mA vote from the cable callback */
 static void chg_det_start(struct chg_chip *chip)
 {
-	/* The PD fields are deliberately NOT cleared here: SRC_CAP may
-	 * arrive before the debounce commits online (tcpc moves faster
-	 * than our confirmation window) -- they belong to the tcpc
-	 * listener and are wiped by chg_det_stop() on a real detach */
 	chip->chg_type = HM_POWER_SUPPLY_TYPE_UNKNOWN;
 	chip->bc12_result = HM_BC12_UNKNOWN;
 	chip->hvdcp_ok = false;
@@ -739,15 +578,11 @@ static void chg_det_start(struct chg_chip *chip)
 	chip->sel_protocol = HM_CHG_PROTO_5V;
 	chip->det_jiffies = jiffies;
 
-	/* only state + schedule here: the BC1.2 start hook runs from the
-	 * first chg_det_work() run, so a blocking hook cannot stall
-	 * the event chain that called us */
 	chg_det_set_st(chip, DET_BC12);
 	mod_delayed_work(system_wq, &chip->det_work, 0);
 }
 
-/* adapter removed: stop the machine and wipe every detection result
- * so the next insertion starts clean */
+/* 拔出: 停机并清掉所有检测证据, 下次插入从零开始 */
 static void chg_det_stop(struct chg_chip *chip)
 {
 	cancel_delayed_work_sync(&chip->det_work);
@@ -771,9 +606,8 @@ static void chg_response_cable_cb(struct chg_chip *chip, bool online)
 	chg_reset_voters(chip, online);
 
 	if (online) {
-		/* insertion-safe ICL until detection completes: aligned with
-		 * PWR_DET_START_MA, deliberately below the SDP-class 500mA
-		 * (BC1.2/PD have not run yet, assume the weakest source) */
+		/* 检测完成前的插入安全 ICL, 刻意低于 SDP 级 500mA
+		 * (BC1.2/PD 还没跑, 先按最弱源算) */
 		hm_vote(chip->icl_votable, DEFALUT_VOTER, true, PWR_DET_START_MA);
 		chg_det_start(chip);
 	} else {
@@ -813,10 +647,6 @@ static void chg_psy_changed(struct chg_chip *chip)
 	}
 }
 
-/*
- * Vbus online debounce.
- *
- */
 static void chg_debounce_work(struct work_struct *ws)
 {
 	struct chg_chip *chip =
@@ -824,7 +654,7 @@ static void chg_debounce_work(struct work_struct *ws)
 
 	mutex_lock(&chip->lock);
 	if (chip->usb_raw == chip->usb_present) {
-		/* recovered before the window elapsed */
+		/* 窗口内恢复了, 不提交 */
 		mutex_unlock(&chip->lock);
 		return;
 	}
@@ -833,23 +663,23 @@ static void chg_debounce_work(struct work_struct *ws)
 	chip->usb_present = chip->usb_raw;
 	mutex_unlock(&chip->lock);
 
-	/* commit: uevent + event bus broadcast to every module */
+	/* 提交: uevent + 事件总线广播给所有模块 */
 	chg_psy_changed(chip);
 }
 
 static void chg_vbus_irq_cb(struct chg_chip *chip)
 {
 	unsigned int db_ms;
-	bool raw = false;//这里实现vbus是否在线的检测
+	bool raw = false;	/* TODO (移植): 读真实 VBUS 在线检测 */
 
-	/* wake the power sweep immediately on a physical drop: it waits
-	 * on this completion while a step settles */
+	/* 物理掉线立即唤醒正在 settle 的功率扫描 */
 	if (!raw)
 		complete(&chip->sweep_drop);
 
 	mutex_lock(&chip->lock);
 	if (raw == chip->usb_present) {
 		if (raw != chip->usb_raw) {
+			/* 毛刺吸收: 采样回到了已确认状态 */
 			cancel_delayed_work(&chip->debounce_work);
 			chip->usb_raw = raw;
 			hm_dbg("glitch absorbed, staying %sline\n",
@@ -860,7 +690,7 @@ static void chg_vbus_irq_cb(struct chg_chip *chip)
 	}
 
 	if (raw == chip->usb_raw) {
-		/* window already running for this value; keep it */
+		/* 该值的确认窗口已在跑, 保持 */
 		mutex_unlock(&chip->lock);
 		return;
 	}
@@ -886,8 +716,8 @@ static void chg_parse_dt(struct chg_chip *chip)
 			&chip->debounce_offline_ms);
 	if (!chip->debounce_offline_ms)
 		chip->debounce_offline_ms = USB_OFFLINE_DEBOUNCE_DFLT_MS;
-	/* per-step settle of the power sweep: default conservative, tune
-	 * per board on the bench (see PWR_DET_STEP_SETTLE_DFLT_MS) */
+	/* 扫描每档 settle: 缺省保守, 板级上机台后调
+	 * (见 PWR_DET_STEP_SETTLE_DFLT_MS) */
 	of_property_read_u32(chip->dev->of_node, "pwr-det-step-settle-ms",
 			&chip->pwr_step_settle_ms);
 	if (!chip->pwr_step_settle_ms)
@@ -895,17 +725,15 @@ static void chg_parse_dt(struct chg_chip *chip)
 	chip->pwr_step_settle_ms = max(chip->pwr_step_settle_ms,
 			PWR_DET_STEP_SETTLE_MIN_MS);
 
-	/* keep the power-detection rescue window intact: settle + adapter
-	 * recovery must fit inside the offline debounce */
+	/* 保住功率扫描的营救窗: settle + 适配器恢复必须装进离线防抖 */
 	if (chip->debounce_offline_ms < 2 * chip->pwr_step_settle_ms) {
 		hm_warn("debounce-offline-ms too small, raised to %d\n",
 				2 * chip->pwr_step_settle_ms);
 		chip->debounce_offline_ms = 2 * chip->pwr_step_settle_ms;
 	}
 
-	/* per-type power detection start values: DT-configurable but
-	 * never below the insertion-safe floor and never above the
-	 * type's standard cap */
+	/* 各类型扫描起点: 可 DT 配, 但不低于插入安全底线, 不高于该
+	 * 类型规范上限 */
 	of_property_read_u32(chip->dev->of_node, "pwr-det-start-cdp-ma",
 			&chip->pwr_start_cdp_ma);
 	if (!chip->pwr_start_cdp_ma)
@@ -929,18 +757,8 @@ static void chg_parse_dt(struct chg_chip *chip)
 }
 
 /* ------------------------------------------------------------------ */
-/* power_supply interface (user space)                                 */
+/* power_supply 接口 (用户空间)                                        */
 /* ------------------------------------------------------------------ */
-/*
- * One psy, two audiences: the "usb" psy carries the standard
- * user-space view AND the framework's kernel-only protocol. The
- * properties[] trick keeps the audiences apart: custom properties
- * are handled in the same switches but are NOT listed in
- * chg_usb_props[], so they never appear in sysfs -- they are only
- * reachable through the psy API (HM_PSY_GET_PROP / HM_PSY_SET_PROP)
- * by hm modules (detector pushes USB_DETECT samples, cms picks
- * PROTOCOL_SELECT, hm-battery reads USB_ONLINE/CHG_TYPE).
- */
 static int chg_usb_get_prop(struct power_supply *psy,
 		enum power_supply_property psp,
 		union power_supply_propval *val)
@@ -948,8 +766,7 @@ static int chg_usb_get_prop(struct power_supply *psy,
 	struct chg_chip *chip = power_supply_get_drvdata(psy);
 	int rc = 0;
 
-	/* The psy ABI reports voltage/current in microvolts/microamps;
-	 * internal units are mV/mA, convert at this boundary */
+	/* psy ABI 电压/电流用 uV/uA, 内部单位 mV/mA, 在此边界换算 */
 	switch ((int)psp) {
 		case POWER_SUPPLY_PROP_ONLINE:
 			val->intval = chip->usb_present;
@@ -969,7 +786,7 @@ static int chg_usb_get_prop(struct power_supply *psy,
 		case POWER_SUPPLY_PROP_VOLTAGE_MAX:
 			val->intval = chip->adapter_max_mv * 1000;
 			break;
-	/* ---- kernel-only protocol, no sysfs file ---- */
+			/* ---- 内核专用协议, 无 sysfs 文件 ---- */
 		case HM_POWER_SUPPLY_PROP_CHG_TYPE:
 			val->intval = chip->chg_type;
 			break;
@@ -989,19 +806,17 @@ static int chg_usb_set_prop(struct power_supply *psy,
 
 	switch ((int)psp) {
 		case POWER_SUPPLY_PROP_ONLINE:
-			/* route through the debouncer like every other
-			 * sample source, so sysfs test writes get the
-			 * same semantics as the detector pushes */
+			/* 与其它采样源一样走防抖: sysfs 测试写与检测器推送
+			 * 语义一致 */
 			chg_vbus_irq_cb(chip);
 			break;
-	/* ---- kernel-only protocol, no sysfs file ---- */
+			/* ---- 内核专用协议, 无 sysfs 文件 ---- */
 		case HM_POWER_SUPPLY_PROP_USB_DETECT:
-			/* detector pushes a raw vbus sample: 0/1 */
+			/* 检测器推入 vbus 原始采样: 0/1 */
 			chg_vbus_irq_cb(chip);
 			return 0;
 		case HM_POWER_SUPPLY_PROP_PROTOCOL_SELECT:
-			/* policy layer picks the input protocol,
-			 * enum hm_chg_proto */
+			/* 策略层点输入协议, enum hm_chg_proto */
 			return chg_protocol_select(chip, val->intval);
 		default:
 			return -EINVAL;
@@ -1042,16 +857,8 @@ static const struct power_supply_desc chg_usb_desc = {
 };
 
 /* ------------------------------------------------------------------ */
-/* votable (charging policy arbitration)                               */
+/* votable (充电策略仲裁)                                              */
 /* ------------------------------------------------------------------ */
-/*
- * Program an effective votable result into the primary charger's psy.
- *  - a negative result means "no vote" (all clients abstained) and is
- *    not programmed;
- *  - a not-yet-registered primary psy only warns: vote() callers must
- *    not fail for that transient state, the next election re-applies
- *    the value once the peer appears.
- */
 static int chg_set_prop_to_primary_chg(struct chg_chip *chip,
 		const char *tag, enum hm_power_supply_property psp,
 		int result)
@@ -1078,21 +885,13 @@ static int chg_set_prop_to_primary_chg(struct chg_chip *chip,
 	return rc;
 }
 
-/*
- * Each callback logs which voter produced the new effective result
- * (client), whether that client's vote is enabled (true/false) and the
- * value. The hm_log macros prepend __func__, so grepping the log for
- * "chg_icl_callback" etc. directly lands on the right votable.
- * These run under the votable's vote_lock: the *_locked query variant
- * must be used, the plain one would deadlock on the mutex vote() holds.
- */
 static int chg_icl_callback(struct votable *votable, void *data,
 		int result, const char *client)
 {
 	hm_info("voter=%s vote=%s val=%d\n",
 			client ? client : "none",
 			is_client_vote_enabled_locked(votable, client) ?
-				"true" : "false",
+			"true" : "false",
 			result);
 
 	return chg_set_prop_to_primary_chg(data, "icl",
@@ -1105,7 +904,7 @@ static int chg_ichg_callback(struct votable *votable, void *data,
 	hm_info("voter=%s vote=%s val=%d\n",
 			client ? client : "none",
 			is_client_vote_enabled_locked(votable, client) ?
-				"true" : "false",
+			"true" : "false",
 			result);
 
 	return chg_set_prop_to_primary_chg(data, "ichg",
@@ -1118,7 +917,7 @@ static int chg_fv_callback(struct votable *votable, void *data,
 	hm_info("voter=%s vote=%s val=%d\n",
 			client ? client : "none",
 			is_client_vote_enabled_locked(votable, client) ?
-				"true" : "false",
+			"true" : "false",
 			result);
 
 	return chg_set_prop_to_primary_chg(data, "fv",
@@ -1131,7 +930,7 @@ static int chg_iterm_callback(struct votable *votable, void *data,
 	hm_info("voter=%s vote=%s val=%d\n",
 			client ? client : "none",
 			is_client_vote_enabled_locked(votable, client) ?
-				"true" : "false",
+			"true" : "false",
 			result);
 
 	return chg_set_prop_to_primary_chg(data, "iterm",
@@ -1144,29 +943,20 @@ static int chg_vindpm_callback(struct votable *votable, void *data,
 	hm_info("voter=%s vote=%s val=%d\n",
 			client ? client : "none",
 			is_client_vote_enabled_locked(votable, client) ?
-				"true" : "false",
+			"true" : "false",
 			result);
 
 	return chg_set_prop_to_primary_chg(data, "vindpm",
 			HM_POWER_SUPPLY_PROP_VINDPM_MV, result);
 }
 
-/*
- * chg_disable / chg_suspend are SET_ANY: any client voting true wins.
- * Keep their roles orthogonal: disable gates the BATTERY charge path
- * (safety / user / factory), suspend gates the INPUT (temporary
- * algorithmic pauses such as OCV relax measurements) -- they program
- * different primary-charger properties and can never fight over one
- * register. Note the SET_ANY effective client label is "the last
- * voter", informative only (see vote_set_any).
- */
 static int chg_disable_callback(struct votable *votable, void *data,
 		int result, const char *client)
 {
 	hm_info("voter=%s vote=%s val=%d\n",
 			client ? client : "none",
 			is_client_vote_enabled_locked(votable, client) ?
-				"true" : "false",
+			"true" : "false",
 			result);
 
 	return chg_set_prop_to_primary_chg(data, "chg_disable",
@@ -1179,7 +969,7 @@ static int chg_suspend_callback(struct votable *votable, void *data,
 	hm_info("voter=%s vote=%s val=%d\n",
 			client ? client : "none",
 			is_client_vote_enabled_locked(votable, client) ?
-				"true" : "false",
+			"true" : "false",
 			result);
 
 	return chg_set_prop_to_primary_chg(data, "chg_suspend",
@@ -1271,10 +1061,9 @@ static int __maybe_unused chg_suspend(struct device *dev)
 	cancel_delayed_work_sync(&chip->debounce_work);
 	cancel_delayed_work_sync(&chip->det_work);
 
-	/* Drop any sample that was still awaiting its confirmation window:
-	 * without the window it is meaningless, and a stale usb_raw would
-	 * make the next identical sample take the "window already running"
-	 * path while no window exists -- the transition would stall. */
+	/* 丢弃还在等确认窗口的采样: 没有窗口它就没有意义, 而残留的
+	 * usb_raw 会让下一个相同采样走"窗口已在跑"分支, 但窗口其实
+	 * 不存在 -- 状态切换会卡死 */
 	mutex_lock(&chip->lock);
 	chip->usb_raw = chip->usb_present;
 	mutex_unlock(&chip->lock);
@@ -1287,7 +1076,7 @@ static int __maybe_unused chg_resume(struct device *dev)
 {
 	struct chg_chip *chip = dev_get_drvdata(dev);
 
-	/* resume an interrupted detection pipeline */
+	/* 恢复被打断的检测管线 */
 	if (chip->usb_present && chip->det_st != DET_IDLE &&
 			chip->det_st != DET_DONE)
 		mod_delayed_work(system_wq, &chip->det_work, 0);
@@ -1313,16 +1102,15 @@ static int chg_probe(struct platform_device *pdev)
 
 	chg_parse_dt(chip);
 
-	/* Create the votables before registering the psys: other modules
-	 * may vote via find_votable() as soon as they see the psy */
+	/* 注册 psy 前先建 votables: 其它模块一看到 psy 就可能经
+	 * find_votable() 投票 */
 	rc = chg_create_votables(chip);
 	if (rc)
 		return rc;
 
-	/* works first: the event subscription below is the first point
-	 * where an external event (a concurrent module's probe publishing
-	 * on the bus) can reach chg_evt_notify -> chg_det_start ->
-	 * mod_delayed_work -- the work must be initialized by then */
+	/* works 先行: 下面的订阅是外部事件(并发模块的 probe 在总线上
+	 * 发布)能进入 chg_evt_notify -> chg_det_start ->
+	 * mod_delayed_work 的第一个入口, work 到那时必须已初始化 */
 	INIT_DELAYED_WORK(&chip->debounce_work, chg_debounce_work);
 	INIT_DELAYED_WORK(&chip->det_work, chg_det_work);
 	INIT_WORK(&chip->pd_work, chg_pd_work);
@@ -1330,7 +1118,7 @@ static int chg_probe(struct platform_device *pdev)
 
 	usb_cfg.drv_data = chip;
 	usb_cfg.of_node = chip->dev->of_node;
-	usb_cfg.supplied_to = chg_supplied_to;	/* usb -> other psys power relationship */
+	usb_cfg.supplied_to = chg_supplied_to;	/* usb -> 其它 psy 的供电关系 */
 	usb_cfg.num_supplies = ARRAY_SIZE(chg_supplied_to);
 
 	chip->usb_psy = power_supply_register(chip->dev, &chg_usb_desc, &usb_cfg);
@@ -1339,9 +1127,8 @@ static int chg_probe(struct platform_device *pdev)
 		goto err_votables;
 	}
 
-	/* Subscribe to the common event bus LAST: nothing external can
-	 * reach this driver before it is fully constructed, and no probe
-	 * failure path after this point exists to leak the notifier */
+	/* 事件总线最后订阅: 完整构造之前外部到达不了本驱动, 此后也
+	 * 不存在会泄漏 notifier 的失败路径 */
 	chip->chg_nb.notifier_call = chg_evt_notify;
 	rc = hm_event_register_notifier(&chip->chg_nb);
 	if (rc) {

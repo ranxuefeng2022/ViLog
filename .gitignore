@@ -30,3 +30,6 @@ temp/
 
 # Claude settings (local only)
 .claude/
+
+# ctags index
+docs/tags

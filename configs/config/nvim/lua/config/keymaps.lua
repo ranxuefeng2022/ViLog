@@ -299,6 +299,10 @@ map('v', '<C-c>', function()
   local s = math.min(vim.fn.line('v'), vim.fn.line('.'))
   local e = math.max(vim.fn.line('v'), vim.fn.line('.'))
   vim.cmd(s .. ',' .. e .. 'w! ~/.vim/cvbuf.c')
+  vim.notify(('写入 cvbuf.c:%d 行 (%d-%d)'):format(e - s + 1, s, e),
+    vim.log.levels.INFO, { title = 'C-v 粘贴缓冲' })
+  -- 写完退出可视模式，取消选中
+  vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes('<Esc>', true, false, true), 'n', false)
 end)
 map('n', '<C-v>', '<Cmd>r ~/.vim/cvbuf.c<CR>')
 

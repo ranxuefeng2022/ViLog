@@ -11,30 +11,25 @@
  * GNU General Public License for more details.
  */
 /*
- * voter.c - voting framework shared by the hm modules (ported from the
- * mature Qualcomm pmic-voter)
+ * voter.c - hm 模块共用的投票框架(移植自高通成熟的 pmic-voter)
  *
- * Changes relative to the upstream source:
- *   - include fixes (upstream includes pmic-voter.h, renamed here);
- *   - EXPORT_SYMBOL_GPL added to every public interface;
- *   - the debugfs interface was removed (status/force_val/force_active):
- *     observability comes from the hm_vote() call-site logs and the
- *     vote() election logs; force_active had no non-debugfs setter and
- *     is gone with it, vote_override() remains as the API override;
- *   - vote()'s switch default branch jumps to the out label to unlock
- *     and return (upstream returns while holding vote_lock, leaking
- *     the lock on an invalid type);
- *   - vote() also fires when the effective client changed at an
- *     unchanged value (upstream: value change only). This keeps
- *     effective_client_id from going stale and gives the callback
- *     fresh "who" context; callbacks must be idempotent;
- *   - bug fixes: vote_override() NULL-callback guard (crash on
- *     votables created without a callback); registry insertion moved
- *     to the end of create_votable() with an atomic duplicate check
- *     (error paths used to leave a freed votable on the list);
- *   - query APIs (is_client_vote_enabled/get_client_vote) no longer
- *     REGISTER the queried name as a side effect (upstream: a query
- *     on an unknown name allocates a slot).
+ * 相对 upstream 源码的改动:
+ *   - include 修正(upstream 引 pmic-voter.h, 此处改名);
+ *   - 所有公开接口补 EXPORT_SYMBOL_GPL;
+ *   - 删 debugfs 接口(status/force_val/force_active): 可观测性由
+ *     hm_vote() 调用点日志与 vote() 选举日志承担; force_active
+ *     无非 debugfs 的设置途径, 一并移除, API 级覆盖用
+ *     vote_override();
+ *   - vote() switch 的 default 分支改为跳 out 标签解锁返回
+ *     (upstream 持 vote_lock 直接 return, 非法类型会漏锁);
+ *   - 值不变而生效 client 变了时 vote() 也触发回调(upstream 仅
+ *     值变化触发), 保证 effective_client_id 不陈旧, 回调总能拿到
+ *     新鲜的"谁"上下文; 回调必须幂等;
+ *   - bug fix: vote_override() 的 NULL 回调保护(无回调建的
+ *     votable 会崩); 注册表插入移到 create_votable() 末尾并做
+ *     原子查重(原错误路径会把已释放的 votable 留在链表上);
+ *   - 查询 API(is_client_vote_enabled/get_client_vote)不再把被查
+ *     名字注册为副作用(upstream 查未知名会占一个槽).
  */
 #include <linux/err.h>
 #include <linux/errno.h>
@@ -80,17 +75,16 @@ struct votable {
 };
 
 /**
- * vote_set_any()
- * @votable:	votable object
- * @client_id:	client number of the latest voter
- * @eff_res:	sets 0 or 1 based on the voting
- * @eff_id:	Always returns the client_id argument
+ * vote_set_any() - SET_ANY 选举
+ * @votable:	votable 对象
+ * @client_id:	最新投票者的 client 编号
+ * @eff_res:	输出: 按投票结果置 0 或 1
+ * @eff_id:	输出: 恒等于传入的 client_id
  *
- * Note that for SET_ANY voter, the value is always same as enabled. There is
- * no idea of a voter abstaining from the election. Hence there is never a
- * situation when the effective_id will be invalid, during election.
+ * SET_ANY 的值恒等于 enabled, 没有"弃权"的概念, 因此选举过程中
+ * effective_id 永远有效.
  *
- * Context:	Must be called with the votable->lock held
+ * Context:	须持有 votable->lock
  */
 static void vote_set_any(struct votable *votable, int client_id,
 				int *eff_res, int *eff_id)
@@ -106,16 +100,9 @@ static void vote_set_any(struct votable *votable, int client_id,
 }
 
 /**
- * vote_min() -
- * @votable:	votable object
- * @client_id:	client number of the latest voter
- * @eff_res:	sets this to the min. of all the values amongst enabled voters.
- *		If there is no enabled client, this is set to -EINVAL
- * @eff_id:	sets this to the client id that has the min value amongst all
- *		the enabled clients. If there is no enabled client, sets this
- *		to -EINVAL
+ * vote_min() - 取启用票中的最小值; 无启用票时结果与 id 均为 -EINVAL
  *
- * Context:	Must be called with the votable->lock held
+ * Context:	须持有 votable->lock
  */
 static void vote_min(struct votable *votable, int client_id,
 			int *eff_res, int *eff_id)
@@ -136,16 +123,9 @@ static void vote_min(struct votable *votable, int client_id,
 }
 
 /**
- * vote_max() -
- * @votable:	votable object
- * @client_id:	client number of the latest voter
- * @eff_res:	sets this to the max. of all the values amongst enabled voters.
- *		If there is no enabled client, this is set to -EINVAL
- * @eff_id:	sets this to the client id that has the max value amongst all
- *		the enabled clients. If there is no enabled client, sets this
- *		to -EINVAL
+ * vote_max() - 取启用票中的最大值; 无启用票时结果与 id 均为 -EINVAL
  *
- * Context:	Must be called with the votable->lock held
+ * Context:	须持有 votable->lock
  */
 static void vote_max(struct votable *votable, int client_id,
 			int *eff_res, int *eff_id)
@@ -176,11 +156,11 @@ static int get_client_id(struct votable *votable, const char *client_str,
 			return i;
 	}
 
-	/* new client */
+	/* 新 client: 占第一个空槽 */
 	for (i = 0; i < votable->num_clients; i++) {
 		if (!votable->client_strs[i]) {
 			if (!register_new)
-				return -EINVAL;	/* query on unknown client */
+				return -EINVAL;	/* 查询未知的 client */
 
 			votable->client_strs[i]
 				= kstrdup(client_str, GFP_KERNEL);
@@ -371,9 +351,8 @@ int vote(struct votable *votable, const char *client_str, bool enabled, int val)
 	}
 
 	/*
-	 * for SET_ANY the val is to be ignored, set it
-	 * to enabled so that the election still works based on
-	 * value regardless of the type
+	 * SET_ANY 忽略 val, 置成 enabled, 让选举对各种类型都
+	 * 按值工作
 	 */
 	if (votable->type == VOTE_SET_ANY)
 		val = enabled;
@@ -418,11 +397,9 @@ int vote(struct votable *votable, const char *client_str, bool enabled, int val)
 	}
 
 	/*
-	 * Note that the callback is called with a NULL string and -EINVAL
-	 * result when there are no enabled votes. Fire not only on a value
-	 * change but also when the effective client changed at the same
-	 * value: the callback then always sees fresh "who" context, and
-	 * get_effective_client() never reports a stale client.
+	 * 无启用票时回调收到 NULL 字符串和 -EINVAL 结果. 不仅值变
+	 * 触发, 值不变而生效 client 变了也触发: 回调总能拿到新鲜的
+	 * "谁"上下文, get_effective_client() 不报陈旧 client.
 	 */
 	if (!votable->voted_on
 			|| (effective_result != votable->effective_result)
@@ -452,8 +429,8 @@ int vote_override(struct votable *votable, const char *override_client,
 {
 	int rc = 0;
 
-	/* override_client must be a persistent string (static / kstrdup'd):
-	 * it is stored by pointer, not copied */
+	/* override_client 必须是持久字符串(static/kstrdup): 按指针
+	 * 存, 不拷贝 */
 	if (!votable || !override_client || !votable->callback)
 		return -EINVAL;
 
@@ -528,10 +505,9 @@ out:
 EXPORT_SYMBOL_GPL(find_votable);
 
 /*
- * Add to the registry, -EEXIST if a votable of the same name raced in
- * between the caller's early check and here. Kept as the LAST step of
- * create_votable() so no error path can leave a freed votable on the
- * list (find_votable() would then walk into freed memory).
+ * 入注册表; 调用方早查之后有同名 votable 抢先入表则 -EEXIST.
+ * 保持是 create_votable() 的最后一步, 错误路径才不会把已释放的
+ * votable 留在链表上(find_votable() 会走进已释放内存).
  */
 static int votable_list_add_unique(struct votable *votable)
 {
@@ -591,10 +567,7 @@ struct votable *create_votable(const char *name,
 	votable->override_result = -EINVAL;
 	mutex_init(&votable->vote_lock);
 
-	/*
-	 * Because effective_result and client states are invalid
-	 * before the first vote, initialize them to -EINVAL
-	 */
+	/* 首次投票前 effective_result 与 client 状态无效, 置 -EINVAL */
 	votable->effective_result = -EINVAL;
 	if (votable->type == VOTE_SET_ANY)
 		votable->effective_result = 0;

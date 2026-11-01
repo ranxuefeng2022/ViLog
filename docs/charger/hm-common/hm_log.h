@@ -1,23 +1,18 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * hm_log.h - logging macros shared by the hm modules
+ * hm_log.h - hm 模块共用日志宏
  *
- * Every message is prefixed with "<tag> <function>:<line> ". The tag
- * defaults to KBUILD_MODNAME (the kbuild object name of the including
- * file, e.g. "hm_charger", "voter"); define HM_LOG_TAG before
- * including this header to override it.
+ * 每条消息前缀 "<tag> <function>:<line> ". tag 缺省
+ * KBUILD_MODNAME(包含文件的目标名, 如 "hm_charger", "voter"),
+ * 包含本头文件前定义 HM_LOG_TAG 可覆盖.
  *
- * Usage rules:
- *   - hm_dbg() maps to pr_debug: it compiles away unless the file is
- *     built with -DDEBUG or CONFIG_DYNAMIC_DEBUG is enabled, in which
- *     case it is switchable at runtime through
- *     /sys/kernel/debug/dynamic_debug/control;
- *   - always terminate the format string with '\n'; never call bare
- *     printk();
- *   - in paths that run periodically (poll works, interrupts), prefer
- *     the *_ratelimited variants so a fault cannot flood the log;
- *   - keep in mind __LINE__ drifts with every edit: logs captured from
- *     a field unit only match the source tree it was built from.
+ * 用法:
+ *   - hm_dbg() 映射 pr_debug: 不带 -DDEBUG 且未开
+ *     CONFIG_DYNAMIC_DEBUG 时编译期消除; 开了 dynamic_debug 可经
+ *     /sys/kernel/debug/dynamic_debug/control 运行时开关;
+ *   - 格式串必须以 '\n' 结尾; 不许裸调 printk();
+ *   - 周期路径(轮询 work/中断)用 *_ratelimited 变体, 防故障刷屏;
+ *   - __LINE__ 随编辑漂移: 现场日志只与构建它的源码版本对得上.
  */
 #ifndef __HM_LOG_H__
 #define __HM_LOG_H__

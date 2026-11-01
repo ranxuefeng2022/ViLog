@@ -1,18 +1,15 @@
 config HM_COMMON
 	bool "HM common support library (voter, event bus)"
 	help
-	  Shared support library of the hm modules: the voter voting
-	  framework and the hm_event inter-module event bus.
+	  hm 模块的共享支持库: voter 投票框架与 hm_event 模块间
+	  事件总线.
 
-	  Notes:
-	  - This is bool, not tristate, matching the all-builtin policy of
-	    the hm modules (a =m library with =y consumers would fail to
-	    link; do not create that trap);
-	  - voter.o and hm_event.o are built exactly once for the whole
-	    kernel; modules use them through the headers and exported
-	    symbols, and must NEVER compile the sources of this directory
-	    again in their own Makefiles (duplicate copies would split the
-	    votable name registry and find_votable() would never find the
-	    votables created by other modules).
+	  注意:
+	  - bool 而非 tristate, 与 hm 模块全内建策略一致(=m 的库
+	    被 =y 的使用者引用会链接失败, 不留这个坑);
+	  - voter.o 与 hm_event.o 整个内核只构建一次; 模块经头文件
+	    与导出符号使用它们, 严禁在自己的 Makefile 里再次编译
+	    本目录源码(重复副本会分裂 votable 名字注册表,
+	    find_votable() 将永远找不到其它模块创建的 votable).
 
-	  Each hm module's Kconfig should depend on HM_COMMON.
+	  各 hm 模块的 Kconfig 应 depends on HM_COMMON.

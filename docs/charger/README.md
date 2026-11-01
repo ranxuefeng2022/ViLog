@@ -1,7 +1,8 @@
 # hm 充电框架(docs/charger)
 
 内核充电框架参考实现。**只写不编**:本机(macOS)无内核树,clangd 报
-`linux/*.h not found` 属预期。所有代码注释为英文;讨论用中文。
+`linux/*.h not found` 属预期。代码注释与讨论均用中文,注释只写
+非显而易见的信息(决策理由/单位/TODO),不写复述代码的废话。
 
 新会话从这里开始。架构理由大多写在代码内的关键位置(文件头注释、
 决策点上方),改动前先读对应注释。
@@ -16,14 +17,16 @@ charger/
 ├── hm-common/           共享库: voter.c/h(投票仲裁) hm_event.c/h(事件总线)
 │                        hm_power_supply.h(私有 psy 协议) hm_log.h(日志宏)
 ├── hm-charger/          充电信息中枢: usb psy + 检测管线 + votables
-└── hm-battery/          电池 psy "battery": status/health/JEITA/保护
-                         (FG 钩子内嵌; hm-fg 形态决策仍悬置)
+└── hm-battery/          电池 psy "battery": FG 读取 + 信息暴露
+                         (纯信息层,所有值读自 FG 含 status;
+                         JEITA/过欠压/status 合成已删,不订阅事件
+                         总线,不读 usb psy;hm-fg 形态决策仍悬置)
 ```
 
 接入内核树:父目录 Makefile 加 `obj-y += charger/`,Kconfig source 两行,
 drivers/Kconfig 追加 source。ccflags -I hm-common 已配好。
 
-## 架构(hm_charger.c 文件头有完整图)
+## 架构
 
 - **一个 psy**:"usb" 同时服务两个受众——标准属性(6 个,对用户空间)
   和内核协议(自定义属性,**不进 desc->properties 故不上 sysfs**,仅
@@ -31,8 +34,8 @@ drivers/Kconfig 追加 source。ccflags -I hm-common 已配好。
   同一个 switch,用 `/* kernel-only */` 注释行分界(曾试过拆成独立
   proto handler 函数,已回退——基线是混排版)。混有 HM_ case 的
   switch 控制表达式一律 `(int)` 强转(否则 -Wswitch 告警)。
-  hm-battery 读输入状态用标准 `POWER_SUPPLY_PROP_ONLINE`(私有
-  USB_ONLINE 已删:合并后冗余)
+  hm-battery 不读 usb psy:status 等所有值来自 FG(私有
+  USB_ONLINE 曾存在,连同类耦合一起删了)
 - **检测管线**(det_work):BC12 → 5V 功率扫描 → QC 探测 → QC 扫描,
   永不被 PD 打扰;**PD 监听**(pd_event)独立记账
 - **仲裁**(chg_arbitrate):证据的纯函数分类(PD>QC>BC1.2),幂等,

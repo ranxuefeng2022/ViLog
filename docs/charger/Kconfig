@@ -1,7 +1,6 @@
-# Kconfig of the hm framework parent directory.
-# When moving this tree into a kernel tree, adjust the source paths
-# below to the real location; if this directory lands in drivers/hm/,
-# keep them as is and append to the end of drivers/Kconfig:
+# hm 框架父目录的 Kconfig.
+# 挪进内核树时按真实位置调整下方 source 路径; 若本目录落在
+# drivers/hm/, 路径不变, 在 drivers/Kconfig 末尾追加:
 #   source "drivers/hm/Kconfig"
 source "drivers/hm/hm-common/Kconfig"
 source "drivers/hm/hm-charger/Kconfig"

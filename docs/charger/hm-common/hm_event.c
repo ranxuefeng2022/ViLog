@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * hm_event.c - common event bus for inter-module communication
+ * hm_event.c - 模块间通信的公共事件总线
  *
- * The one and only blocking notifier chain of the framework; the
- * register/unregister/publish API is exported to all hm modules. Built
- * exactly once in hm-common (see this directory's Makefile).
+ * 框架唯一的 blocking notifier chain; register/unregister/publish
+ * 对所有 hm 模块导出. 只在 hm-common 构建一次(见本目录 Makefile).
  */
 #include <linux/export.h>
 #include <linux/notifier.h>

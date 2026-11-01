@@ -1,7 +1,6 @@
-# HM_CHARGER is bool (y/n only), kbuild never produces a .ko for this
-# driver; it is always built into the kernel image
+# HM_CHARGER 是 bool (只有 y/n), kbuild 不产出 .ko, 永远内建
 
-# the hm-common include path is provided once by the parent Makefile
+# hm-common 的 include 路径由父目录 Makefile 统一提供
 # (subdir-ccflags-y)
 
 obj-$(CONFIG_HM_CHARGER) += hm_charger.o

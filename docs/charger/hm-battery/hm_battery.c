@@ -1,45 +1,34 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * hm_battery - battery psy of the hm framework
+ * hm_battery - hm 框架的电池侧 psy
  *
- * Role: the BATTERY-SIDE power supply. Registers the psy named
- * "battery" (the name is a hard contract: Android health HAL and
- * upower look it up by name) and exposes what the battery is going
- * through: status/health/capacity/voltage/current/temperature. The
- * input-side view (what the adapter offers) belongs to hm-charger's
- * "usb" psy; charging status is a synthesis of both sides and is
- * computed here, on the battery side, per the psy placement rules in
- * the framework README.
+ * 职责: 纯信息层. 轮询 FG, 注册名为 "battery" 的 power supply
+ * (名字是硬契约: Android health HAL / upower 按名查找), 暴露
+ * 电池数据: status/capacity/电压/电流/温度. 所有值都是读来的,
+ * 本模块不做任何合成/判决 -- status 也来自 FG(或主充), 保护与
+ * 充电策略归 hm-charger 侧的 votable 消费者.
  *
- * Data flow:
+ * 数据流:
+ *   FG 硬件 --> bat_fg_read() 钩子(唯一的硬件边界)
+ *            --> 缓存(锁保护快照)
+ *            --> psy get_property: 快物理量(电压/电流/温度)是
+ *                pull-through -- 每次 get 现读 FG, 闭环消费者拿到
+ *                实时数据而非轮询缓存; 其余值来自轮询缓存,
+ *                变化时发 uevent
  *
- *   FG hardware --> bat_fg_read() hook (the only hardware boundary)
- *              --> cache (lock-protected snapshot)
- *              --> status/health computation
- *                  + input evidence: usb psy USB_ONLINE (private
- *                    protocol) and the event bus
- *              --> psy get_property: the fast physical values
- *                  (voltage/current/temp) are PULL-THROUGH -- read
- *                  from the FG live on every get, so closed-loop
- *                  consumers get current data instead of the poll
- *                  cache; the derived values (status/health/ui_soc)
- *                  come from the cache + uevent on change
+ * 跨模块集成:
+ *   - 算法模块经 RAW_SOC 属性推入 gauge 原始 soc
+ *   - usb psy 的 supplied_to 级联触发 external_power_changed,
+ *     即时踢一次刷新
  *
- * Cross-module integration demonstrated here:
- *   - reads hm-charger's private psy via HM_PSY_GET_PROP
- *   - subscribes HM_EVT_PWR_USB_STATUS_CHANGED for immediate refresh
- *   - votes on hm-charger's "chg_disable"/"fv" votables via
- *     find_votable() for JEITA protection
- *
- * Conventions: mV/mA internally, x1000 at the psy boundary;
- * temperature in tenths of degree C (the ABI unit) throughout.
+ * 约定: 内部单位 mV/mA, psy 边界 x1000; 温度两侧都是 0.1 摄氏度
+ * (ABI 单位), 不换算.
  */
 #include <linux/device.h>
 #include <linux/err.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
-#include <linux/notifier.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/pm.h>
@@ -47,142 +36,68 @@
 #include <linux/power_supply.h>
 #include <linux/workqueue.h>
 
-#include "hm_event.h"
 #include "hm_log.h"
 #include "hm_power_supply.h"
-#include "voter.h"
 
 #define BAT_POLL_INTERVAL_DFLT_MS	10000
 #define BAT_POLL_INTERVAL_MIN_MS		500
-
-/* charging status computation */
-#define BAT_IBAT_CHG_THLD_MA		50	/* ibat above: charging */
-#define BAT_IBAT_TERM_THLD_MA		150	/* ibat below (CV): full */
-/* full-state hysteresis: once FULL, only a soc drop below this level
- * (or losing the input) restarts charging -- in between the FG soc
- * wobble around 100 must not flip the status back and forth */
-#define BAT_RECHARGE_SOC		97
-/* a battery is declared REMOVED only after this many consecutive FG
- * read failures (single glitches keep the previous data) */
+/* 连续这么多次 FG 读失败才判定电池移除(单次毛刺保留旧数据) */
 #define BAT_FG_FAIL_COUNT		3
 
-/* JEITA bands (tenths of deg C), DT-tunable */
-#define BAT_TEMP_COLD			0
-#define BAT_TEMP_COOL			100
-#define BAT_TEMP_WARM			450
-#define BAT_TEMP_HOT			600
-/*
- * JEITA float-voltage targets for the cool/warm bands: ABSOLUTE mV
- * values, not deltas -- the fv votable arbitrates absolute values and
- * a "base minus delta" vote would need a base nobody owns here (the
- * policy layer / cell profile votes the normal-zone base). Typical
- * values; real numbers come from the cell spec (DT-ify then).
- */
-#define BAT_FV_COOL_MV			4100
-#define BAT_FV_WARM_MV			4100
-
-/* battery-side safety protections (thresholds per cell spec, DT-ify
- * when the real datasheet lands; every trip has a release threshold
- * below it -- hysteresis, so the protection cannot oscillate) */
-#define BAT_VBAT_OV_MV			4600	/* trip: stop charging */
-#define BAT_VBAT_OV_REL_MV		4450	/* release */
-#define BAT_VBAT_UV_MV			3000	/* trip: precharge only */
-#define BAT_VBAT_UV_REL_MV		3200	/* release: normal charging */
-#define BAT_PRECHARGE_MA		100	/* trickle for a dead battery */
-/* a temp reading outside this window is a broken sensor, not weather:
- * treat it as HOT (worst case) instead of trusting it */
-#define BAT_TEMP_VALID_MIN		-400	/* tenths of deg C */
-#define BAT_TEMP_VALID_MAX		900
-
-/* capacity_level thresholds (%) */
+/* capacity_level 阈值 (%) */
 #define BAT_CAP_CRITICAL		5
 #define BAT_CAP_LOW			20
 #define BAT_CAP_HIGH			95
-
-/* voter client names this module casts; macros so the strings exist
- * exactly once; the string is exactly the macro name (#define X "X"),
- * so the vote-log client name and the source token are identical and
- * grepping either finds both */
-#define VOTER_JEITA		"VOTER_JEITA"
-#define VOTER_BAT_OV		"VOTER_BAT_OV"
-#define VOTER_PRECHARGE	"VOTER_PRECHARGE"
-
-/* hm_jeita_zone lives in hm_power_supply.h: it is the value contract
- * of the JEITA_ZONE property */
-
-static const char * const jeita_zone_text[] = {
-	"COLD", "COOL", "NORMAL", "WARM", "HOT",
-};
 
 struct bat_chip {
 	struct device		*dev;
 	struct delayed_work	refresh_work;
 	unsigned int		poll_interval_ms;
 
-	struct mutex		lock;		/* protects the cache below */
-	/* cache: last FG snapshot + derived state */
+	struct mutex		lock;		/* 保护下方缓存 */
+	/* 缓存: 最近一次 FG 快照 */
 	bool			present;
 	int			vbat_mv;
-	int			ibat_ma;	/* signed: + charging, - discharging */
-	int			temp_tenth;	/* tenths of deg C */
-	int			ui_soc;	/* user-facing percent; computed by the
-				 * battery algorithm module (gauge/OCV
-				 * model), NOT the raw FG register */
-	int			raw_soc;	/* raw gauge soc percent; pushed by
-					 * the algorithm module through the
-					 * RAW_SOC property */
+	int			ibat_ma;	/* 带符号: + 充电, - 放电 */
+	int			temp_tenth;	/* 0.1 摄氏度 */
+	int			status;		/* enum power_supply_status,
+						 * 读自 FG, 非本地合成 */
+	int			ui_soc;	/* 用户看到的百分比; 由电池算法
+					 * 模块(gauge/OCV 模型)算出, 不是
+					 * FG 原始寄存器值 */
+	int			raw_soc;	/* gauge 原始 soc 百分比; 算法
+					 * 模块经 RAW_SOC 属性推入 */
 	unsigned int		charge_full_mah;
 	unsigned int		charge_full_design_mah;
 	unsigned int		cycle_count;
 	int			technology;
-	/* derived */
-	int			status;		/* enum power_supply_status */
-	int			health;		/* enum power_supply_health */
-	enum hm_jeita_zone	jeita_zone;
-	/* safety protection states (hysteresis latches) */
-	bool			ov_active;	/* battery overvoltage */
-	bool			uv_active;	/* dead battery, precharge */
-	bool			temp_bad;	/* temp reading out of window */
-	/* full-state hysteresis latch */
-	bool			full_latched;
-	/* consecutive FG read failures */
+	/* FG 连续读失败计数 */
 	int			fg_fail_cnt;
-	/* last published snapshot, for change detection */
+	/* 最近发布的快照, 变化检测用 */
 	int			rep_status;
 	int			rep_ui_soc;
 	int			rep_temp_tenth;
 
-	bool			input_online;	/* cached input evidence */
-
 	struct power_supply	*bat_psy;
-	struct power_supply	*usb_psy;	/* hm-charger usb psy */
-	struct notifier_block	nb;
-
-	/* cached handles to hm-charger's votables (looked up once, see
-	 * hm_votable_get_by_name); NULL until the peer module is up */
-	struct votable		*chg_disable_vot;
-	struct votable		*fv_vot;
-	struct votable		*ichg_vot;
 };
 
 /* ------------------------------------------------------------------ */
-/* FG hooks: the only hardware boundary, replace the bodies when
- * porting; the framework around them never changes ---- */
+/* FG 钩子: 唯一的硬件边界, 移植时只换函数体, 框架不动 ---- */
 
 /*
- * One poll of the fuel gauge: fill the raw battery data. Returning
- * -EAGAIN keeps the previous values (FG busy), a hard error marks the
- * battery not present.
+ * 轮询一次 fuel gauge: 填入原始电池数据. -EAGAIN 保留旧值(FG 忙),
+ * 硬错误标记电池不在.
  */
 static int bat_fg_read(struct bat_chip *chip)
 {
-	/* TODO: read the FG (vbat/ibat/temp/fcc/cycles); ui_soc comes
-	 * from the battery algorithm module's computation, not from the
-	 * raw gauge register */
+	/* TODO (移植): 读 FG(vbat/ibat/temp/fcc/cycles/status);
+	 * ui_soc 来自电池算法模块的计算, 不是 gauge 原始寄存器;
+	 * status 来自 FG 的状态寄存器(或读主充 psy) */
 	chip->present = true;
 	chip->vbat_mv = 4000;
 	chip->ibat_ma = 0;
-	chip->temp_tenth = 250;		/* 25.0 degC */
+	chip->temp_tenth = 250;		/* 25.0 摄氏度 */
+	chip->status = POWER_SUPPLY_STATUS_UNKNOWN;
 	chip->ui_soc = 50;
 	chip->charge_full_mah = 5000;
 	chip->cycle_count = 0;
@@ -190,240 +105,31 @@ static int bat_fg_read(struct bat_chip *chip)
 }
 
 /*
- * Fast read of the three physical values, for the pull-through access
- * in bat_get_prop(): closed-loop consumers (e.g. direct charge) read
- * VOLTAGE_NOW / CURRENT_NOW / TEMP on demand and need live data, not
- * the up-to-poll-interval-old cache. A nonzero return falls back to
- * the cached values.
+ * 三个物理量的快速读, 供 bat_get_prop() 的 pull-through: 闭环
+ * 消费者(如直充)按需读 VOLTAGE_NOW/CURRENT_NOW/TEMP, 要实时数据
+ * 而非最多旧一个轮询周期的缓存. 非零返回则回退缓存.
  */
 static int bat_fg_read_fast(struct bat_chip *chip,
 		int *vbat_mv, int *ibat_ma, int *temp_tenth)
 {
-	/* TODO: one FG register read of voltage/current/temp */
+	/* TODO (移植): 一次 FG 寄存器读, 电压/电流/温度 */
 	*vbat_mv = chip->vbat_mv;
 	*ibat_ma = chip->ibat_ma;
 	*temp_tenth = chip->temp_tenth;
 	return 0;
 }
 
-/* battery static identity; FG may or may not know these */
+/* 电池静态身份; FG 不一定知道这些 */
 static unsigned int bat_fg_charge_full_design(struct bat_chip *chip)
 {
-	/* TODO: FG learned/OTP capacity, when available */
+	/* TODO (移植): FG 学习到的/OTP 里的设计容量 */
 	return 5000;
 }
 
 static unsigned int bat_fg_cycle_count(struct bat_chip *chip)
 {
-	/* TODO: FG cycle counter */
+	/* TODO (移植): FG 循环计数 */
 	return 0;
-}
-
-/* ------------------------------------------------------------------ */
-/* status / health computation                                        */
-/* ------------------------------------------------------------------ */
-
-/*
- * Refresh the input-side evidence through hm-charger's usb psy (the
- * kernel-only USB_ONLINE property). Needed for the boot case --
- * adapter already attached, no bus event will fire for it;
- * afterwards the event bus keeps the cache fresh. Sleepable (psy
- * read), so it runs from the refresh work only.
- */
-static void bat_update_input_online(struct bat_chip *chip)
-{
-	union power_supply_propval val = { };
-
-	if (hm_psy_get_by_name(&chip->usb_psy, "usb") ||
-	    HM_PSY_GET_PROP(chip->usb_psy,
-			    POWER_SUPPLY_PROP_ONLINE, &val))
-		return;				/* keep the cached value */
-
-	chip->input_online = !!val.intval;
-}
-
-/*
- * Compute status/health/jeita from the cached FG data + input
- * evidence. Called with chip->lock held.
- */
-static void bat_compute_state(struct bat_chip *chip)
-{
-	/*
-	 * Sensor sanity first: a reading outside the plausible window
-	 * means a broken thermistor/ADC, not weather. Treat it as HOT
-	 * (worst case: charging disabled) rather than trusting it.
-	 */
-	chip->temp_bad = chip->temp_tenth < BAT_TEMP_VALID_MIN ||
-			 chip->temp_tenth > BAT_TEMP_VALID_MAX;
-
-	/* JEITA zone first: health and status depend on it */
-	if (chip->temp_bad)
-		chip->jeita_zone = JEITA_HOT;
-	else if (chip->temp_tenth < BAT_TEMP_COLD)
-		chip->jeita_zone = JEITA_COLD;
-	else if (chip->temp_tenth < BAT_TEMP_COOL)
-		chip->jeita_zone = JEITA_COOL;
-	else if (chip->temp_tenth > BAT_TEMP_HOT)
-		chip->jeita_zone = JEITA_HOT;
-	else if (chip->temp_tenth > BAT_TEMP_WARM)
-		chip->jeita_zone = JEITA_WARM;
-	else
-		chip->jeita_zone = JEITA_NORMAL;
-
-	/* over/undervoltage latches with hysteresis: trip at the
-	 * threshold, release only below/at the release value, so a
-	 * battery sitting right at the threshold cannot toggle the
-	 * protection on and off */
-	if (chip->vbat_mv >= BAT_VBAT_OV_MV)
-		chip->ov_active = true;
-	else if (chip->vbat_mv <= BAT_VBAT_OV_REL_MV)
-		chip->ov_active = false;
-
-	if (chip->vbat_mv <= BAT_VBAT_UV_MV)
-		chip->uv_active = true;
-	else if (chip->vbat_mv >= BAT_VBAT_UV_REL_MV)
-		chip->uv_active = false;
-
-	/* health: only the severe zones surface here; cool/warm are
-	 * handled as reduced charging (JEITA votes), not as a fault */
-	if (chip->ov_active)
-		chip->health = POWER_SUPPLY_HEALTH_OVERVOLTAGE;
-	else if (chip->jeita_zone == JEITA_COLD)
-		chip->health = POWER_SUPPLY_HEALTH_COLD;
-	else if (chip->jeita_zone == JEITA_HOT)
-		chip->health = POWER_SUPPLY_HEALTH_OVERHEAT;
-	else
-		chip->health = POWER_SUPPLY_HEALTH_GOOD;
-
-	/* battery overvoltage means no charging, unconditionally */
-	if (chip->ov_active) {
-		chip->status = POWER_SUPPLY_STATUS_NOT_CHARGING;
-		return;
-	}
-
-	/* status synthesis */
-	if (!chip->input_online || !chip->present) {
-		chip->status = POWER_SUPPLY_STATUS_DISCHARGING;
-		chip->full_latched = false;	/* input gone: reset */
-		return;
-	}
-
-	/* Full-state hysteresis: once FULL is latched (soc hit 100 or
-	 * the CV termination current was reached), it stays FULL until
-	 * the soc actually falls below the recharge level -- the FG
-	 * wobble 100 <-> 99 around a full battery must not flip the
-	 * status back and forth (uevent storm, UI flicker). */
-	if (chip->full_latched) {
-		chip->status = POWER_SUPPLY_STATUS_FULL;
-		if (chip->ui_soc <= BAT_RECHARGE_SOC)
-			chip->full_latched = false;
-		else
-			return;
-	}
-
-	if (chip->ui_soc >= 100) {
-		chip->full_latched = true;
-		chip->status = POWER_SUPPLY_STATUS_FULL;
-		return;
-	}
-
-	/* charging disabled (e.g. JEITA cold/hot, or any chg_disable
-	 * voter): online but no current flowing */
-	if (chip->ibat_ma < BAT_IBAT_CHG_THLD_MA) {
-		if (chip->ibat_ma >= -BAT_IBAT_CHG_THLD_MA)
-			chip->status = POWER_SUPPLY_STATUS_NOT_CHARGING;
-		else
-			chip->status = POWER_SUPPLY_STATUS_DISCHARGING;
-		return;
-	}
-
-	/* CV-phase termination current reached: latch full before the
-	 * FG soc catches up */
-	if (chip->ibat_ma < BAT_IBAT_TERM_THLD_MA && chip->ui_soc >= 95) {
-		chip->full_latched = true;
-		chip->status = POWER_SUPPLY_STATUS_FULL;
-		return;
-	}
-
-	chip->status = POWER_SUPPLY_STATUS_CHARGING;
-}
-
-/*
- * Resolve every votable handle this module votes on, ONCE per refresh
- * cycle (hm_votable_get_by_name caches: after first success it is a
- * single branch). Keeps the apply/withdraw functions below free of
- * scattered lookups; handles stay NULL until hm-charger is up, and
- * the vote sites simply skip while they are.
- */
-static void bat_votables_resolve(struct bat_chip *chip)
-{
-	hm_votable_get_by_name(&chip->chg_disable_vot, "chg_disable");
-	hm_votable_get_by_name(&chip->fv_vot, "fv");
-	hm_votable_get_by_name(&chip->ichg_vot, "ichg");
-}
-
-/*
- * JEITA protection: the canonical consumer of hm-charger's votables.
- * Zones map to votes on "chg_disable" (hard stop) and "fv" (reduced
- * float voltage); NORMAL withdraws both.
- */
-static void bat_jeita_apply(struct bat_chip *chip)
-{
-	int fv_mv = 0;
-	bool disable = false;
-
-	switch (chip->jeita_zone) {
-	case JEITA_COLD:
-	case JEITA_HOT:
-		disable = true;
-		break;
-	case JEITA_COOL:
-		fv_mv = BAT_FV_COOL_MV;
-		break;
-	case JEITA_WARM:
-		fv_mv = BAT_FV_WARM_MV;
-		break;
-	case JEITA_NORMAL:
-		break;
-	}
-
-	if (chip->chg_disable_vot)
-		hm_vote(chip->chg_disable_vot, VOTER_JEITA, disable, 1);
-	if (chip->fv_vot && fv_mv)
-		hm_vote(chip->fv_vot, VOTER_JEITA, true, fv_mv);
-	else if (chip->fv_vot)
-		hm_vote(chip->fv_vot, VOTER_JEITA, false, 0);
-}
-
-/*
- * Battery-side safety protections, same shape as JEITA: latch states
- * computed under the lock (see bat_compute_state), votes cast here
- * outside it (vote -> callback -> psy write sleeps).
- *  - overvoltage: hard stop via "chg_disable";
- *  - dead battery: cap the charge current to a trickle via "ichg"
- *    (VOTE_MIN: the small precharge vote wins over any larger one).
- */
-static void bat_safety_apply(struct bat_chip *chip)
-{
-	if (chip->chg_disable_vot)
-		hm_vote(chip->chg_disable_vot, VOTER_BAT_OV, chip->ov_active, 1);
-	if (chip->ichg_vot)
-		hm_vote(chip->ichg_vot, VOTER_PRECHARGE, chip->uv_active,
-				BAT_PRECHARGE_MA);
-}
-
-/* withdraw every vote this module casts (battery gone / driver
- * leaving): never leave a votable referencing our decisions */
-static void bat_votes_withdraw(struct bat_chip *chip)
-{
-	if (chip->chg_disable_vot) {
-		hm_vote(chip->chg_disable_vot, VOTER_JEITA, false, 0);
-		hm_vote(chip->chg_disable_vot, VOTER_BAT_OV, false, 0);
-	}
-	if (chip->fv_vot)
-		hm_vote(chip->fv_vot, VOTER_JEITA, false, 0);
-	if (chip->ichg_vot)
-		hm_vote(chip->ichg_vot, VOTER_PRECHARGE, false, 0);
 }
 
 static int bat_capacity_level(int soc)
@@ -440,9 +146,8 @@ static int bat_capacity_level(int soc)
 }
 
 /*
- * One refresh cycle: poll the FG, recompute, apply JEITA, publish on
- * change. Runs from the periodic work and from event-bus kicks (usb
- * online/offline changes the status immediately).
+ * 一个刷新周期: 轮询 FG, 变化才发布. 由周期 work 与
+ * external_power_changed 踢驱动.
  */
 static void bat_refresh(struct bat_chip *chip)
 {
@@ -454,27 +159,19 @@ static void bat_refresh(struct bat_chip *chip)
 	rc = bat_fg_read(chip);
 	if (rc == -EAGAIN) {
 		pm_relax(chip->dev);
-		return;			/* keep previous values */
+		return;			/* 保留旧值 */
 	}
-
-	/* input evidence (psy read, sleepable -- before the lock) */
-	bat_update_input_online(chip);
-
-	/* votable handles (cached lookups, near-free after first hit) */
-	bat_votables_resolve(chip);
 
 	mutex_lock(&chip->lock);
 	if (rc) {
-		/* FG read failed: only N consecutive failures declare the
-		 * battery removed, a single glitch keeps the last data */
+		/* FG 读失败: 连续 N 次才判电池移除, 单次毛刺保留
+		 * 旧数据 */
 		if (++chip->fg_fail_cnt >= BAT_FG_FAIL_COUNT) {
 			chip->present = false;
 			chip->status = POWER_SUPPLY_STATUS_UNKNOWN;
-			chip->full_latched = false;
 		}
 	} else {
 		chip->fg_fail_cnt = 0;
-		bat_compute_state(chip);
 	}
 
 	changed = chip->status != chip->rep_status ||
@@ -484,14 +181,6 @@ static void bat_refresh(struct bat_chip *chip)
 	chip->rep_ui_soc = chip->ui_soc;
 	chip->rep_temp_tenth = chip->temp_tenth;
 	mutex_unlock(&chip->lock);
-
-	if (chip->present) {
-		bat_jeita_apply(chip);
-		bat_safety_apply(chip);
-	} else {
-		/* battery gone: no decision of ours may outlive it */
-		bat_votes_withdraw(chip);
-	}
 
 	if (changed)
 		power_supply_changed(chip->bat_psy);
@@ -508,27 +197,6 @@ static void bat_refresh_work(struct work_struct *ws)
 
 	schedule_delayed_work(&chip->refresh_work,
 			msecs_to_jiffies(chip->poll_interval_ms));
-}
-
-static int bat_evt_notify(struct notifier_block *nb, unsigned long event,
-		void *ptr)
-{
-	struct bat_chip *chip =
-		container_of(nb, struct bat_chip, nb);
-	struct hm_evt_pwr_data *evt = ptr;
-
-	switch (event) {
-	case HM_EVT_PWR_USB_STATUS_CHANGED:
-		/* the input side flipped: the status changes with it,
-		 * refresh now instead of waiting for the next poll */
-		chip->input_online = evt->usb_online;
-		mod_delayed_work(system_wq, &chip->refresh_work, 0);
-		break;
-	default:
-		break;
-	}
-
-	return NOTIFY_DONE;
 }
 
 static void bat_parse_dt(struct bat_chip *chip)
@@ -548,7 +216,7 @@ static void bat_parse_dt(struct bat_chip *chip)
 }
 
 /* ------------------------------------------------------------------ */
-/* power_supply interface (user space)                                 */
+/* power_supply 接口 (用户空间)                                        */
 /* ------------------------------------------------------------------ */
 static int bat_get_prop(struct power_supply *psy,
 		enum power_supply_property psp,
@@ -559,9 +227,8 @@ static int bat_get_prop(struct power_supply *psy,
 	bool fast = false;
 	int rc = 0;
 
-	/* pull-through: the fast physical values are read live (I2C, ~ms,
-	 * before the lock) instead of serving the poll cache; a failed
-	 * fast read falls back to the cached snapshot below */
+	/* pull-through: 快物理量在锁前现读 FG(I2C, 毫秒级), 不给轮询
+	 * 缓存; 快读失败回退下方缓存快照 */
 	switch ((int)psp) {
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
@@ -574,9 +241,7 @@ static int bat_get_prop(struct power_supply *psy,
 		break;
 	}
 
-	/* the psy ABI reports voltage/current in micro units; internal
-	 * units are mV/mA, convert at this boundary. Temperature is
-	 * tenths of degree C on both sides, no conversion. */
+	/* psy ABI 电压/电流用微单位, 内部 mV/mA, 在此边界换算 */
 	switch ((int)psp) {
 	case POWER_SUPPLY_PROP_STATUS:
 		val->intval = chip->status;
@@ -585,7 +250,8 @@ static int bat_get_prop(struct power_supply *psy,
 		val->intval = chip->present;
 		break;
 	case POWER_SUPPLY_PROP_HEALTH:
-		val->intval = chip->health;
+		/* 纯信息层不做健康判决, 恒报 GOOD; 保护归策略层 */
+		val->intval = POWER_SUPPLY_HEALTH_GOOD;
 		break;
 	case POWER_SUPPLY_PROP_TECHNOLOGY:
 		val->intval = chip->technology;
@@ -615,15 +281,11 @@ static int bat_get_prop(struct power_supply *psy,
 		val->intval = chip->cycle_count;
 		break;
 	/*
-	 * Kernel-only custom properties: NOT in bat_props[], so they
-	 * never appear in sysfs -- only reachable through the psy API
-	 * (HM_PSY_GET_PROP) by hm modules.
+	 * 内核专用属性: 不在 bat_props[] 里, 不上 sysfs, 只有 hm
+	 * 模块经 psy API(HM_PSY_GET_PROP)可达
 	 */
 	case HM_POWER_SUPPLY_PROP_RAW_SOC:
 		val->intval = chip->raw_soc;
-		break;
-	case HM_POWER_SUPPLY_PROP_JEITA_ZONE:
-		val->intval = chip->jeita_zone;
 		break;
 	default:
 		rc = -EINVAL;
@@ -634,11 +296,8 @@ static int bat_get_prop(struct power_supply *psy,
 }
 
 /*
- * Kernel-only write path (same properties[] trick: no sysfs file, so
- * user space cannot reach it). The battery algorithm module pushes
- * its computed raw soc here; the derived JEITA zone is read-only --
- * forcing it would desync the zone from the temperature it is
- * computed from.
+ * 内核专用写入口(同 properties[] 技巧: 无 sysfs 文件, 用户空间
+ * 够不到). 算法模块把算好的 raw soc 推进来.
  */
 static int bat_set_prop(struct power_supply *psy,
 		enum power_supply_property psp,
@@ -661,7 +320,7 @@ static void bat_external_power_changed(struct power_supply *psy)
 {
 	struct bat_chip *chip = power_supply_get_drvdata(psy);
 
-	/* a supplier (usb psy) changed: refresh right away */
+	/* 供电方(usb psy)变化: 立即踢一次刷新 */
 	mod_delayed_work(system_wq, &chip->refresh_work, 0);
 }
 
@@ -681,7 +340,7 @@ static enum power_supply_property bat_props[] = {
 };
 
 static const struct power_supply_desc bat_psy_desc = {
-	.name			= "battery",	/* Android health HAL: by name */
+	.name			= "battery",	/* Android health HAL 按名查找 */
 	.type			= POWER_SUPPLY_TYPE_BATTERY,
 	.properties		= bat_props,
 	.num_properties		= ARRAY_SIZE(bat_props),
@@ -712,7 +371,6 @@ static int bat_probe(struct platform_device *pdev)
 {
 	struct bat_chip *chip;
 	struct power_supply_config cfg = { };
-	int rc;
 
 	chip = devm_kzalloc(&pdev->dev, sizeof(*chip), GFP_KERNEL);
 	if (!chip)
@@ -723,8 +381,7 @@ static int bat_probe(struct platform_device *pdev)
 
 	bat_parse_dt(chip);
 
-	/* works before anything external can kick them (probe order
-	 * rule of the framework) */
+	/* works 先于 psy 注册: 注册后 external_power_changed 就能踢 */
 	INIT_DELAYED_WORK(&chip->refresh_work, bat_refresh_work);
 
 	cfg.drv_data = chip;
@@ -734,15 +391,6 @@ static int bat_probe(struct platform_device *pdev)
 			&cfg);
 	if (IS_ERR(chip->bat_psy))
 		return PTR_ERR(chip->bat_psy);
-
-	/* event subscription LAST: nothing can reach this driver before
-	 * it is fully constructed */
-	chip->nb.notifier_call = bat_evt_notify;
-	rc = hm_event_register_notifier(&chip->nb);
-	if (rc) {
-		power_supply_unregister(chip->bat_psy);
-		return rc;
-	}
 
 	device_init_wakeup(chip->dev, true);
 	platform_set_drvdata(pdev, chip);
@@ -755,14 +403,9 @@ static int bat_remove(struct platform_device *pdev)
 {
 	struct bat_chip *chip = platform_get_drvdata(pdev);
 
-	hm_event_unregister_notifier(&chip->nb);
 	cancel_delayed_work_sync(&chip->refresh_work);
 	device_init_wakeup(chip->dev, false);
 	power_supply_unregister(chip->bat_psy);
-
-	/* withdraw every vote this module casts so the votables hold
-	 * no references to our decisions after we are gone */
-	bat_votes_withdraw(chip);
 	return 0;
 }
 
@@ -784,5 +427,5 @@ static struct platform_driver hm_battery_driver = {
 builtin_platform_driver(hm_battery_driver);
 
 MODULE_AUTHOR("hm battery reference");
-MODULE_DESCRIPTION("HM battery psy (status/health/capacity + JEITA)");
+MODULE_DESCRIPTION("HM battery psy (FG read/expose)");
 MODULE_LICENSE("GPL");

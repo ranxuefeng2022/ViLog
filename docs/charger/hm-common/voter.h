@@ -11,24 +11,21 @@
  * GNU General Public License for more details.
  */
 /*
- * voter.h - voting framework shared by the hm modules
+ * voter.h - hm 模块共用的投票框架
  *
- * Ported from the mature Qualcomm pmic-voter. Compared to the early
- * version that used to live in this tree:
- *   - clients are strings instead of int indexes and register
- *     themselves on their first vote, so cross-module users can never
- *     collide on an index;
- *   - a global name registry plus find_votable() lets module B get a
- *     votable created by module A;
- *   - destroy_votable() / vote_override() / rerun_election() added;
- *   - no debugfs interface: observability comes from the hm_vote()
- *     call-site logs and the vote() election logs (both dynamic-debug
- *     controlled); vote_override() is the API-level forced vote.
+ * 移植自高通成熟的 pmic-voter. 相对 upstream 的差异:
+ *   - client 用字符串而非 int 下标, 首次投票时注册, 跨模块用户
+ *     不会撞下标;
+ *   - 全局名字注册表 + find_votable(), 模块 B 能拿到模块 A 创建
+ *     的 votable;
+ *   - 增加 destroy_votable() / vote_override() / rerun_election();
+ *   - 无 debugfs 接口: 可观测性来自 hm_vote() 调用点日志与
+ *     vote() 的选举日志(均受 dynamic-debug 控制); API 级强制票
+ *     是 vote_override().
  *
- * Typical usage: the owner creates the votable in probe(); users get it
- * by name through find_votable() and vote(). Votable and client names
- * are cross-module contracts; keep them centrally defined instead of
- * scattering string literals across modules.
+ * 典型用法: 属主在 probe() 里 create_votable(), 使用者按名
+ * find_votable() 后 vote(). votable 与 client 名是跨模块契约,
+ * 应集中定义, 不要在各模块散落字符串字面量.
  */
 #ifndef __HM_VOTER_H__
 #define __HM_VOTER_H__
@@ -40,17 +37,15 @@
 struct votable;
 
 enum votable_type {
-	VOTE_MIN,		/* smallest value among enabled votes wins */
-	VOTE_MAX,		/* largest value among enabled votes wins */
-	VOTE_SET_ANY,		/* true if any client votes true */
+	VOTE_MIN,		/* 启用票中的最小值胜出 */
+	VOTE_MAX,		/* 启用票中的最大值胜出 */
+	VOTE_SET_ANY,		/* 任一 client 投 true 即 true */
 	NUM_VOTABLE_TYPES,
 };
 
 /*
- * Create a votable. name is globally unique (duplicates return
- * -EEXIST); callback runs under the vote lock whenever the effective
- * result changes and data is passed through untouched; pass NULL if no
- * callback is needed.
+ * 创建 votable. name 全局唯一(重名返回 -EEXIST); 生效结果变化时
+ * 回调在 vote 锁下运行, data 原样透传; 不需要回调传 NULL.
  */
 struct votable *create_votable(const char *name, int votable_type,
 		int (*callback)(struct votable *votable, void *data,
@@ -59,18 +54,15 @@ struct votable *create_votable(const char *name, int votable_type,
 		void *data);
 void destroy_votable(struct votable *votable);
 
-/* Look up a votable created by any module; NULL if not found */
+/* 查任意模块创建的 votable; 没有返回 NULL */
 struct votable *find_votable(const char *name);
 
 /*
- * Persistent votable acquisition, mirroring hm_psy_get_by_name(): the
- * pointer is cached in *vot on first success and later calls reuse it,
- * so the name-registry list walk happens once per module lifetime
- * instead of on every vote. All hm modules are builtin and votables
- * are destroyed only at driver teardown, so the cached pointer is
- * valid for the module's whole life. Returns -ENODEV while the peer
- * module has not created the votable yet -- callers that retry
- * periodically simply skip that round.
+ * votable 的持久获取, 与 hm_psy_get_by_name() 对称: 首次成功后
+ * 指针缓存在 *vot, 之后复用, 名字注册表的链表遍历每个模块生命
+ * 周期只走一次. hm 模块全部内建且 votable 只在驱动拆除时销毁,
+ * 缓存指针终生有效. 对端尚未创建时返回 -ENODEV, 周期重试的调用
+ * 方跳过该轮即可.
  */
 static inline int hm_votable_get_by_name(struct votable **vot,
 		const char *name)
@@ -89,11 +81,10 @@ int vote(struct votable *votable, const char *client_str,
 		bool enabled, int val);
 
 /*
- * vote() with call-site attribution: hm_dbg's __func__ expands at the
- * CALL site (naming the function the vote came from) and #votable
- * stringifies the votable argument, so a single client name used from
- * several places stays traceable in the log. Must stay a macro -- a
- * function wrapper would report its own name instead of the caller's.
+ * 带调用点归属的 vote(): hm_dbg 的 __func__ 在调用点展开(指出票
+ * 来自哪个函数), #votable 字符串化 votable 实参, 同一 client 名
+ * 在多处投票也能在日志里区分. 必须是宏 -- 函数包装会报它自己的
+ * 名字而不是调用者的.
  */
 #define hm_vote(votable, client, enabled, val) do { \
 	hm_dbg("[%s] %s: %s val=%d\n", #votable, (client), \
@@ -118,8 +109,7 @@ const char *get_effective_client_locked(struct votable *votable);
 bool is_override_vote_enabled(struct votable *votable);
 bool is_override_vote_enabled_locked(struct votable *votable);
 
-/* Lock/unlock around the *_locked variants when several states must be
- * read atomically */
+/* 需要原子读多个状态时, 围绕 *_locked 变体加解锁 */
 void lock_votable(struct votable *votable);
 void unlock_votable(struct votable *votable);
 
