@@ -1,31 +1,38 @@
-alias vim='nvim'
-alias grep='grep --color=auto'
-alias rg='rg --no-ignore-global'
-alias y='yazi'
+# ~/.bashrc — 由 ViLog/configs/bashrc 同步部署
+# 注: ~/logc、~/m、~/.vimrc_ex、vendor/vivo、./vbuild 等路径仅存在于工作机
+
+# ========== 别名 ==========
+# 编辑器
+alias v='nvim'
 alias vim='nvim'
 alias vu='nvim -u ~/.vimrc'
-alias v='nvim'
 
+# 其他单命令快捷方式
+alias g='fg'
+alias y='yazi'
+alias gs='git status'
+alias grep='grep --color=auto'
+alias rg='rg --no-ignore-global'
+
+# ls 系列用 eza 替代（无 eza 时退回 exa，都没有则保持原生 ls）
+_ls=''
 if command -v eza >/dev/null 2>&1; then
-  alias ls='eza --color=auto'
-  alias ll='eza -l --git --icons'
-  alias la='eza -la --git --icons'
-  alias lt='eza --tree --level=2 --git-ignore'
+	_ls=eza
+elif command -v exa >/dev/null 2>&1; then
+	_ls=exa
 fi
+if [ -n "$_ls" ]; then
+	alias ls="$_ls --color=auto"
+	alias ll="$_ls -l --git --icons"
+	alias la="$_ls -la --git --icons"
+	alias lt="$_ls --tree --level=2 --git-ignore"
+fi
+unset _ls
 
-export EDITOR="nvim"
-export VISUAL="nvim"
+# ========== 环境变量 ==========
+export EDITOR=nvim VISUAL=nvim
 
-# history: 调大容量 + 去重 + 带时间戳
-HISTSIZE=100000
-HISTFILESIZE=200000
-HISTCONTROL=ignoreboth:erasedups
-HISTTIMEFORMAT='%F %T '
-
-# autocd: 直接敲目录名即 cd；cdspell: 纠正路径拼写
-shopt -s direxpand autocd cdspell
-
-export RIPGREP_CONFIG_PATH=~/.ripgreprc
+[ -f "$HOME/.ripgreprc" ] && export RIPGREP_CONFIG_PATH="$HOME/.ripgreprc"
 
 # PATH 去重追加，避免反复 source 后越滚越长
 case ":$PATH:" in
@@ -38,6 +45,19 @@ case $TERM in
 	''|dumb|linux) export TERM=xterm-256color ;;
 esac
 
+# ========== 历史 ==========
+# 大容量 + 去重 + 带时间戳
+HISTSIZE=100000
+HISTFILESIZE=200000
+HISTCONTROL=ignoreboth:erasedups
+HISTTIMEFORMAT='%F %T '
+shopt -s histappend # 退出时追加而非覆盖，多个 tmux pane 的历史不互相冲掉
+
+# ========== Shell 选项 ==========
+# autocd: 直接敲目录名即 cd；cdspell: 纠正路径拼写
+shopt -s direxpand autocd cdspell
+
+# ========== 工具集成 ==========
 # zoxide: z <关键词> 直接跳目录，zi 交互选择
 command -v zoxide >/dev/null 2>&1 && eval "$(zoxide init bash)"
 
@@ -56,134 +76,64 @@ for _f in /usr/share/doc/fzf/examples/key-bindings.bash /usr/share/fzf/key-bindi
 	[ -f "$_f" ] && source "$_f" && break
 done
 unset _f
-export FZF_CTRL_T_COMMAND='fd --type f --hidden --exclude .git'
-export FZF_ALT_C_COMMAND='fd --type d --hidden --exclude .git'
 
-p() {
-	python3 -c "for i in range(256): print(f'\x1b[48;5;{i}m {i:3} \x1b[0m', end='\n' if i % 41 == 40 else '')"
-}
+# Ctrl-T / Alt-C 候选来源换成 fd（未装 fd 则用 fzf 默认）
+if command -v fd >/dev/null 2>&1; then
+	export FZF_CTRL_T_COMMAND='fd --type f --hidden --exclude .git'
+	export FZF_ALT_C_COMMAND='fd --type d --hidden --exclude .git'
+fi
 
-tm() {
-	tmux at -t 0
-}
+# ========== 函数 ==========
 
-# 对 4 个 pane 逐个发按键
-_panes() {
-	local i
-	for i in 0 1 2 3; do
-		tmux send-keys -t "$i" "$@"
-	done
-}
-
-cl() {
-	_panes 'clear' Enter
-}
-
-cld() {
-	_panes 'cd' Enter
-}
-
-cls() {
-	_panes 'source ~/.bashrc' Enter 'clear' Enter
-}
-
-tls() {
-	_panes 'tmux source-file ~/.tmux.conf' Enter
-}
-
-c() {
-	cd ~/logc
-}
-
-ni() {
-	nvim ~/.config/nvim/init.lua
-}
-
-gb() {
-	git rev-parse --abbrev-ref HEAD
-}
-
-f() {
+# ---- 目录跳转 ----
+# fd 列目录 + fzf 选择 + cd；$1 为搜索起点，默认当前目录
+_fcd() {
 	local dir
-	# 使用 fd 列出目录，fzf 选择
-	dir=$(fd -t d . 2>/dev/null | fzf) || return
-	cd "$dir" || echo "无法切换到目录: $dir"
+	dir=$(fd -t d . "${1:-.}" 2>/dev/null | fzf) || return
+	cd "$dir" || { echo "无法切换到目录: $dir"; return 1; }
 }
+f()  { _fcd; }         # 任意目录
 
-g() {
-	fg
-}
-
-ff() {
-	local dir
-	dir=$(fd -t d . ~/logc 2>/dev/null | fzf) || return
-	cd "$dir" || echo "无法切换到目录: $dir"
-}
-
-gco() {
-	local branch
-	branch=$(git branch --all --format='%(refname:short)' | sed 's|^origin/||' | fzf) || return
-	git checkout "$branch"
-}
-
+# 从 zoxide 历史中 fzf 选择目录
 fz() {
 	local dir
 	dir=$(zoxide query -l | fzf) || return
-	cd "$dir" || echo "无法切换到目录: $dir"
+	cd "$dir" || { echo "无法切换到目录: $dir"; return 1; }
 }
+fzv() { fz && nvim; }  # 跳过去并在该目录打开 nvim
 
-fzv() {
-	local dir
-	dir=$(zoxide query -l | fzf) || return
-	cd "$dir" || echo "无法切换到目录: $dir"
-	nvim
+# ---- git ----
+gb() { git rev-parse --abbrev-ref HEAD; }
+
+gco() {
+	local branch
+	branch=$(git branch --all --format='%(refname:short)' | sed 's|^origin/||' | sort -u | fzf) || return
+	git checkout "$branch"
 }
+push()   { git push origin HEAD:"refs/for/$(git rev-parse --abbrev-ref HEAD)"; } # Gerrit
 
-n() {
-	nvim -u ~/.vimrc_ex
+# ---- tmux ----
+# 对 4 个 pane 逐个发按键
+_panes() {
+	local i
+	for i in {0..3}; do
+		tmux send-keys -t "$i" "$@"
+	done
 }
+cl()  { _panes 'clear' Enter; }
+cld() { _panes 'cd' Enter; }
+cls() { _panes 'source ~/.bashrc' Enter 'clear' Enter; }
+tls() { _panes 'tmux source-file ~/.tmux.conf' Enter; }
 
-vs() {
-	nvim -S ~/.vim/lastsession.vim
+# ---- Android 构建（工作机）----
+# ./vbuild 的 TARGET_BUILD_VARIANT 快捷方式
+vb()        { TARGET_BUILD_VARIANT="$1" ./vbuild; }
+user()      { vb user; }
+userdebug() { vb userdebug; }
+eng()       { vb eng; }
+
+# ---- 其他 ----
+# 256 色打印
+p() {
+	python3 -c "for i in range(256): print(f'\x1b[48;5;{i}m {i:3} \x1b[0m', end='\n' if i % 41 == 40 else '')"
 }
-
-u() {
-	~/m/unzip.sh
-}
-
-mkcd() {
-	mkdir -p "$1" && cd "$1"
-}
-
-push() {
-	git push origin HEAD:"refs/for/$(git rev-parse --abbrev-ref HEAD)"
-}
-
-user() {
-	TARGET_BUILD_VARIANT=user ./vbuild
-}
-
-userdebug() {
-	TARGET_BUILD_VARIANT=userdebug ./vbuild
-}
-
-eng() {
-	TARGET_BUILD_VARIANT=eng ./vbuild
-}
-
-vp() {
-	nvim vendor/vivo/pri-charge/common/
-}
-
-commit() {
-	git commit -m "${1:?用法: commit <message>}"
-}
-
-gs() {
-	git status
-}
-
-cv() {
-	nvim ~/.vim/cvbuf.c
-}
-
