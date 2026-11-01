@@ -1,0 +1,189 @@
+alias vim='nvim'
+alias grep='grep --color=auto'
+alias rg='rg --no-ignore-global'
+alias y='yazi'
+alias vim='nvim'
+alias vu='nvim -u ~/.vimrc'
+alias v='nvim'
+
+if command -v eza >/dev/null 2>&1; then
+  alias ls='eza --color=auto'
+  alias ll='eza -l --git --icons'
+  alias la='eza -la --git --icons'
+  alias lt='eza --tree --level=2 --git-ignore'
+fi
+
+export EDITOR="nvim"
+export VISUAL="nvim"
+
+# history: 调大容量 + 去重 + 带时间戳
+HISTSIZE=100000
+HISTFILESIZE=200000
+HISTCONTROL=ignoreboth:erasedups
+HISTTIMEFORMAT='%F %T '
+
+# autocd: 直接敲目录名即 cd；cdspell: 纠正路径拼写
+shopt -s direxpand autocd cdspell
+
+export RIPGREP_CONFIG_PATH=~/.ripgreprc
+
+# PATH 去重追加，避免反复 source 后越滚越长
+case ":$PATH:" in
+	*":$HOME/.user/bin:"*) ;;
+	*) export PATH="$HOME/.user/bin:$PATH" ;;
+esac
+
+# 仅在缺失时兜底，避免覆盖 tmux 的 tmux-256color/screen-256color
+case $TERM in
+	''|dumb|linux) export TERM=xterm-256color ;;
+esac
+
+# zoxide: z <关键词> 直接跳目录，zi 交互选择
+command -v zoxide >/dev/null 2>&1 && eval "$(zoxide init bash)"
+
+export FZF_DEFAULT_OPTS='
+  --border
+  --color=dark
+  --prompt="fzf快速搜索🔍>  "
+  --info=inline
+  --multi
+  --color=info:#cba6f7,prompt:#89b4fa,pointer:#f5e0dc
+  --color=fg+:#cdd6f4,bg+:#313244,hl+:#f38ba8
+'
+
+# fzf 官方按键: Ctrl-R 历史搜索(带预览) / Ctrl-T 插入文件名 / Alt-C 跳目录
+for _f in /usr/share/doc/fzf/examples/key-bindings.bash /usr/share/fzf/key-bindings.bash; do
+	[ -f "$_f" ] && source "$_f" && break
+done
+unset _f
+export FZF_CTRL_T_COMMAND='fd --type f --hidden --exclude .git'
+export FZF_ALT_C_COMMAND='fd --type d --hidden --exclude .git'
+
+p() {
+	python3 -c "for i in range(256): print(f'\x1b[48;5;{i}m {i:3} \x1b[0m', end='\n' if i % 41 == 40 else '')"
+}
+
+tm() {
+	tmux at -t 0
+}
+
+# 对 4 个 pane 逐个发按键
+_panes() {
+	local i
+	for i in 0 1 2 3; do
+		tmux send-keys -t "$i" "$@"
+	done
+}
+
+cl() {
+	_panes 'clear' Enter
+}
+
+cld() {
+	_panes 'cd' Enter
+}
+
+cls() {
+	_panes 'source ~/.bashrc' Enter 'clear' Enter
+}
+
+tls() {
+	_panes 'tmux source-file ~/.tmux.conf' Enter
+}
+
+c() {
+	cd ~/logc
+}
+
+ni() {
+	nvim ~/.config/nvim/init.lua
+}
+
+gb() {
+	git rev-parse --abbrev-ref HEAD
+}
+
+f() {
+	local dir
+	# 使用 fd 列出目录，fzf 选择
+	dir=$(fd -t d . 2>/dev/null | fzf) || return
+	cd "$dir" || echo "无法切换到目录: $dir"
+}
+
+g() {
+	fg
+}
+
+ff() {
+	local dir
+	dir=$(fd -t d . ~/logc 2>/dev/null | fzf) || return
+	cd "$dir" || echo "无法切换到目录: $dir"
+}
+
+gco() {
+	local branch
+	branch=$(git branch --all --format='%(refname:short)' | sed 's|^origin/||' | fzf) || return
+	git checkout "$branch"
+}
+
+fz() {
+	local dir
+	dir=$(zoxide query -l | fzf) || return
+	cd "$dir" || echo "无法切换到目录: $dir"
+}
+
+fzv() {
+	local dir
+	dir=$(zoxide query -l | fzf) || return
+	cd "$dir" || echo "无法切换到目录: $dir"
+	nvim
+}
+
+n() {
+	nvim -u ~/.vimrc_ex
+}
+
+vs() {
+	nvim -S ~/.vim/lastsession.vim
+}
+
+u() {
+	~/m/unzip.sh
+}
+
+mkcd() {
+	mkdir -p "$1" && cd "$1"
+}
+
+push() {
+	git push origin HEAD:"refs/for/$(git rev-parse --abbrev-ref HEAD)"
+}
+
+user() {
+	TARGET_BUILD_VARIANT=user ./vbuild
+}
+
+userdebug() {
+	TARGET_BUILD_VARIANT=userdebug ./vbuild
+}
+
+eng() {
+	TARGET_BUILD_VARIANT=eng ./vbuild
+}
+
+vp() {
+	nvim vendor/vivo/pri-charge/common/
+}
+
+commit() {
+	git commit -m "${1:?用法: commit <message>}"
+}
+
+gs() {
+	git status
+}
+
+cv() {
+	nvim ~/.vim/cvbuf.c
+}
+
